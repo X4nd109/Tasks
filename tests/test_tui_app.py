@@ -486,11 +486,13 @@ class TestAufgabenDetectorTUI(unittest.IsolatedAsyncioTestCase):
             async with app.run_test(size=(width, 35)) as pilot:
                 b_bar = app.query_one("#button_bar")
                 buttons = list(b_bar.query(Button))
-                self.assertEqual(len(buttons), 7)
+                self.assertEqual(len(buttons), 8)
                 self.assertEqual(buttons[0].id, "btn_main_absences")
                 self.assertIn("Absences", str(buttons[0].label))
                 self.assertEqual(buttons[1].id, "btn_main_exams")
                 self.assertIn("Tests", str(buttons[1].label))
+                self.assertEqual(buttons[2].id, "btn_main_ai")
+                self.assertIn("Ai", str(buttons[2].label))
                 b_last = app.query_one("#btn_main_quit", Button)
                 self.assertIn("Exit", str(b_last.label))
                 total_used = b_last.region.x + b_last.region.width

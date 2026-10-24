@@ -379,15 +379,13 @@ Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
     Show full description, links, and attachments for a task.
     Supports either Task ID (e.g. 'moodle_10421') or 1-based index (e.g. '1').
 
-  tasks download <id|index> [--dir PATH] [--json]
+  tasks download <id|index> [--auto-dir] [--dir PATH] [--json]
     Download attachments & assignment markdown for the task.
+    Use --auto-dir (-a) to automatically detect linked course folder and create a subfolder.
     Returns the absolute paths of all saved files for immediate reading.
 
   tasks explain <id|index> [--lang de|en] [--copy-only] [--no-browser] [--json]
     Generate a structured AI prompt for an assignment, copy to clipboard, and open in AI browser.
-
-  tasks agent <id|index> [--dir PATH] [--no-launch] [--json]
-    Export assignment attachments & angabe.md into project folder and launch configured Agentic Coding Tool.
 
   tasks add --title "..." --subject "..." [--due "..."] [--teacher "..."] [--desc "..."] [--json]
     Create a manual homework task directly from CLI.
@@ -523,8 +521,7 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "list", "ls", "show", "get", "view", "info",
         "download", "dl", "fetch",
         "explain", "ai-explain", "ask-ai",
-        "agent", "ai-agent",
-        "add", "new", "create",
+                "add", "new", "create",
         "done", "complete", "toggle",
         "delete", "del", "remove", "rm", "hide",
         "restore", "unhide", "undelete",
@@ -543,8 +540,7 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "-list", "--list", "-show", "--show", "-get", "--get",
         "-download", "--download", "-dl", "--dl",
         "-explain", "--explain",
-        "-agent", "--agent",
-        "-add", "--add", "-done", "--done", "-toggle", "--toggle",
+                "-add", "--add", "-done", "--done", "-toggle", "--toggle",
         "-delete", "--delete", "-restore", "--restore",
         "-sync", "--sync", "-guide", "--guide", "--json", "-json",
         "-help", "--help", "-h",
@@ -762,6 +758,7 @@ def run_agent_cli(argv: List[str]) -> int:
     if command in ["download", "dl", "fetch"]:
         parser = argparse.ArgumentParser(prog=f"tasks {command}", add_help=False)
         parser.add_argument("target", nargs="?", default="", help="Task ID or 1-based index")
+        parser.add_argument("--auto-dir", "-a", action="store_true", help="Automatically detect linked course directory and create subfolder")
         parser.add_argument("--dir", default=None, help="Destination folder")
         parser.add_argument("--json", action="store_true", help="Output as JSON")
         args, remaining = parser.parse_known_args(sub_args)
@@ -784,8 +781,31 @@ def run_agent_cli(argv: List[str]) -> int:
                 print(msg)
             return 1
 
+        target_dir = args.dir
+        if args.auto_dir:
+            try:
+                from directory_service import DirectoryService
+            except ImportError:
+                from services.directory_service import DirectoryService
+            try:
+                from config import sanitize_filename
+            except ImportError:
+                from core.config import sanitize_filename
+
+            matched = DirectoryService.find_matching_directory_for_course(task.course, task.course_full)
+            if not matched:
+                msg = f"Error: No linked directory found matching course '{task.course or task.course_full}'. Link one first with 'tasks dirs add <path>'."
+                if args.json:
+                    print(json.dumps({"error": msg, "target": target}, ensure_ascii=False))
+                else:
+                    print(msg)
+                return 1
+            safe_title = sanitize_filename(task.title)
+            target_dir = os.path.join(matched.get("path", ""), safe_title)
+            os.makedirs(target_dir, exist_ok=True)
+
         try:
-            files = mgr.download_task_files(task, dest_dir=args.dir)
+            files = mgr.download_task_files(task, dest_dir=target_dir)
         except Exception as e:
             msg = f"Error during download: {e}"
             if args.json:
@@ -799,14 +819,14 @@ def run_agent_cli(argv: List[str]) -> int:
                 "success": True,
                 "id": task.id,
                 "title": task.title,
-                "folder": task.download_dir or args.dir,
+                "folder": task.download_dir or target_dir or args.dir,
                 "files": files
             }, ensure_ascii=False, indent=2))
         else:
             print(f"✓ Downloaded {len(files)} file(s) for '{task.title}':")
             for f in files:
                 print(f"  - {f}")
-            folder = task.download_dir or args.dir or "-"
+            folder = task.download_dir or target_dir or args.dir or "-"
             print(f"Folder: {folder}")
         return 0
 
@@ -848,18 +868,38 @@ def run_agent_cli(argv: List[str]) -> int:
                 pass
 
         from services.ai_explain_service import build_ai_explain_prompt, copy_to_clipboard, get_ai_explain_url
-        from config import load_ai_explain_config
+        from config import load_ai_explain_config, load_ai_chat_config
+        from services.ai_chat_service import build_task_ai_context, send_ai_chat_message
 
         cfg = load_ai_explain_config()
-        if args.lang:
-            cfg["language"] = args.lang
+        chat_cfg = load_ai_chat_config()
+        lang = args.lang or chat_cfg.get("language") or cfg.get("language", "de")
+        cfg["language"] = lang
+        chat_cfg["language"] = lang
 
-        prompt = build_ai_explain_prompt(task, language=cfg.get("language", "de"))
+        prompt = build_ai_explain_prompt(task, language=lang)
         copied = copy_to_clipboard(prompt)
         url = get_ai_explain_url(prompt, config=cfg)
 
+        ai_response = None
+        if chat_cfg.get("api_key") and not args.copy_only:
+            try:
+                system_prompt = build_task_ai_context(task, language=lang)
+                user_msg = (
+                    "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt."
+                    if lang == "de" else
+                    "Please explain this assignment clearly, practically, and step-by-step."
+                )
+                ai_response = send_ai_chat_message(
+                    [{"role": "user", "content": user_msg}],
+                    system_prompt=system_prompt,
+                    config=chat_cfg
+                )
+            except Exception as e:
+                ai_response = f"AI request failed: {e}"
+
         opened = False
-        if not args.no_browser and not args.copy_only:
+        if not args.no_browser and not args.copy_only and not ai_response:
             try:
                 import webbrowser
                 opened = bool(webbrowser.open(url))
@@ -867,111 +907,43 @@ def run_agent_cli(argv: List[str]) -> int:
                 pass
 
         if args.json:
-            print(json.dumps({
+            out_dict = {
                 "success": True,
                 "task_id": task.id,
                 "task_title": task.title,
-                "language": cfg.get("language", "de"),
+                "language": lang,
                 "copied_to_clipboard": copied,
-                "browser_opened": opened,
-                "url": url,
                 "prompt": prompt
-            }, ensure_ascii=False, indent=2))
+            }
+            if ai_response:
+                out_dict["ai_response"] = ai_response
+                out_dict["model"] = chat_cfg.get("model", "unknown")
+            else:
+                out_dict["browser_opened"] = opened
+                out_dict["url"] = url
+            print(json.dumps(out_dict, ensure_ascii=False, indent=2))
         else:
-            print(f"✓ AI prompt generated for '{task.title}' [{cfg.get('language', 'de').upper()}]:")
-            print("-" * 50)
-            print(prompt)
-            print("-" * 50)
+            if ai_response:
+                print(f"🤖 AI Explanation for '{task.title}' [{chat_cfg.get('model', 'AI')}]:")
+                print("-" * 60)
+                print(ai_response)
+                print("-" * 60)
+            else:
+                print(f"✓ AI prompt generated for '{task.title}' [{lang.upper()}]:")
+                print("-" * 50)
+                print(prompt)
+                print("-" * 50)
             status_parts = []
             if copied:
                 status_parts.append("Copied to clipboard")
             if opened:
                 status_parts.append(f"Opened in browser ({url})")
-            elif not args.no_browser and not args.copy_only:
+            elif not args.no_browser and not args.copy_only and not ai_response:
                 status_parts.append(f"URL: {url}")
             print(f"Status: {', '.join(status_parts) if status_parts else 'Ready'}")
         return 0
 
     # ─────────────────────────────────────────────────────────────────
-    # ─────────────────────────────────────────────────────────────────
-    # AGENT (Download task files to project directory & launch Agentic Coding Tool)
-    # ─────────────────────────────────────────────────────────────────
-    if command in ["agent", "ai-agent"]:
-        parser = argparse.ArgumentParser(prog=f"tasks {command}", add_help=False)
-        parser.add_argument("target", nargs="?", default="", help="Task ID or 1-based index")
-        parser.add_argument("--dir", default=None, help="Destination project directory")
-        parser.add_argument("--no-launch", action="store_true", help="Do not launch the coding tool (download & copy path only)")
-        parser.add_argument("--json", action="store_true", help="Output as JSON")
-        args, remaining = parser.parse_known_args(sub_args)
-
-        target = args.target or (remaining[0] if remaining else "")
-        if not target:
-            msg = "Error: Please provide a Task ID or list index. Example: 'tasks agent 1'"
-            if args.json:
-                print(json.dumps({"error": msg}, ensure_ascii=False))
-            else:
-                print(msg)
-            return 1
-
-        task = resolve_task(mgr, target)
-        if not task:
-            msg = f"Error: Task '{target}' not found."
-            if args.json:
-                print(json.dumps({"error": msg, "target": target}, ensure_ascii=False))
-            else:
-                print(msg)
-            return 1
-
-        if not task.details_loaded:
-            try:
-                mgr.load_task_details(task)
-            except Exception:
-                pass
-
-        target_dir = args.dir
-        if not target_dir:
-            if sys.stdin.isatty():
-                try:
-                    from win_dialogs import pick_directory
-                    target_dir = pick_directory(dialog_title="Select Destination Folder for Agent Project")
-                except Exception:
-                    target_dir = None
-            if not target_dir:
-                from config import get_task_download_dir
-                target_dir = task.download_dir or get_task_download_dir(task.course, task.title)
-
-        from services.ai_agent_service import run_agent_workflow
-        from config import load_agent_coding_tool
-
-        tool_path = load_agent_coding_tool()
-        success, files, status_msg = run_agent_workflow(
-            task,
-            mgr,
-            target_dir,
-            exe_path=tool_path,
-            launch_tool=not args.no_launch
-        )
-
-        if args.json:
-            print(json.dumps({
-                "success": success,
-                "task_id": task.id,
-                "task_title": task.title,
-                "directory": os.path.abspath(target_dir),
-                "files": files,
-                "tool_path": tool_path,
-                "tool_launched": bool(tool_path and os.path.exists(tool_path) and not args.no_launch),
-                "message": status_msg
-            }, ensure_ascii=False, indent=2))
-        else:
-            print(status_msg)
-            print(f"Directory: {os.path.abspath(target_dir)}")
-            print(f"Files: {len(files)} file(s) saved.")
-            if tool_path:
-                print(f"Coding Tool: {tool_path}")
-            else:
-                print("Notice: No coding tool configured in Settings.")
-        return 0 if success else 1
 
     # ─────────────────────────────────────────────────────────────────
     # 6. ADD

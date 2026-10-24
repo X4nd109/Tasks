@@ -18,7 +18,7 @@ WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 GITHUB_REPO = "X4nd109/Aufgaben-Detector"
 
 
@@ -1303,6 +1303,72 @@ AI_EXPLAIN_PRESETS = {
     },
 }
 
+DEFAULT_AI_CHAT_CONFIG = {
+    "provider": "gemini",           # "gemini" | "openai_compatible"
+    "api_key": "",
+    "model": "gemini-2.0-flash",    # e.g. "gemini-2.0-flash", "gpt-4o-mini"
+    "base_url": "https://api.openai.com/v1",
+    "language": "de",               # "de" | "en"
+}
+
+
+def load_ai_chat_config() -> dict:
+    """Lädt die Konfiguration für das AI-Chat Feature aus config.json."""
+    for path in [CONFIG_FILE, APP_CONFIG_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict) and "ai_chat_config" in data:
+                        raw = data["ai_chat_config"]
+                        if isinstance(raw, dict):
+                            res = dict(DEFAULT_AI_CHAT_CONFIG)
+                            if "provider" in raw and str(raw["provider"]).lower() in ["gemini", "openai_compatible"]:
+                                res["provider"] = str(raw["provider"]).lower()
+                            if "api_key" in raw and isinstance(raw["api_key"], str):
+                                res["api_key"] = raw["api_key"].strip()
+                            if "model" in raw and isinstance(raw["model"], str) and raw["model"].strip():
+                                res["model"] = raw["model"].strip()
+                            if "base_url" in raw and isinstance(raw["base_url"], str) and raw["base_url"].strip():
+                                res["base_url"] = raw["base_url"].strip()
+                            if "language" in raw and str(raw["language"]).lower() in ["de", "en"]:
+                                res["language"] = str(raw["language"]).lower()
+                            return res
+            except Exception:
+                pass
+    return dict(DEFAULT_AI_CHAT_CONFIG)
+
+
+def save_ai_chat_config(cfg: dict, auto_push: bool = True) -> None:
+    """Speichert die AI-Chat-Einstellungen persistent."""
+    if not isinstance(cfg, dict):
+        return
+    current = load_ai_chat_config()
+    if "provider" in cfg and str(cfg["provider"]).lower() in ["gemini", "openai_compatible"]:
+        current["provider"] = str(cfg["provider"]).lower()
+    if "api_key" in cfg and isinstance(cfg["api_key"], str):
+        current["api_key"] = cfg["api_key"].strip()
+    if "model" in cfg and isinstance(cfg["model"], str) and cfg["model"].strip():
+        current["model"] = cfg["model"].strip()
+    if "base_url" in cfg and isinstance(cfg["base_url"], str) and cfg["base_url"].strip():
+        current["base_url"] = cfg["base_url"].strip()
+    if "language" in cfg and str(cfg["language"]).lower() in ["de", "en"]:
+        current["language"] = str(cfg["language"]).lower()
+
+    for path in [CONFIG_FILE, APP_CONFIG_FILE]:
+        try:
+            data = {}
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+            data["ai_chat_config"] = current
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Warning: Could not save ai_chat_config to {path}: {e}", file=sys.stderr)
+
+
 DEFAULT_AI_EXPLAIN_CONFIG = {
     "provider": "gemini",
     "url_template": "https://gemini.google.com/app",
@@ -1363,39 +1429,3 @@ def save_ai_explain_config(cfg: dict, auto_push: bool = True) -> None:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Warning: Could not save ai_explain_config to {path}: {e}", file=sys.stderr)
-
-
-def load_agent_coding_tool() -> Optional[str]:
-    """Lädt den Pfad zum konfigurierten Agentic Coding Tool (.exe) aus config.json."""
-    for path in [CONFIG_FILE, APP_CONFIG_FILE]:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    if isinstance(data, dict) and "agent_coding_tool_path" in data:
-                        val = data["agent_coding_tool_path"]
-                        if isinstance(val, str) and val.strip():
-                            return val.strip()
-            except Exception:
-                pass
-    return None
-
-
-def save_agent_coding_tool(exe_path: Optional[str], auto_push: bool = True) -> None:
-    """Speichert den Pfad zur Executable des Agentic Coding Tools persistent."""
-    clean_path = exe_path.strip() if isinstance(exe_path, str) and exe_path.strip() else None
-
-    for path in [CONFIG_FILE, APP_CONFIG_FILE]:
-        try:
-            data = {}
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    data = json.load(f) or {}
-            data["agent_coding_tool_path"] = clean_path
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            print(f"Warning: Could not save agent_coding_tool_path to {path}: {e}", file=sys.stderr)
-
-

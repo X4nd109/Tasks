@@ -185,6 +185,57 @@ class DirectoryService:
         return None
 
     @classmethod
+    def find_matching_directory_for_course(
+        cls, course: Optional[str], course_full: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Finds a linked directory matching a course code (e.g. 'BET', 'SWP')
+        or full course name (e.g. 'Biomedizinische Technik').
+        Checks exact matches first, then folder basename matches, then word boundaries, then containment.
+        """
+        import re
+
+        c_code = (course or "").strip().lower()
+        c_full = (course_full or "").strip().lower()
+        if not c_code and not c_full:
+            return None
+
+        dirs = cls.load_directories()
+        if not dirs:
+            return None
+
+        candidates = [c for c in [c_code, c_full] if c]
+
+        # 1. Exact match on title or folder basename
+        for c in candidates:
+            for d in dirs:
+                title = d.get("title", "").strip().lower()
+                base = os.path.basename(d.get("path", "").rstrip("\/")).lower()
+                if title == c or base == c:
+                    return d
+
+        # 2. Match as whole word in title or basename (e.g. "SWP" in "3AHWII - SWP" or "SWP PM")
+        for c in candidates:
+            if len(c) >= 2:
+                pattern = r"\b" + re.escape(c) + r"\b"
+                for d in dirs:
+                    title = d.get("title", "").strip().lower()
+                    base = os.path.basename(d.get("path", "").rstrip("\/")).lower()
+                    if re.search(pattern, title) or re.search(pattern, base):
+                        return d
+
+        # 3. Substring match
+        for c in candidates:
+            if len(c) >= 3:
+                for d in dirs:
+                    title = d.get("title", "").strip().lower()
+                    path = d.get("path", "").strip().lower()
+                    if c in title or c in path:
+                        return d
+
+        return None
+
+    @classmethod
     def open_directory(cls, identifier_or_dir: Union[str, Dict[str, Any]]) -> Tuple[bool, str]:
         """
         Opens the specified directory in the system file explorer.

@@ -11,9 +11,8 @@
 - **Run TUI (Interactive)**: `python main.py` or `.\run.bat`
 - **Run CLI (Agent / Headless)**: `.\tasks.bat <cmd>` or `python main.py <cmd>`
   - `tasks list [-s all|open|overdue|completed] [-f <fach>] [--json]`
-  - `tasks show <id|index> [--json]` | `tasks download <id|index> [--dir <path>]`
+  - `tasks show <id|index> [--json]` | `tasks download <id|index> [--auto-dir] [--dir <path>]`
   - `tasks explain <id|index> [--lang de|en] [--copy-only] [--json]`
-  - `tasks agent <id|index> [--dir <path>] [--no-launch] [--json]`
   - `tasks books [list|open|add|remove|download] [--json]` | `tasks dirs [list|open|add|remove] [--json]`
   - `tasks sync [--deep]` | `tasks open <fach>` | `tasks skill [sync|status] [--json]`
 - **Tests**: `python -m unittest discover tests` or `pytest tests/`

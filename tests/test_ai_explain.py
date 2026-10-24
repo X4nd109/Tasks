@@ -135,7 +135,7 @@ class TestAiExplain(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(url.startswith("http"))
 
     @patch("os.path.exists")
-    @patch("services.ai_agent_service.launch_coding_tool")
+    @patch("services.ai_explain_service.launch_desktop_app")
     def test_open_ai_explain_desktop_app(self, mock_launch, mock_exists):
         mock_exists.return_value = True
         mock_launch.return_value = True

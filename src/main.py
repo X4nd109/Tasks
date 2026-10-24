@@ -30,7 +30,6 @@ if sys.platform == "win32":
 from rich.console import Console
 from rich.prompt import Prompt
 
-from auth import setup_moodle_interactive, setup_teams_interactive
 from config import clean_browser_profile_caches, AUTO_CLEAN_BROWSER_CACHE
 from models import Task
 from task_manager import TaskManager
@@ -308,6 +307,7 @@ def interactive_loop():
 
             # 8. Teams Setup / Login
             elif choice_lower == "t":
+                from auth import setup_teams_interactive
                 success = setup_teams_interactive(console)
                 if success:
                     with console.status("[bold green]Updating Teams assignments...[/bold green]", spinner="dots") as status:
@@ -320,6 +320,7 @@ def interactive_loop():
 
             # 9. Moodle Setup / Login
             elif choice_lower == "m":
+                from auth import setup_moodle_interactive
                 success = setup_moodle_interactive(console)
                 if success:
                     with console.status("[bold green]Updating Moodle assignments...[/bold green]", spinner="dots") as status:
@@ -373,10 +374,12 @@ def main():
         ensure_dependencies()
 
     if args.teams_login:
+        from auth import setup_teams_interactive
         setup_teams_interactive(console)
         return
 
     if args.moodle_login:
+        from auth import setup_moodle_interactive
         setup_moodle_interactive(console)
         return
 

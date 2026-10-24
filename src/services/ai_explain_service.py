@@ -156,6 +156,19 @@ def get_ai_explain_url(prompt: str, config: Optional[dict] = None) -> str:
     return template
 
 
+def launch_desktop_app(app_path: str) -> bool:
+    """Launches a desktop executable application in the background."""
+    if not app_path or not os.path.exists(app_path):
+        return False
+    try:
+        flags = 0x08000000 if sys.platform == "win32" else 0  # CREATE_NO_WINDOW
+        subprocess.Popen([app_path], creationflags=flags)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to launch desktop app '{app_path}': {e}")
+        return False
+
+
 def open_ai_explain(task: Task, config: Optional[dict] = None) -> Tuple[bool, str, str]:
     """
     Generiert den Prompt für die übergebene Aufgabe, kopiert ihn in die
@@ -173,8 +186,7 @@ def open_ai_explain(task: Task, config: Optional[dict] = None) -> Tuple[bool, st
     app_path = cfg.get("app_path")
 
     if provider == "app" and app_path and os.path.exists(app_path):
-        from services.ai_agent_service import launch_coding_tool
-        launched = launch_coding_tool(app_path)
+        launched = launch_desktop_app(app_path)
         return copied or launched, prompt, app_path
 
     url = get_ai_explain_url(prompt, config=cfg)

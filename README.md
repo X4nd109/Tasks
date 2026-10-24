@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6.svg)](https://microsoft.com/windows)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
-[![Tests: 317 passing](https://img.shields.io/badge/Tests-317%20passing-brightgreen.svg)](tests/)
+[![Tests: 381 passing](https://img.shields.io/badge/Tests-381%20passing-brightgreen.svg)](tests/)
 
 Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all school assignments from **Moodle** and **Microsoft Teams**, timetable absences and exam schedules from **WebUntis**, as well as schoolbooks and **Digi4School** in one unified view.
 
@@ -19,17 +19,19 @@ Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all sch
    - Automatic urgency warnings (Red = Overdue, Yellow = Due within 24 hours).
    - Rich filtering by completion status (*Open Only*, *Overdue*, *Completed*, *All*), school subject (*SWP*, *AMEC*, *NWES*, *BET*...), or platform.
 
-2. **Assignment Details & 1-Click File Download:**
+2. **Assignment Details & Smart Auto-Dir Downloads:**
    - Full task instructions rendered as clean, formatted Markdown.
-   - 1-Click download (`[D]`) of all attached PDFs, ZIPs, templates, and a generated `angabe.md` directly into your Windows Downloads folder:
-     `%USERPROFILE%\Downloads\<Subject> - <Title>\`
+   - **Smart Download Dialog (`[D]`):** Choose between **[1] Auto-Dir** (automatically downloads attachments into your linked school subject folder, e.g. `OneDrive\Schule\HTL\3. Klasse\<Subject>\`), **[2] Explorer** (pick destination via Windows File Explorer), or **[3] Standard Downloads** (`%USERPROFILE%\Downloads\<Subject> - <Title>\`).
    - Automatically opens the target folder in Windows File Explorer upon completion.
    - 1-Click navigation directly to the official Moodle or Teams submission portal in your browser (`[O]`).
 
-3. **AI Explain & Agentic Coding Workflows (`Ai Explain` & `Agent`):**
-   - **🤖 Ai Explain (`[A]`):** Generates a structured, rich prompt containing all assignment metadata, description, due date, teacher, and an enumeration of all attachments. Automatically copies the prompt to your Windows clipboard (`pyperclip` with native Win32 fallback) and launches your chosen AI provider (Google Gemini, ChatGPT, Perplexity, custom URL, or a local desktop `.exe` app like Gemini Desktop or ChatGPT Desktop).
-   - **🤖 Agent Workspace Export (`[G]`):** 1-Click project preparation for agentic coding tools (Google Antigravity, Cursor, VS Code, etc.). Downloads all task attachments and a rendered `angabe.md` into a selected folder, copies the project path to your clipboard, and launches the coding tool as an independent background process.
-   - **AI Configuration Hub (`Settings` -> `[7]` / `[A]`):** Central configuration modal to set prompt language (English / German), manage provider presets, and configure desktop app paths via native Windows file dialogs.
+3. **Native In-App AI Assistant & Explain Screen (`AiChatScreen`):**
+   - **🤖 Interactive Full-Screen AI Assistant (`[I]`):** Dedicated chat interface with browser-style tabs for all active assignments. Automatically remembers your last opened task.
+   - **Deep Context & Auto-Attachment Text Extraction:** Automatically extracts text from attached PDFs (via PyMuPDF / `fitz`), Markdown files, and source code (`.py`, `.c`, `.java`, etc.) into the AI system prompt. The assistant understands the exact requirements and questions without user re-explanation.
+   - **Rich Markdown & Syntax Highlighting:** Assistant responses render with native Markdown, syntax-highlighted code fences (`MarkdownFence`), and inline code blocks across both standard and OLED themes.
+   - **Fluid Input Experience:** Direct Enter-to-send, `Shift+Enter` multi-line expansion (up to 3 rows with auto-scrollbar), and an animated 3-dot thinking indicator (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`).
+   - **🤖 Seamless Ai Explain (`[A]`):** In any assignment detail modal, click `[A]` to immediately transition into the AI assistant with that task active and step-by-step guidance.
+   - **AI Configuration Hub (`Settings` -> `[7]` / `[A]`):** Configure Google Gemini Free-Tier (`gemini-2.0-flash`) or OpenAI-compatible models, auto-fetch available models, test connection, and switch languages (DE/EN).
 
 4. **WebUntis Absence Tracking & Timetable Reconciliation:**
    - Split absence view accessible via `[U]` or by clicking `[📅 Absences]`.
@@ -137,6 +139,7 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 ### Main Screen
 | Key | Action |
 |---|---|
+| `I` | 🤖 Open In-App AI Assistant (`AiChatScreen`) |
 | `1` - `9` | View details for task 1 to 9 |
 | `A` | Add a manual custom task |
 | `E` | Open WebUntis Exams & Tests calendar |
@@ -146,20 +149,19 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 | `U` | Open WebUntis Absences & Excuse PDF Generator |
 | `G` | Open Trash (Hidden / Deleted assignments) |
 | `L` | Open Login Menu (Moodle, Teams, WebUntis) |
-| `O` | Open Settings (Themes, Untis group, Excuse profile) |
-| `T` / `Ctrl+P` | Switch color theme (Catppuccin, Nord, Dracula, Monokai) |
+| `O` | Open Settings (Themes, Untis group, Excuse profile, AI config) |
+| `T` / `Ctrl+P` | Switch color theme (22 curated themes with instant preview) |
 | `Q` | Quit Aufgaben-Detector |
 
 ### Assignment Details Modal
 | Key | Action |
 |---|---|
 | `O` | Open submission portal in web browser |
-| `D` | Download all attachments & instructions to Downloads folder |
+| `D` | Download all attachments & instructions (Auto-Dir [1], Explorer [2], Downloads [3]) |
+| `A` | 🤖 Ai Explain (switch directly to In-App AI Assistant for this task) |
 | `E` | Toggle task completion status (Done / Open) |
 | `L` | Hide assignment / move to Trash |
 | `W` | Restore deleted assignment |
-| `A` | 🤖 Ai Explain (generate prompt, copy to clipboard & open AI tool) |
-| `G` | 🤖 Agent (download task files & launch coding tool workspace) |
 | `Esc` / `Z` | Close details modal |
 
 ### Schoolbooks Palette Commands (`Backspace` -> `Tab`)
@@ -190,12 +192,9 @@ tasks show <task_id> --json
 tasks explain 1
 tasks explain <task_id> --lang en --copy-only
 
-# Setup task workspace & launch agent coding tool
-tasks agent 1
-tasks agent <task_id> --dir "C:\Projects\SWP_Task"
-
-# Download attachments & problem statement
+# Download attachments & problem statement (optional --auto-dir to auto-match linked folder)
 tasks download 1
+tasks download 1 --auto-dir
 tasks download <task_id> --dir "C:\School\SWP"
 
 # Manage & open schoolbooks
@@ -246,9 +245,10 @@ Aufgaben-Detector/
 │   │   ├── models.py           # Data models (Task, UntisExam, Lesson)
 │   │   └── task_manager.py     # Aggregation, sorting & caching
 │   ├── services/               # Platform adapters & generators
-│   │   ├── ai_agent_service.py # Workspace exporter & coding tool launcher
+│   │   ├── ai_chat_service.py    # In-App AI assistant: attachment extraction & Gemini/OpenAI API
 │   │   ├── ai_explain_service.py # AI prompt generator & provider dispatcher
 │   │   ├── digi4school_service.py # Digi4School grabber & OCR engine
+│   │   ├── directory_service.py  # Linked subject directories & Explorer integration
 │   │   ├── excuse_service.py   # PDF excuse letter generator
 │   │   ├── git_sync_service.py # Git cloud synchronization
 │   │   ├── moodle_service.py   # Moodle HTTP scraper & API
@@ -258,7 +258,7 @@ Aufgaben-Detector/
 │   └── ui/                     # Terminal User Interface (Textual)
 │       ├── tui_app.py          # Interactive TUI (screens, modals, palettes)
 │       └── ui.py               # Rich terminal formatting helpers
-├── tests/                      # Automated unit & integration test suite (317 tests)
+├── tests/                      # Automated unit & integration test suite (381 tests)
 ├── AGENTS.md                   # Lean master index (< 3 KB) for Antigravity agents
 ├── config.example.json         # Example user configuration template
 ├── LICENSE                     # MIT License

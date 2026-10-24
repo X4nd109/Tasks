@@ -1,11 +1,119 @@
 # Current Project State & Session Handoff — Aufgaben-Detector
 
-> **Last Updated**: 2026-10-22  
-> **Active Milestone**: Release v1.2.1 — Global 'tasks' Agent-Skill & CLI Sync Command
+> **Last Updated**: 2026-10-24  
+> **Active Milestone**: Release v1.3.0 (Released) — Native In-App AI Assistant, Task Tabs, Smart Download & Performance Polish
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **In-App AI Chat Assistant & Browser-Style Task Tabs (`AiChatScreen` & `AiConfigModal`)**:
+  - **Interaktiver Vollbild-Assistent (`AiChatScreen`)**:
+    - Schlanke obere Tableiste (`#ai_tab_scroll`) mit robuster Befüllung aller gefilterten Aufgaben aus dem Task-Manager.
+    - **Filter-Synchronisation mit Hauptmenü**: Die im AI-Menü angezeigten Aufgaben-Tabs spiegeln exakt die im Hauptmenü aktiven Filter (Status, Zeitrahmen, Schulfach, Plattform) wider.
+    - Saubere Kursanzeige & Dynamische Tabs: Inaktive Tabs zeigen direkt das Schulfach ohne Klammern (z. B. `SESD`, `SWP`, `AMEC`), der ausgewählte Tab expandiert flüssig auf `<Fach>: <Titel>` mit dynamischem Layout-Refresh (`refresh(layout=True)`).
+    - **Kompakte 1-Zeilen-Tabs mit Vollfarb-Aktivierung**:
+      - Aufgaben-Buttons sind nun exakt **1 Zeile hoch** (`height: 1`), wodurch kein ungenutzter Freiraum über oder unter dem Text entsteht.
+      - Der ausgewählte Tab wird vollständig vollflächig farbig hervorgehoben (`background: #89b4fa; color: #11111b;` im Standard-Theme bzw. `#205ea6; color: #ffffff;` im OLED-Theme), statt nur durch einen Randstrich markiert zu werden.
+      - Inaktive Tabs verbleiben in dezentem, dunklem Hintergrund (`#1e1e2e` bzw. `#181816`).
+      - Auch `#ai_top_bar`, `#ai_tab_scroll` und `#btn_ai_clear_chat` wurden nahtlos auf `height: 1` angepasst.
+    - 100% Modulare & Schulfreie KI-Persona: Hardcoded Schulnamen (`Spengergasse`) vollständig aus `_persona()` in `src/services/ai_chat_service.py` entfernt. Die KI agiert universell als neutraler Lernassistent für jede Schule, Universität oder Weiterbildung.
+    - **Reines Aufgaben-Banner ohne Fach-Präfix**: In der Informationszeile unterhalb der Tabs wird nun ausschließlich der exakte Aufgabentitel angezeigt (z. B. `OverTheWire/Bandit_0-6_Linux:...` statt `SESD: OverTheWire/...`), da das Fach bereits in den Tabs präsent ist.
+    - **Intelligente, dynamische Prompt-Eingabezeile (`ChatInputArea`)**:
+      - `Send`-Button entfernt: Prompts werden nun direkt und intuitiv mit `Enter` abgesendet; die Eingabeleiste nutzt die gesamte verfügbare Breite.
+      - **Zuverlässiges `Shift + Enter` für mehrzeilige Prompts**:
+        - Unterstützung für `shift+enter`, `shift+return`, `ctrl+j`, `ctrl+enter`, `alt+enter` und `shift+linefeed`.
+        - **Hardware-Level Win32-Fallback (`is_shift_pressed_win32`)**: Falls Terminal-Emulatoren (z. B. Standard Windows Console / conhost) bei gedrücktem Shift nur einfache `Enter`-Tastencodes senden, prüft der Eingabebereich über `GetAsyncKeyState(VK_SHIFT)` den physischen Zustand und fügt zuverlässig einen Zeilenumbruch ein (`self.insert("\n")`), ohne den Prompt versehentlich abzusenden.
+        - Ergänzung in `patch_win32_event_monitor` zur Erzeugung von `\x1b[13;2u` bei Shift+Enter auf Windows-Treiber-Ebene.
+      - **Symmetrische Rahmentrennung & Höhenverschiebung (`#ai_input_bar`)**:
+        - Über und unter der Schreibleiste befinden sich nun identische Trennlinien (`border-top: solid #313244;` und `border-bottom: solid #313244;` bzw. `#343331` im OLED-Theme).
+        - Die Eingabeleiste ist dadurch leicht nach oben versetzt und schließt nach unten mit einer sauberen horizontalen Kontur ab.
+      - **Kompakter Clear-Button links neben dem Back-Button (`#btn_ai_clear_chat`)**:
+        - Aus der oberen Tableiste (`#ai_top_bar`) entfernt, wodurch die Aufgaben-Tabs über die volle Breite ungestört scrollen können.
+        - Platziert direkt links neben dem Back-Button im horizontalen Container `#ai_input_btn_box`.
+        - Beschriftung auf das Emoji `🗑️` gestrafft (ohne Text "Clear") mit exakt symmetrischer 4-Zellen-Breite (`width: 4; min-width: 4; padding: 0;`), sodass links genau 1 Zeichen Abstand, in der Mitte das 2-Zellen-Emoji und rechts genau 1 Zeichen Abstand gerendert wird.
+        - **Satter, echter Rotton**: Kräftiges, sattes Rot (`background: #e03131; color: #ffffff;` mit Hover `#c92a2a;`) sowohl im Standard- als auch im OLED-Theme für maximale Signalwirkung statt blasser oder pastellener Töne.
+      - **Fest verankerter Button-Bereich (`#ai_input_btn_box`)**:
+        - `#btn_ai_clear_chat` und `#btn_ai_back` sind zusammen in einem dedizierten Container (`Horizontal(id="ai_input_btn_box")`) mit `height: 100%; align: right bottom;` fixiert.
+        - Wächst das Schreibfeld beim Verfassen längerer, mehrzeiliger Prompts von 1 auf 2 oder 3 Zeilen nach oben, verbleiben beide Buttons unverrückbar nebeneinander rechts unten auf der untersten Zeile.
+      - Auto-Expand nach oben (1–3 Zeilen): Die Eingabeleiste wächst beim Tippen längerer Texte dynamisch von 1 auf bis zu 3 Zeilen nach oben.
+      - Scrollbar ab Zeile 4: Bei noch längeren Texten blendet sich eine elegante, schlanke Scrollbar ein (`scrollbar-size: 1 1`).
+      - Automatisches Zurückfedern: Nach dem Absenden schrumpft das Eingabefeld sofort wieder auf 1 Zeile zurück.
+    - Symmetrisches Aufgaben-Banner: Banner mit oberer und unterer Trennlinie (`border-top` und `border-bottom`) eingefasst, sodass der Text absolut mittig zentriert wirkt.
+    - Automatischer Start bei Aufgabe 1: Klick auf `[🤖 Ai]` im Hauptmenü öffnet direkt die 1. Aufgabe samt Chatverlauf bzw. Startanzeige, ohne leeren Platzhalter.
+    - Fehlerfreie Chat-Persistenz: Bereinigung in `_populate_table` korrigiert (`getattr(self.mgr, 'tasks', [])`), sodass gespeicherte Chats für offene Aufgaben beim Verlassen des AI-Screens nicht mehr versehentlich gelöscht werden.
+    - Minimalistischer Chatverlauf: Redundante Absenderzeilen (`🧑 You` / `🤖 AI (...)`) entfernt; Nachrichten werden clean und übersichtlich direkt durch den farbigen Seitenstrich (User grün, Assistant blau) visualisiert.
+    - Vollbild-Optimierung: Unnötige Header-Leiste ("TASKS — School Assignment Hub" + Uhrzeit) komplett entfernt, um den vollen vertikalen Platz für den Chat bereitzustellen.
+    - Höhen- und Layout-Perfektion: Natürlicher vertikaler Fluss für Tableiste (`height: 3`) und Banner (`height: 3`) sowie `dock: bottom; height: 4` für die Eingabeleiste verhindern jegliches Überlappen oder Abschneiden von Tabs, Clear-Button, Eingabefeld oder `Send`/`Back`-Buttons.
+    - Perfekt zentrierte Button-Labels (`content-align: center middle`) und saubere Platzhalter ohne störenden Klammerzusatz.
+    - Chat-Verlauf mit formatierten User- und Assistant-Nachrichten (`VerticalScroll`), Denk-Indikator während der KI-Anfrage und Eingabezeile mit direktem `Enter`-zum-Senden.
+    - **Rich Markdown & Code-Block Rendering**: Assistant-Antworten werden über das Textual-`Markdown`-Widget gerendert (User-Nachrichten bleiben `Static`), inklusive eigener Styles für Fenced Code Blocks (`MarkdownFence`) und Inline-Code (`MarkdownCodeInline`) im Standard- und OLED-Theme.
+    - **Animierte Denk-Anzeige (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`)**:
+      - Ersetzt die alte statische Box durch eine cleane, emoji-freie Textanzeige ohne störenden Text-Overhead.
+      - 3-stufiger Textual-Timer (`self.set_interval(2.0 / 3.0, ...)`), der zyklisch zwischen 1, 2 und 3 Punkten wechselt (exakt 2,0 Sekunden pro voller Durchlauf).
+      - Automatische Bereinigung und Stoppen des Timers beim Eintreffen der KI-Antwort, bei Screen-Dismiss (`action_dismiss_screen`) oder Unmount (`on_unmount`).
+    - **Vollständige Multi-Theme-Unterstützung (alle 22 Themes)**:
+      - Umstellung aller hardcodierten Catppuccin-Hexwerte in `AiChatScreen.DEFAULT_CSS` auf Textuals semantische Design-Variablen (`$background`, `$surface`, `$panel`, `$primary`, `$border`, `$text`, `$text-muted`, `$warning`, `$success`, `$error`).
+      - Das gesamte AI-Menü (Tableiste, aktiver Tab, Banner, Chat-Bubbles, Code-Blöcke, Eingabebereich, Buttons und Platzhalter) passt sich sofort und automatisch jedem gewählten Theme (Catppuccin, Dracula, Tokyo Night, Nord, Gruvbox, Rosé Pine, Solarized Light, Textual Light/Dark etc.) an.
+      - Beibehaltung und Verfeinerung dedizierter `.-theme-oled` Overrides für tiefschwarze `#000000`-Hintergründe und akzentuierte Ränder.
+    - Dedizierter `🗑️ Clear Chat` Button pro Aufgaben-Tab zur manuellen Rücksetzung des Verlaufs.
+  - **Deep Task Context & System Prompt**:
+    - Automatischer Hintergrund-Download von Aufgaben-Dateien und Textextraktion aus PDFs (`fitz` / PyMuPDF) und Quellcode/Textdateien in den System-Prompt.
+    - Die KI besitzt das komplette Wissen über Aufgabenstellung, Kriterien, Lehrer und Dateiinhalte.
+  - **Cache-Persistenz & Automatische Bereinigung**:
+    - Speicherung in `cache/ai_chats.json` bleibt während der Arbeit erhalten.
+    - Sobald eine Aufgabe als abgeschlossen markiert wird oder nicht mehr offen/überfällig ist, wird ihr Chatverlauf automatisch aus dem Cache gelöscht (`cleanup_ai_chats_cache`).
+  - **Nahtlose `Ai Explain` Weiterleitung**:
+    - Klick auf `🤖 Ai Explain [A]` in der Aufgaben-Detailansicht schließt den Dialog, öffnet sofort `AiChatScreen` mit dem aktiven Tab der Aufgabe und versendet automatisch den Erklärungs-Prompt.
+  - **Automatisierte & Vereinfachte Settings-Konfiguration (`AiConfigModal`)**:
+    - Automatisches Laden der Modelle (`_fetch_models`): Sobald der Benutzer einen API-Key einfügt oder eingibt, wird die Modellliste unmittelbar und ohne manuellen Klick aktualisiert.
+    - Prepayment-Hinweis & Fehlerbehandlung: Klare Diagnose und Handlungsanleitung, falls ein Google-Cloud-Key versehentlich an ein Projekt mit Billing gebunden ist, anstatt das kostenlose Google AI Studio Free-Tier zu nutzen.
+    - Verbindungstest-Button `🔌 Test Connection` in voller Button-Höhe (`height: 3`) ohne vertikales Abschneiden.
+    - Sprache umschaltbar (DE/EN) und automatische Provider-Erkennung (Google Gemini vs. OpenAI).
+  - **Hauptmenü & Tastenkürzel**:
+    - Neuer Button `[🤖 Ai]` in der Menüleiste neben Tests (`btn_main_ai`) mit Tastaturkürzel `[I]`.
+  - **Intelligente Tab-Wiederherstellung (Zuletzt geöffnete Aufgabe)**:
+    - Beim Öffnen des AI-Assistenten wird automatisch die Aufgabe geöffnet, die zuletzt aktiv war (`_last_opened_task_id` und `load_last_active_ai_task_id()`).
+    - War noch nie eine Aufgabe geöffnet oder ist die zuletzt aktive Aufgabe nicht mehr in der Liste (z. B. erledigt oder weggefiltert), wird automatisch die erste offene Aufgabe (Index 0) als Fallback gewählt.
+    - Gezielte Aufrufe (z. B. via `Ai Explain [A]`) überschreiben das Verhalten weiterhin priorisiert.
+  - **Lesefreundliches Scrollen bei KI-Antworten (Start von oben)**:
+    - Bei Eintreffen einer Antwort der KI wird das Chatfenster nicht mehr an das absolute Ende (Zeile 50) gescrollt.
+    - Stattdessen wird die neue Assistant-Nachricht mit `last_assistant_bubble.scroll_visible(top=True, animate=False)` via `call_after_refresh` exakt an die Oberkante des Fensters ausgerichtet, sodass der Benutzer die Antwort sofort von der ersten Zeile an lesen kann.
+  - **Umfassende Testabdeckung**: 78 dedizierte AI-Tests (50 in `test_ai_chat_service.py`, 13 in `test_ai_explain.py`, 15 in `test_ai_chat_ui.py`), Gesamtsuite erfolgreich.
+
+- [x] **AI Chat Service Foundation (`src/services/ai_chat_service.py`)**:
+  - **Attachment Text Extraction (`extract_attachment_text`)**: PDFs via PyMuPDF (`fitz.open`, whitespace-cleaned, capped at `max_chars`), text/source formats (`.txt`, `.md`, `.py`, `.c`, `.cpp`, `.java`, `.html`, `.css`, `.json`, `.csv`, `.xml`) with UTF-8/latin-1 fallback, binary placeholder `[Binary file: <name>]`, and graceful error notes for unreadable files.
+  - **Task Context Builder (`build_task_ai_context`)**: German/English HTL-Spengergasse persona plus subject, title, due date, teacher, status, description, extracted local attachment contents (`--- Datei: ... ---`) or attachment name list, and closing answer instructions.
+  - **Provider Dispatcher (`send_ai_chat_message`)**: Google Gemini (`generateContent`, `gemini-2.0-flash` default, `system_instruction` + user/model role mapping) and OpenAI-compatible (`/chat/completions`, system message, Bearer auth, configurable `base_url`/model). Errors are cleaned into `Error: ...` strings; missing API key returns the Settings hint.
+  - **Connection Probe (`test_ai_connection`)**: Sends `"Hi, reply with OK"` and reports `(True, "Connection successful! Model responded.")` or `(False, <error>)`.
+  - **Chat Cache (`cache/ai_chats.json`)**: `load_task_chat_cache`, `save_task_chat_cache`, `clear_task_chat_cache`, and `cleanup_ai_chats_cache(active_open_task_ids)` (atomic writes, RLock, corrupted-file tolerance).
+  - **Tests**: 50 new unit tests in `tests/test_ai_chat_service.py` (mocked `requests.post` and `fitz`; no live network calls).
+
+- [x] **Filter Menu Scrollbar & TUI Startup Speed Optimization**:
+  - **Scrollbares Filter-Menü (`FilterMenuModal`)**:
+    - Umstellung des `#filter_dialog` Containers von `Vertical` auf `VerticalScroll(id="filter_dialog")`.
+    - CSS-Anpassung mit `overflow-y: auto;` und `scrollbar-gutter: stable;` für zuverlässiges Scrollen auf kleinen Bildschirmen (z. B. 80x20 Terminals) ohne abgeschnittene Buttons.
+  - **Startbeschleunigung (~40% schneller, ca. 800 ms Ersparnis)**:
+    - Lazy Loading für schwere Bibliotheken: `excuse_service` (`fpdf2`), `digi4school_service` (`fitz`/`PyMuPDF`, `PIL`, `pytesseract`) und `auth` (`playwright`, `requests`) in `src/ui/tui_app.py` und `src/main.py`.
+    - Asynchroner Daemon-Thread für `clean_browser_profile_caches()`, sodass der synchrone Festplattenscan vor dem Öffnen der TUI entfällt.
+    - Vollständige Verifikation: 316 Unit-Tests erfolgreich (100%), Kaltstartzeit von 1,88s auf 1,12s gesenkt.
+
+- [x] **Release v1.3.0 — Smart Download Auto-Dir & Agent Cleanup**:
+  - **Download Auto-Directory Modal (`DownloadLocationModal`)**:
+    - Neues, vollständig auf Englisch gehaltenes Auswahldialog-Modal beim Klick auf `📥 Download [D]`.
+    - Direkte Hotkeys: `[1]` (Auto-Dir), `[2]` (Manual), `[3]` (Standard Downloads), `[ESC]` (Cancel).
+    - `[1] Linked Course Folder`: Automatische Erkennung via `DirectoryService.find_matching_directory_for_course()`. Erstellt einen Unterordner mit dem Aufgabennamen im verknüpften Kursverzeichnis (`<Matched_Path>/<Aufgabentitel>/`) und speichert dort alle Dateien ab. Falls kein Ordner für das Fach verknüpft ist: Button deaktiviert (`disabled=True`) mit gelbem Hinweis `⚠️ No linked folder for '<Fach>' [1]`.
+    - `[2] Choose Folder Manually...`: Öffnet wie gewohnt den nativen Windows Explorer Folder Picker (`pick_directory`).
+    - `[3] Standard Downloads Folder`: Speichert direkt unter `%USERPROFILE%\Downloads\<Fach> - <Aufgabe>\`.
+  - **Headless CLI Erweiterung (`tasks download --auto-dir`)**:
+    - Neuer Flag `--auto-dir` (`-a`) für `tasks download <id>`.
+    - Ermittelt automatisch den verknüpften Ordner und legt den Aufgaben-Unterordner an; klare Fehlermeldung/JSON falls kein Ordner verknüpft ist.
+  - **Vollständige Bereinigung des alten Agent-Harnesses**:
+    - Entfernung des Buttons `🤖 Agent [G]` (`btn_det_agent`) und des Handlers `action_agent_open`.
+    - Entfernung von `AiAgentConfigModal` und `AiConfigChoiceModal`.
+    - Settings-Button `🤖 AI Explain Config` (`btn_set_ai_explain`, Shortcut `[7]`/`[A]`) führt direkt zu `AiExplainModal`.
+    - Entfernung des CLI-Subcommands `tasks agent` und Löschung von `src/services/ai_agent_service.py`.
+    - Neuer Unit-Test-Suite `tests/test_download_auto_dir.py` (7 Tests bestanden, Gesamtsuite 316 Tests).
 
 - [x] **Release v1.2.1 — Global 'tasks' Agent-Skill & 'tasks skill sync' CLI-Befehl**:
   - **Schlanker, token-effizienter Skill (`skills/tasks/SKILL.md`)**:
@@ -293,30 +401,55 @@
 
 ## 3. Known Issues & Blockers
 
-- *None active* (All 317 test suite tests passing cleanly with 100% pass rate).
+- **Keine**: Alle 381 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 381 tests — OK`).
 
 ---
 
 ## 4. Session Handoff Notes (Context for Next Agent)
 
-- **Recent Achievements (2026-10-22 — Release v1.2.0: AI Explain, AI Agent & AI Configuration Hub)**:
-  - **'Ai Explain' Integration (`TaskDetailModal`, `AiExplainModal`, `open_ai_explain`)**:
-    - Generiert strukturierte Prompts auf Deutsch oder Englisch mit allen Aufgabenmetadaten und Dateianhängen.
-    - Automatisches Kopieren in die Zwischenablage (`pyperclip` + `ctypes` Fallback) und Öffnen im Browser oder Starten einer lokalen Desktop-App (`.exe`).
-    - Vollständige englische Lokalisierung und dynamische Umschaltung zwischen Web-URL und Desktop-App-Pfad.
-    - `VerticalScroll`-Unterstützung mit `scrollbar-gutter: stable` und `max-height: 85%`, wodurch die Buttons `Save [S]` und `Back [ESC]` auch in kompakten Terminals mit sicherem Puffer erreichbar sind.
-  - **'Agent' Button & Agentic Coding Tool Integration (`TaskDetailModal`, `AiAgentConfigModal`, `run_agent_workflow`)**:
-    - 1-Klick-Workflow lädt Aufgaben-Dateien & `angabe.md` herunter, kopiert den Zielordner-Pfad in die Zwischenablage und startet das konfigurierte Coding Tool (Antigravity, Cursor, VS Code etc.).
-    - Native Windows-Explorer-Auswahl für Verzeichnisse (`pick_directory`) und Executables (`pick_file`).
-  - **Zentrales Einstellungs-Hub `AI Configuration` (`SettingsModal`, `AiConfigChoiceModal`)**:
-    - Menüpunkt in den Settings unter Shortcut `[7]` / `[A]`.
-  - **Headless Agent CLI (`tasks explain`, `tasks agent`)**:
-    - Vollständige Befehle für autonome KI-Agenten mit `--json`, `--copy-only`, `--no-launch` etc.
-  - **316 automatisierte Tests** in der Gesamtsuite mit 100 % Erfolgsquote (`tests/test_ai_explain.py`, `tests/test_agent_feature.py`, `tests/test_tui_app.py` etc.).
-- **Previous Achievements (2026-10-21 — Release v1.1.0 & WebUntis Lateness & Excuse Letter Polish)**:
-  - Minutengenaue Verspätungsberechnung und Stundenplan-Abgleich.
-  - Verspätungsfilter `Hide Lateness` im Entschuldigungs-Dialog.
-  - Plattform-Toggle im Login-Menü.
+- **Release v1.3.0 Milestone Summary (2026-10-24)**:
+  - **In-App AI Chat Assistant (`AiChatScreen`)**: Vollständiger Ersatz des alten externen Web-Ai-Systems durch ein integriertes Vollbild-Terminal-Interface.
+  - **Browser-Style Task Tabs**: Horizontale, kompakte 1-Zeilen-Tableiste mit Fachkürzeln für inaktive Tabs und voller Fachtitel-Expansion für den aktiven Tab inklusive flüssigem Scrolling.
+  - **Auto-Attachment Extraction**: PyMuPDF (`fitz`), Markdown- und Quellcode-Extraktion bettet alle Aufgaben-Dateien ohne Zutun des Benutzers direkt in den Prompt-Kontext ein.
+  - **Rich Markdown & Code-Block Rendering**: Native Formatierung für Assistant-Antworten mit Highlighting für Inline-Code und Codeblöcke im Standard- und OLED-Theme.
+  - **Pulsierende Denk-Anzeige**: 3-Stufen-Animation (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`) mit 2,0s Zyklus und sauberem Timer-Lifecycle.
+  - **Universal Theme Support**: Semantische Textual-Variablen für fehlerfreie Darstellung über alle 22 Themes hinweg.
+  - **Intelligente Tab-Wiederherstellung & Lesefluss**: Merkt sich die zuletzt geöffnete Aufgabe und richtet das Chatfenster bei Antworten an der Fensteroberkante aus.
+  - **Auto-Growing Prompt-Eingabe**: Dynamisch wachsende Leiste (1–3 Zeilen) mit echtem `Shift+Enter` Zeilenumbruch (inkl. Win32-Hardware-Fallback) und verankertem, sattem Karminrot-Clear-Button (`#e03131`).
+  - **Smart Download Auto-Directory (`DownloadLocationModal`)**: 1-Klick-Download direkt in verknüpfte Schulfach-Ordner (`tasks download --auto-dir`).
+  - **Startzeit-Optimierung**: Kaltstart um ~40% beschleunigt durch Lazy Loading von Heavyweight-Paketen und asynchrone Cache-Pruning-Threads.
+
+- **Recent Achievements (2026-10-23 — Filter Menu Scrollbar & TUI Startup Speed Optimization)**:
+  - **Scrollbares Filter-Menü (`FilterMenuModal`)**:
+    - Umstellung des `#filter_dialog` Containers von `Vertical` auf `VerticalScroll(id="filter_dialog")`.
+    - CSS-Anpassung mit `overflow-y: auto;` und `scrollbar-gutter: stable;` für zuverlässiges Scrollen auf kleinen Bildschirmen (z. B. 80x20 Terminals) ohne abgeschnittene Buttons.
+  - **Startbeschleunigung (~40% schneller, ca. 760 ms Ersparnis)**:
+    - Lazy Loading für schwere Bibliotheken: `excuse_service` (`fpdf2`), `digi4school_service` (`fitz`/`PyMuPDF`, `PIL`, `pytesseract`) und `auth` (`playwright`, `requests`) in `src/ui/tui_app.py` und `src/main.py`.
+    - Asynchroner Daemon-Thread für `clean_browser_profile_caches()`, sodass der synchrone Festplattenscan vor dem Öffnen der TUI entfällt.
+    - Vollständige Verifikation: 316 Unit-Tests erfolgreich (100%), Kaltstartzeit von 1,88s auf 1,12s gesenkt.
+  - **Architektur & ADR**:
+    - Dokumentiert in `ADR-022: On-Demand Lazy Subsystem Loading & Non-Blocking Startup Optimization` und `docs/architecture.md`.
+
+- **Previous Achievements (2026-10-23 — Release v1.3.0: Smart Download Auto-Dir & Agent Streamlining)**:
+  - **Smart Download Auto-Directory Feature (`DownloadLocationModal`)**:
+    - Vollständig englischsprachiges Auswahldialog-Modal beim Klick auf `📥 Download [D]` mit Hotkeys `[1]`, `[2]`, `[3]` und `[ESC]`.
+    - `[1] Linked Course Folder`: Automatische Erkennung via `DirectoryService.find_matching_directory_for_course()`. Erstellt einen Unterordner mit dem Aufgabennamen im verknüpften Kursverzeichnis (`<Matched_Path>/<Aufgabentitel>/`) und speichert dort alle Dateien ab. Falls kein Ordner für das Fach verknüpft ist: Button deaktiviert (`disabled=True`) mit gelbem Hinweis `⚠️ No linked folder for '<Fach>' [1]`.
+    - `[2] Choose Folder Manually...`: Öffnet wie gewohnt den nativen Windows Explorer Folder Picker (`pick_directory`).
+    - `[3] Standard Downloads Folder`: Speichert direkt unter `%USERPROFILE%\Downloads\<Fach> - <Aufgabe>\`.
+  - **Headless CLI Erweiterung (`tasks download --auto-dir`)**:
+    - Neuer Flag `--auto-dir` (`-a`) für `tasks download <id>`.
+  - **Vollständige Bereinigung des alten Agent-Harnesses**:
+    - Button `🤖 Agent [G]` (`btn_det_agent`), Key-Binding `[G]` und `action_agent_open` entfernt.
+    - Dialoge `AiAgentConfigModal` und `AiConfigChoiceModal` entfernt; das Einstellungsmenü verlinkt wieder direkt auf `🤖 AI Explain Config`.
+    - Headless CLI-Befehl `tasks agent` entfernt und `src/services/ai_agent_service.py` gelöscht.
+  - **Testabdeckung**:
+    - Neue Test-Suite `tests/test_download_auto_dir.py` (7/7 Tests erfolgreich).
+    - Gesamte Test-Suite mit 100 % Erfolgsquote (316 Tests).
+- **Previous Achievements (2026-10-22 — Release v1.2.1: Global 'tasks' Agent-Skill & CLI Sync Command)**:
+  - Schlanker, token-effizienter Skill (`skills/tasks/SKILL.md`) optimiert für `/tasks`.
+  - Befehl `tasks skill [sync|status]`.
+- **Previous Achievements (2026-10-22 — Release v1.2.0: AI Explain & Desktop App Linking)**:
+  - AI Explain mit Provider-Vorlagen und Desktop App Linking.
 - **Entry Points**:
   - Desktop / Interactive: `run.bat` oder `python main.py`
   - Agent / Script: `tasks.bat <subcommand>` oder `python main.py <subcommand>`

@@ -22,15 +22,15 @@
 | :--- | :--- | :--- |
 | `TaskDetailModal` | Modal | Zeigt formatierte Angabe (`angabe.md`), Metadaten und Aktions-Buttons für eine gewählte Aufgabe. |
 | `AddTaskModal` (`[A]`) | Modal | Eingabemaske zur manuellen Erstellung eigener Hausübungen oder Notizen mit Fälligkeitsdatum. |
-| `FilterMenuModal` (`[F]`) | Modal | Kompakter Filter-Dialog für Status, Fach und Zeitfenster mit Statusanzeige direkt auf den Buttons. |
+| `FilterMenuModal` (`[F]`) | Modal | Kompakter, scrollbarer Filter-Dialog für Status, Fach, Zeitfenster und Plattform mit Statusanzeige direkt auf den Buttons. |
 | `SubjectFilterModal` | Modal | Listen-Auswahl zur Einschränkung der Tabelle auf ein spezifisches Schulfach. |
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
 | `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v1.1.0`), Themes, Logins und Schülereinstellungen. |
-| `AiConfigChoiceModal` | Modal | Englische Auswahloberfläche zwischen AI Explain (Prompts, Web & Desktop App) und AI Agent (Coding Tool Executable). |
-| `AiExplainModal` | Modal | Englischer Konfigurationsdialog für 'Ai Explain' mit Provider-Vorlagen (Gemini, ChatGPT, Perplexity, Custom URL oder lokale Desktop App .exe via Explorer), dynamischer Scrollbar (`VerticalScroll`) und Sprachumschalter (German/English). |
-| `AiAgentConfigModal` | Modal | Englischer Konfigurationsdialog für das Agentic Coding Tool mit .exe-Dateiauswahl via Windows Explorer. |
+| `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
+| `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen und direkter Gemini / OpenAI REST-Anbindung. |
+| `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
 | `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases mit 1-Klick-In-App-Download, Fortschrittsbalken und automatischer Installation im selben Verzeichnis (ohne PATH-Änderung oder Datenverlust). |
 | `LoginChoiceModal` (`[L]`) | Modal | Zentrales Auswahlmenü für Anmeldungen bei Moodle, Microsoft Teams und WebUntis. |
 | `TeamsSetupModal` | Modal | Geführter Teams-Login via Playwright-Chromium mit Passkey-, 2FA- oder Kennwort-Unterstützung. |
@@ -50,10 +50,10 @@
 | Button / Control | ID / Key | Kurzbeschreibung |
 | :--- | :--- | :--- |
 | `Open in browser` | `[O]` / `btn_open_browser` | Öffnet die offizielle Abgabeseite der Aufgabe direkt im Standard-Webbrowser. |
-| `Download files` | `[D]` / `btn_download_files` | Lädt alle Anhänge und die Angabe in `%USERPROFILE%\Downloads\<Fach> - <Titel>\` und öffnet den Explorer. |
-| `Ai Explain` | `[A]` / `btn_det_ai_explain` | Generiert einen strukturierten Erklärungsprompt, kopiert ihn in die Zwischenablage und öffnet die gewählte KI-Seite im Browser oder startet die konfigurierte Desktop-App (.exe). |
-| `Agent` | `[G]` / `btn_det_agent` | Lädt alle Aufgaben-Dateien & angabe.md in einen frei wählbaren Ordner, kopiert den Pfad in die Zwischenablage und startet das konfigurierte Coding Tool. |
-| `AI Configuration` | `[7/A]` / `btn_set_ai_config` | Öffnet in den Settings das englischsprachige Auswahlmenü für 'AI Explain' und 'AI Agent' Konfigurationen. |
+| `Download files` | `[D]` / `btn_det_download` | Öffnet das englischsprachige `DownloadLocationModal` zur Zielwahl (Auto-Dir [1], Explorer [2], Downloads [3]). |
+| `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
+| `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung. |
+| `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
 | `Toggle status` | `[E]` / `btn_toggle_status` | Schaltet den Erledigt-Status einer Aufgabe zwischen offen und abgeschlossen um. |
 | `Hide / Delete` | `[L]` / `btn_delete_task` | Verschiebt eine Aufgabe in den lokalen Papierkorb (`deleted_tasks.json`). |
 | `Restore` | `[W]` / `btn_restore_task` | Stellt eine gelöschte Aufgabe aus dem Papierkorb wieder her. |
@@ -96,9 +96,8 @@
 | :--- | :--- | :--- |
 | `tasks list` | `-s <status> -f <fach> --json` | Listet Aufgaben tabellarisch oder als JSON für KI-Agenten auf. |
 | `tasks show <id>` | `--json` | Gibt vollständige Metadaten und Aufgabenstellung einer Aufgabe im Terminal aus. |
-| `tasks download <id>` | `--dir <pfad>` | Lädt Anhänge und Angabe headless in das Zielverzeichnis herunter. |
+| `tasks download <id>` | `[--auto-dir] [--dir <pfad>] [--json]` | Lädt Anhänge und Angabe herunter; `--auto-dir` (-a) ermittelt automatisch das verknüpfte Kursverzeichnis. |
 | `tasks explain <id>` | `[--lang de\|en] [--copy-only] [--no-browser] [--json]` | Generiert einen strukturierten KI-Erklärungsprompt, kopiert ihn in die Zwischenablage und öffnet den Browser. |
-| `tasks agent <id>` | `[--dir <pfad>] [--no-launch] [--json]` | Lädt Aufgaben-Dateien in den Zielordner, kopiert den Pfad und startet das konfigurierte Agentic Coding Tool. |
 | `tasks open <fach>` | — | Öffnet den Moodle-Kurs des angegebenen Fachs im Standard-Webbrowser. |
 | `tasks books list` | `--json` | Gibt alle verknüpften Schulbücher aus. |
 | `tasks books open <id>` | — | Startet das angegebene Schulbuch im OS-Standardviewer oder Webbrowser. |

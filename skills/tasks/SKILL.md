@@ -27,9 +27,9 @@ All commands operate on a lightning-fast local cache (<0.1s). Always pass `--jso
 
 3. **Download attachments & specification (`angabe.md`)**:
    ```powershell
-   tasks download <id|index> --dir "<zielpfad>" --json
+   tasks download <id|index> [--auto-dir] [--dir "<zielpfad>"] --json
    ```
-   *Downloads all PDFs, code files, and generates an `angabe.md`. If `--dir` is omitted, saves to default Downloads.*
+   *Downloads all PDFs, code files, and generates an `angabe.md`. Pass `--auto-dir` (`-a`) to automatically save into the matched linked course directory. If `--dir` and `--auto-dir` are omitted, saves to default Downloads.*
 
 4. **Toggle completion status**:
    ```powershell

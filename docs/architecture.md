@@ -30,7 +30,7 @@ graph TD
         Digi4School[Digi4SchoolService<br/>digi4school_service.py]
         Update[UpdateService<br/>update_service.py]
         AiExplain[AiExplainService<br/>ai_explain_service.py]
-        AiAgent[AiAgentService<br/>ai_agent_service.py]
+        DirectoryService[DirectoryService<br/>directory_service.py]
     end
 
     subgraph Storage Layer [cache/ & data/]
@@ -104,9 +104,9 @@ Aufgaben Detector/
 │   │   ├── task_manager.py     # Central aggregation & caching coordinator
 │   │   └── win_dialogs.py      # Per-Monitor DPI-Awareness v2 & native Windows COM IFileOpenDialog
 │   ├── services/               # External portal integration adapters
-│   │   ├── ai_agent_service.py # Agent project exporter (angabe.md + attachments) & tool launcher
 │   │   ├── ai_explain_service.py # AI prompt generation, clipboard copy & browser / app launcher
-│   │   ├── directory_service.py # Directory linking, listing and Explorer launcher
+│   │   ├── ai_chat_service.py    # In-app AI chat: attachment extraction, Gemini/OpenAI dispatch, chat cache
+│   │   ├── directory_service.py # Directory linking, listing, course auto-matching & Explorer launcher
 │   │   ├── excuse_service.py   # PDF absence excuse generator
 │   │   ├── git_sync_service.py # Multi-device repository sync (including favorites)
 │   │   ├── moodle_service.py   # Moodle scraping & REST API
@@ -174,9 +174,10 @@ sequenceDiagram
 ```
 
 ### Two-Tier Startup Lifecycle
-1. **Tier 1 (Instant Cache Hit)**:
+1. **Tier 1 (Instant Cache Hit & Lazy Heavy Subsystems)**:
    - On execution, `TaskManager` loads `cache/tasks_cache.json` and `data/` immediately.
-   - The UI or CLI outputs data within **100 milliseconds**, requiring zero active network connectivity.
+   - Heavy submodules (`fpdf2`, `PyMuPDF`/`fitz`, `PIL`, `pytesseract`, `playwright`, `requests`) are imported on-demand (lazy loading), keeping the initial import footprint lightweight.
+   - Synchronous disk scanning (`clean_browser_profile_caches`) is deferred to a background daemon thread, allowing the TUI or CLI to output data and render within **100–1100 milliseconds** (down from ~1.9s).
 2. **Tier 2 (Background Prefetch & Live Sync)**:
    - In interactive TUI mode, an optional background worker can prefetch task details or thumbnails.
    - Live synchronization is triggered explicitly via `[R]` in TUI or `tasks sync` in CLI to prevent unprompted network stalls.

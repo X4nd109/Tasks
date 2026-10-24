@@ -11,6 +11,91 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ---
 
+## [1.3.0] - 2026-10-24
+
+### Added
+- **Native In-App AI Assistant Screen (`AiChatScreen`)**:
+  - Neuer Hauptmenü-Button `🤖 Ai` in der unteren Leiste (Shortcut `[I]`) links neben Tests.
+  - **Browser-Style Task Tabs**: Schlanke obere Tableiste mit allen aktuell offenen / überfälligen Aufgaben. Inaktive Tabs zeigen platzsparend nur das Schulfach (z. B. `[SWP]`, `[AMEC]`), der aktive Tab expandiert auf `📌 <Fach>: <Aufgabentitel>` und verschiebt die Nachbartabs. Flüssig horizontal scrollbar.
+  - **Deep Context & Auto-Attachment Extraction**: Lädt beim Betreten des Chats Aufgaben-Anhänge im Hintergrund herunter und extrahiert Textinhalte aus PDFs (via PyMuPDF `fitz`), Markdown und Quellcode direkt in den System-Prompt der KI. Die KI kennt die vollständige Aufgabenstellung ohne Erklärung durch den Benutzer.
+  - **Interaktiver Chat**: Scrollbare Chat-Nachrichten mit Markdown-Formatierung, `Enter`-zum-Senden im Eingabefeld, visuelle Denk-Indikatoren und asynchrone Hintergrund-Abfragen ohne UI-Lag.
+  - **Cache-Persistenz & Automatische Bereinigung**: Speichert Konversationen in `cache/ai_chats.json`. Sobald eine Aufgabe als erledigt markiert wird oder nicht mehr offen/überfällig ist, wird ihr Verlauf automatisch aus dem Cache gelöscht. Eigener `🗑️ Clear Chat`-Button pro Aufgaben-Tab.
+  - **AI Explain Nahtlos-Integration**: Klick auf `🤖 Ai Explain [A]` in der Aufgaben-Detailansicht wechselt direkt in den AI-Chat auf den richtigen Tab und startet automatisch die Schritt-für-Schritt-Erklärung.
+  - **Rich Markdown & Code-Block Rendering**: Assistant-Antworten nutzen jetzt das Textual-`Markdown`-Widget statt reinem Text. Fenced Code Blocks (`MarkdownFence`) und Inline-Code (`MarkdownCodeInline`) erhalten abgesetzte Hintergründe, Rahmen und Akzentfarben – inklusive eigener OLED-Varianten. User-Nachrichten bleiben bewusst als schlichter `Static`-Text.
+  - **Animierte 3-Punkte Denk-Anzeige (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`)**: Sanft pulsierende Textanzeige ohne Emoji-Overhead, gesteuert über einen Textual-Intervalltimer (exakt 2,0 Sekunden pro voller 3-Stufen-Zyklus), die beim Eintreffen der Antwort oder beim Verlassen des Screens automatisch gestoppt wird.
+  - **Universelle Theme-Unterstützung für das AI-Menü**: Vollständige Ablösung fester Hex-Codes durch Textuals semantische CSS-Variablen (`$background`, `$surface`, `$panel`, `$primary`, `$border`, `$text`, `$warning`, `$success`, `$error`), wodurch sich der Chat-Screen dynamisch und fehlerfrei an alle 22 Themes (Dark, Light, Retro/Warm und OLED) anpasst.
+  - **Intelligente Tab-Wiederherstellung (Zuletzt geöffnete Aufgabe)**: Öffnet automatisch die Aufgabe, die zuletzt aktiv war (bzw. die 1. Aufgabe als Fallback, falls noch nie eine offen war oder die Aufgabe abgeschlossen wurde).
+  - **Lesefreundliches Scrollen bei KI-Antworten (Start von oben)**: Bei Eintreffen einer Antwort wird das Chatfenster nicht mehr an das absolute Ende gescrollt, sondern richtet die neue Antwort mit `last_assistant_bubble.scroll_visible(top=True, animate=False)` exakt an der Fensteroberkante aus, sodass man sofort von der ersten Zeile an lesen kann.
+  - **Verbessertes Einstellungsmenü `AiConfigModal`**:
+    - Presets-Dschungel komplett entfernt: Einfache, direkte Eingabe des API-Keys für Google Gemini oder OpenAI.
+    - Automatischer Zeilenumbruch und optimierte Beschriftung (`.ai_hint` mit `width: 100%`), kein Abschneiden mehr am rechten Rand.
+    - Automatisches Modell-Laden: Sobald ein API-Key eingefügt wird, triggert die Eingabe automatisch `_fetch_models` ohne manuellen Button-Klick.
+    - Dynamisches Modell-Dropdown (`Select`) mit `🔄 Load Models` Button zum Abfragen aller für den Key freigeschalteten Modelle (z. B. Gemini Flash, Pro).
+    - Korrigierte Höhe des `🔌 Test Connection` Buttons auf Standardhöhe (`height: 3`) und sprechende Prepayment-Fehlerdiagnose für Google-Cloud-Keys.
+  - **Polished `AiChatScreen` Layout & Navigation**:
+    - Unnötige Header-Leiste ("TASKS — School Assignment Hub" + Uhrzeit) im AI-Chat-Vollbild entfernt.
+    - Start bei Aufgabe 1: Öffnen des AI-Menüs wählt sofort die erste offene Aufgabe aus und zeigt den Chat/Start-Placeholder an.
+    - Zuverlässige Chat-Persistenz: Behebung eines Cache-Wipe-Bugs in `_populate_table`, Chats bleiben dauerhaft gespeichert.
+    - Symmetrisches Aufgaben-Banner mit oberer und unterer Trennlinie (`border-top` und `border-bottom`), perfekt zentrierter Text.
+    - **Reines Aufgaben-Banner ohne Fach**: Die Bannerzeile unter den Tabs zeigt nun ausschließlich den vollständigen Titel der Aufgabe ohne Kurs-Präfix.
+    - **Dynamische Auto-Growing Prompt-Eingabe (`ChatInputArea`)**:
+      - `Send`-Button entfernt: Schnelles Absenden ausschließlich per `Enter`, die Eingabezeile füllt die gesamte verfügbare Breite aus.
+      - **Zuverlässiger Zeilenumbruch mit `Shift + Enter`**:
+        - Unterstützung für `shift+enter`, `shift+return`, `ctrl+j`, `ctrl+enter`, `alt+enter` und `shift+linefeed`.
+        - Hardware-Win32-Fallback (`is_shift_pressed_win32`) und `patch_win32_event_monitor` Treibersequenz (`\x1b[13;2u`), um auch in Standard-Windows-Konsolen ohne ANSI-Shift-Modus zuverlässig Zeilenumbrüche im Prompt zu ermöglichen.
+      - **Symmetrische Rahmentrennung & Höhenverschiebung (`#ai_input_bar`)**:
+        - Oberhalb und unterhalb der Eingabeleiste befindet sich jeweils eine dünne Trennlinie (`border-top` und `border-bottom`), wodurch das Schreibfeld leicht angehoben und nach unten sauber abgeschlossen wird.
+      - **Fest verankerte Aktions-Buttons (`#ai_input_btn_box`)**:
+        - `#btn_ai_clear_chat` aus der oberen Tableiste entfernt und als kompakter, perfekt zentrierter `🗑️`-Button direkt links neben den Back-Button gesetzt (`width: 4; min-width: 4; padding: 0;`).
+        - Beide Buttons verbleiben über `Horizontal(id="ai_input_btn_box")` mit `align: right bottom;` unverrückbar rechts unten, selbst wenn das Schreibfeld bei mehrzeiligen Prompts nach oben auf 2 oder 3 Zeilen wächst.
+      - Automatisches Wachsen nach oben (1 bis maximal 3 Zeilen) bei längeren Prompts oder Soft-Wrapping.
+      - Integrierte dezente Scrollbar ab 4 Zeilen Text.
+      - Automatisches Zurücksetzen auf 1 Zeile Höhe nach dem Absenden.
+    - **Filter-Synchronisation mit dem Hauptmenü**: Die im AI-Chat angezeigten Aufgaben-Tabs basieren nun direkt auf den im Hauptmenü eingestellten Filtern (Zeitfenster, Fach, Plattform, Status).
+    - **Kompakte 1-Zeilen-Tabs & vollflächig farbige Aktivierung**:
+      - Die Aufgaben-Buttons und die obere Tableiste wurden auf exakt **1 Zeile Höhe** (`height: 1`) gestrafft.
+      - Der aktive Tab wird komplett vollflächig farbig hervorgehoben (`background: #89b4fa; color: #11111b;` im Standard-Theme bzw. `#205ea6; color: #ffffff;` im OLED-Theme), während inaktive Tabs dezent dunkel bleiben.
+      - Kein überflüssiger Randstrich oder ungenutzter Freiraum mehr.
+    - Vollständige Modularisierung des AI-Personaprompts: Alle hardcoded Schulnamen (`Spengergasse`) aus `_persona()` in `src/services/ai_chat_service.py` entfernt, sodass der Lernassistent neutral für jede Bildungseinrichtung funktioniert.
+    - Saubere Kursbezeichnungen in inaktiven Tabs ohne Klammern (z. B. `SESD` statt `[SESD]`).
+    - Flüssiger dynamischer Tab-Wechsel mit sofortiger Neuberechnung der Tab-Breiten (`refresh(layout=True)`).
+    - Schlankerer Chatverlauf ohne Absender-Header (`🧑 You` / `🤖 AI`); Differenzierung rein über den farbigen Seitenstrich.
+    - Exakte Höhenanpassungen verhindern jegliches Abschneiden von Tabs, Clear-, Send- und Back-Buttons.
+    - Neuer sichtbarer `↩️ Back [ESC]` Button in der unteren Eingabeleiste zum bequemen Verlassen des Screens.
+    - Robuste Tab-Befüllung aus dem TaskManager für alle offenen Aufgaben.
+  - Neuer CLI-Workflow: `tasks explain <id>` nutzt bei hinterlegtem API-Key direkt die KI zur Erklärungsausgabe.
+
+### Removed
+- **Externes Web-Ai-System**:
+  - Das Öffnen von externen Browser-Fenstern und Desktop-Apps via `open_ai_explain` wurde vollständig durch das native In-App Chat-Interface ersetzt.
+
+### Added (Previous)
+- **Smart Download Auto-Directory Feature (`DownloadLocationModal`)**:
+  - Interaktives, englischsprachiges Auswahlmodal beim Klick auf `📥 Download [D]` in der Aufgaben-Detailansicht.
+  - 1-Klick-Hotkeys `[1]`, `[2]`, `[3]` und `[ESC]`:
+    - `[1] Linked Course Folder`: Sucht via `DirectoryService.find_matching_directory_for_course` automatisch nach einem verknüpften Ordner für das Schulfach, erstellt einen Unterordner mit dem Aufgabennamen und speichert alle Dateien direkt dort ab. (Deaktiviert mit Hinweis, falls kein Ordner für das Fach verknüpft ist).
+    - `[2] Choose Folder Manually...`: Öffnet den nativen Windows Explorer Folder Picker zur freien Pfadauswahl.
+    - `[3] Standard Downloads Folder`: Speichert wie gewohnt in `%USERPROFILE%\Downloads\<Fach> - <Aufgabe>\`.
+  - Neuer CLI-Flag `tasks download <id> --auto-dir` (`-a`): Automatische Zielordner-Erkennung auch headless im Terminal.
+  - `DirectoryService.find_matching_directory_for_course`: Mehrstufige Erkennung über Kurskürzel, Kursvollnamen, Ordner-Basenamen und Wortgrenzen.
+
+### Fixed & Optimized
+- **Scrollbares Filter-Menü (`FilterMenuModal`)**:
+  - Umstellung des Filter-Hubs von `Vertical` auf `VerticalScroll(id="filter_dialog")` mit `overflow-y: auto;` und `scrollbar-gutter: stable;`.
+  - Verhindert das Abschneiden von Filter-Optionen und des Close-Buttons bei begrenzter Fensterhöhe (z. B. 20 Zeilen).
+- **Drastische Startzeit-Optimierung (~40% schneller, ca. 800 ms Ersparnis)**:
+  - **Lazy Loading**: `excuse_service` (`fpdf2`), `digi4school_service` (`fitz`/`PyMuPDF`, `PIL`, `pytesseract`) und `auth` (`playwright`, `requests`) werden nun on-demand erst beim tatsächlichen Aufruf der jeweiligen Module geladen anstatt top-level beim Start.
+  - **Asynchrone Cache-Bereinigung**: `clean_browser_profile_caches()` läuft in `run_tui()` nun als unabhängiger Hintergrund-Thread, wodurch die Festplatten-Traversal (`os.walk`) das Erscheinen der TUI nicht mehr verzögert.
+
+### Removed
+- **Vollständige Bereinigung des 'Agent'-Buttons & Harnesses**:
+  - Button `🤖 Agent [G]` und `action_agent_open` aus `TaskDetailModal` entfernt.
+  - Dialoge `AiAgentConfigModal` und `AiConfigChoiceModal` entfernt; das Einstellungsmenü verlinkt wieder direkt auf `🤖 AI Explain Config`.
+  - Headless CLI-Befehl `tasks agent` entfernt.
+  - Service `src/services/ai_agent_service.py` und Hilfsfunktionen `load_agent_coding_tool` / `save_agent_coding_tool` in `config.py` gelöscht.
+
+---
+
 ## [1.2.1] - 2026-10-22
 
 ### Added

@@ -22,7 +22,7 @@ from rich.text import Text
 from rich.markup import escape
 from textual.app import App, ComposeResult, RenderResult
 from textual.binding import Binding
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll, Center
+from textual.containers import Container, Horizontal, Vertical, VerticalScroll, HorizontalScroll, Center
 from textual import events
 from textual.events import Resize, MouseDown, Click
 from textual.geometry import Size
@@ -80,6 +80,20 @@ def is_ctrl_pressed_win32() -> bool:
         try:
             # 0x11 = VK_CONTROL (prüft linke & rechte STRG-Taste)
             return bool(ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000)
+        except Exception:
+            return False
+    return False
+
+
+def is_shift_pressed_win32() -> bool:
+    """Prüft über die Windows Win32-API (GetAsyncKeyState), ob SHIFT physisch gehalten wird."""
+    if os.name == "nt":
+        try:
+            # 0x10 = VK_SHIFT, 0xA0 = VK_LSHIFT, 0xA1 = VK_RSHIFT
+            u32 = ctypes.windll.user32
+            return bool(
+                (u32.GetAsyncKeyState(0x10) | u32.GetAsyncKeyState(0xA0) | u32.GetAsyncKeyState(0xA1)) & 0x8000
+            )
         except Exception:
             return False
     return False
@@ -156,6 +170,15 @@ def patch_win32_event_monitor() -> None:
                                     or key in ("\x08", "\x7f")
                                 ):
                                     append_key("\x1b[127;5u")
+                                    continue
+
+                                # Shift+Enter Erkennung (0x0010 = SHIFT_PRESSED, VK_RETURN = 13):
+                                is_shift = bool(key_event.dwControlKeyState & 0x0010)
+                                if is_shift and (
+                                    key_event.wVirtualKeyCode == 13
+                                    or key in ("\r", "\n")
+                                ):
+                                    append_key("\x1b[13;2u")
                                     continue
 
                                 if (
@@ -408,11 +431,6 @@ except ImportError:
     from src.services.directory_service import DirectoryService
 
 try:
-    from digi4school_service import Digi4SchoolService, find_tesseract
-except ImportError:
-    from src.services.digi4school_service import Digi4SchoolService, find_tesseract
-
-try:
     from update_service import (
         check_for_updates,
         download_update_installer,
@@ -487,7 +505,6 @@ from untis_service import (
     delete_custom_exam,
     lookup_untis_lesson_details,
 )
-from excuse_service import create_excuse_pdf, open_pdf_in_system_viewer
 import ui
 
 
@@ -1622,6 +1639,8 @@ class FilterMenuModal(ModalScreen[Optional[str]]):
         border: thick #89b4fa;
         background: #1e1e2e;
         padding: 1 2;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
     }
     #filter_title {
         text-align: center;
@@ -1663,7 +1682,7 @@ class FilterMenuModal(ModalScreen[Optional[str]]):
         self.current_timeframe = current_timeframe
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="filter_dialog"):
+        with VerticalScroll(id="filter_dialog"):
             yield Label("🔍 Filter Menu", id="filter_title")
             st_disp = {
                 "open_only": "Open only",
@@ -2501,6 +2520,11 @@ class Digi4SchoolDownloadModal(ModalScreen[Optional[dict]]):
             self._submit()
 
     def _submit(self) -> None:
+        try:
+            from digi4school_service import find_tesseract
+        except ImportError:
+            from src.services.digi4school_service import find_tesseract
+
         email = self.query_one("#digi_input_email", Input).value.strip()
         password = self.query_one("#digi_input_password", Input).value.strip()
         code = self.query_one("#digi_input_code", Input).value.strip()
@@ -2610,6 +2634,11 @@ class Digi4SchoolDetectModal(ModalScreen[Optional[dict]]):
             self.action_cancel()
 
     def _run_detect_thread(self) -> None:
+        try:
+            from digi4school_service import Digi4SchoolService
+        except ImportError:
+            from src.services.digi4school_service import Digi4SchoolService
+
         import asyncio
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
@@ -3029,6 +3058,11 @@ class Digi4SchoolProgressModal(ModalScreen[Optional[dict]]):
         threading.Thread(target=self._run_download_thread, daemon=True).start()
 
     def _run_download_thread(self) -> None:
+        try:
+            from digi4school_service import Digi4SchoolService
+        except ImportError:
+            from src.services.digi4school_service import Digi4SchoolService
+
         import asyncio
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
@@ -3186,6 +3220,11 @@ class Digi4SchoolProgressModal(ModalScreen[Optional[dict]]):
         elif event.button.id == "btn_close_d4s":
             self.dismiss(self.download_result)
         elif event.button.id == "btn_open_folder_d4s":
+            try:
+                from digi4school_service import Digi4SchoolService
+            except ImportError:
+                from src.services.digi4school_service import Digi4SchoolService
+
             downloads_dir = Digi4SchoolService.get_default_downloads_dir()
             try:
                 if sys.platform == "win32":
@@ -3569,7 +3608,7 @@ class SettingsModal(ModalScreen[Optional[str]]):
             yield Button("👁️ Hidden", id="btn_set_hidden", classes="settings_btn", variant="error", tooltip="Hidden [3]")
             yield Button("⚙️ School & Student Config", id="btn_set_school_config", classes="settings_btn", variant="primary", tooltip="School & Student Config [4]")
             yield Button("⌨️ Hotkeys", id="btn_set_hotkeys", classes="settings_btn", variant="default", tooltip="Hotkeys [5/6]")
-            yield Button("🤖 AI Configuration", id="btn_set_ai_config", classes="settings_btn", variant="primary", tooltip="AI Configuration [7/A]")
+            yield Button("🤖 AI Explain Config", id="btn_set_ai_explain", classes="settings_btn", variant="primary", tooltip="AI Explain [7/A]")
             with Horizontal(id="settings_cancel_row"):
                 yield Button("↩️ Close [ESC]", id="btn_set_cancel", variant="default")
 
@@ -3621,33 +3660,43 @@ class SettingsModal(ModalScreen[Optional[str]]):
         self.dismiss(None)
 
 
-class AiConfigChoiceModal(ModalScreen[Optional[str]]):
-    """Selection menu for AI configuration (Explain vs. Agent)."""
+class DownloadLocationModal(ModalScreen[Optional[str]]):
+    """Selection modal for assignment download destination (Auto-Dir, Manual, Standard Downloads)."""
 
     DEFAULT_CSS = """
-    AiConfigChoiceModal {
+    DownloadLocationModal {
         align: center middle;
     }
-    #ai_choice_dialog {
-        width: 62;
+    #dl_loc_dialog {
+        width: 76;
         max-height: 90%;
         height: auto;
-        border: thick #89b4fa;
+        border: thick #a6e3a1;
         background: #1e1e2e;
         padding: 1 2;
     }
-    #ai_choice_title {
+    #dl_loc_title {
         width: 100%;
         text-align: center;
         text-style: bold;
-        color: #89b4fa;
+        color: #a6e3a1;
         margin-bottom: 1;
     }
-    .ai_choice_btn {
+    .dl_loc_meta {
+        color: #a6adc8;
+        margin-bottom: 1;
+        text-align: center;
+    }
+    .dl_loc_btn {
         width: 100%;
         margin-bottom: 1;
     }
-    #ai_choice_cancel_row {
+    .dl_loc_hint {
+        color: #6c7086;
+        margin-bottom: 1;
+        padding-left: 2;
+    }
+    #dl_loc_cancel_row {
         height: auto;
         align: center middle;
         margin-top: 1;
@@ -3655,187 +3704,91 @@ class AiConfigChoiceModal(ModalScreen[Optional[str]]):
     """
 
     BINDINGS = [
-        Binding("1", "choose_explain", "Explain", show=False),
-        Binding("2", "choose_agent", "Agent", show=False),
-        Binding("e", "choose_explain", "Explain", show=False),
-        Binding("a", "choose_agent", "Agent", show=False),
-        Binding("escape", "cancel", "Back"),
+        Binding("1", "choose_auto", "Auto", show=False),
+        Binding("2", "choose_manual", "Manual", show=False),
+        Binding("3", "choose_downloads", "Downloads", show=False),
+        Binding("escape", "cancel", "Cancel"),
     ]
 
+    def __init__(self, task: Task) -> None:
+        super().__init__()
+        self.target_task = task
+        self.matched_dir: Optional[Dict[str, Any]] = None
+        try:
+            from services.directory_service import DirectoryService
+            self.matched_dir = DirectoryService.find_matching_directory_for_course(
+                task.course, task.course_full
+            )
+        except Exception:
+            self.matched_dir = None
+
     def compose(self) -> ComposeResult:
-        with Vertical(id="ai_choice_dialog"):
-            yield Label("🤖 AI Configuration", id="ai_choice_title")
-            yield Button("💬 AI Explain (Web / Desktop App) [1]", id="btn_choice_explain", classes="ai_choice_btn", variant="primary")
-            yield Button("💻 AI Agent (Coding Tool .exe) [2]", id="btn_choice_agent", classes="ai_choice_btn", variant="warning")
-            with Horizontal(id="ai_choice_cancel_row"):
-                yield Button("↩️ Back [ESC]", id="btn_choice_cancel", variant="default")
+        with Vertical(id="dl_loc_dialog"):
+            yield Label("📥 Download Assignment", id="dl_loc_title")
+            course_disp = self.target_task.course_full or self.target_task.course or "General"
+            yield Label(f"Subject: {course_disp} | Title: {self.target_task.title}", classes="dl_loc_meta")
+
+            # Option 1: Auto-Dir
+            if self.matched_dir:
+                dir_title = self.matched_dir.get("title", "Course Folder")
+                dir_path = self.matched_dir.get("path", "")
+                btn_label = f"🎯 Linked Course Folder: {dir_title} [1]"
+                yield Button(btn_label, id="btn_dl_auto", classes="dl_loc_btn", variant="primary")
+                subfolder_preview = os.path.join(dir_path, self.target_task.title)
+                yield Label(f"→ Subfolder: {subfolder_preview}", classes="dl_loc_hint")
+            else:
+                c_name = self.target_task.course or "Subject"
+                yield Button(f"⚠️ No linked folder for '{c_name}' [1]", id="btn_dl_auto", classes="dl_loc_btn", variant="default", disabled=True)
+                yield Label(f"Tip: Link a course folder via 'tasks dirs add <path>' to enable auto-download.", classes="dl_loc_hint")
+
+            # Option 2: Manual
+            yield Button("📂 Choose Folder Manually... [2]", id="btn_dl_manual", classes="dl_loc_btn", variant="warning")
+            yield Label("→ Select destination via Windows Explorer folder picker", classes="dl_loc_hint")
+
+            # Option 3: Standard Downloads
+            yield Button("📥 Standard Downloads Folder [3]", id="btn_dl_downloads", classes="dl_loc_btn", variant="success")
+            yield Label("→ Downloads\\<Subject> - <Title>", classes="dl_loc_hint")
+
+            with Horizontal(id="dl_loc_cancel_row"):
+                yield Button("↩️ Cancel [ESC]", id="btn_dl_cancel", variant="default")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
-        if bid == "btn_choice_explain":
-            self.dismiss("explain")
-        elif bid == "btn_choice_agent":
-            self.dismiss("agent")
-        elif bid == "btn_choice_cancel":
-            self.dismiss(None)
+        if bid == "btn_dl_auto":
+            self.action_choose_auto()
+        elif bid == "btn_dl_manual":
+            self.action_choose_manual()
+        elif bid == "btn_dl_downloads":
+            self.action_choose_downloads()
+        elif bid == "btn_dl_cancel":
+            self.action_cancel()
 
-    def action_choose_explain(self) -> None:
-        self.dismiss("explain")
+    def action_choose_auto(self) -> None:
+        if self.matched_dir:
+            self.dismiss("auto")
 
-    def action_choose_agent(self) -> None:
-        self.dismiss("agent")
+    def action_choose_manual(self) -> None:
+        self.dismiss("manual")
+
+    def action_choose_downloads(self) -> None:
+        self.dismiss("downloads")
 
     def action_cancel(self) -> None:
         self.dismiss(None)
 
 
-class AiAgentConfigModal(ModalScreen[bool]):
-    """Modal dialog to configure the Agentic Coding Tool (.exe path)."""
+class AiConfigModal(ModalScreen[bool]):
+    """Clean configuration modal for AI Chat Assistant (API Key, Model Dropdown, Test Connection, Language)."""
 
     DEFAULT_CSS = """
-    AiAgentConfigModal {
-        align: center middle;
-    }
-    #agent_config_dialog {
-        width: 76;
-        max-height: 85%;
-        height: auto;
-        border: thick #fab387;
-        background: #1e1e2e;
-        padding: 1 2;
-        scrollbar-gutter: stable;
-    }
-    #agent_config_title {
-        width: 100%;
-        text-align: center;
-        text-style: bold;
-        color: #fab387;
-        margin-bottom: 1;
-    }
-    .agent_label {
-        color: #cdd6f4;
-        text-style: bold;
-        margin-top: 1;
-    }
-    .agent_hint {
-        color: #a6adc8;
-        margin-bottom: 1;
-    }
-    #agent_path_display {
-        background: #181825;
-        border: solid #45475a;
-        color: #89dceb;
-        padding: 0 1;
-        height: 3;
-        content-align: left middle;
-        margin-bottom: 1;
-    }
-    #agent_btn_row {
-        height: auto;
-        align: left middle;
-        margin-bottom: 1;
-    }
-    #agent_btn_row Button {
-        margin-right: 1;
-    }
-    #agent_action_buttons {
-        height: auto;
-        align: center middle;
-        margin-top: 1;
-        margin-bottom: 1;
-    }
-    #agent_action_buttons Button {
-        margin: 0 1;
-    }
-    """
-
-    BINDINGS = [
-        Binding("escape", "cancel", "Back"),
-        Binding("s", "save", "Save"),
-    ]
-
-    def __init__(self):
-        super().__init__()
-        from core.config import load_agent_coding_tool
-        self.current_tool_path = load_agent_coding_tool() or ""
-
-    def compose(self) -> ComposeResult:
-        with VerticalScroll(id="agent_config_dialog"):
-            yield Label("💻 AI Agent Configuration", id="agent_config_title")
-            yield Label("Agentic Coding Tool Executable:", classes="agent_label")
-            yield Label("Select the .exe of your coding tool (e.g. Antigravity, Cursor, VS Code):", classes="agent_hint")
-
-            path_text = self.current_tool_path if self.current_tool_path else "(No coding tool configured)"
-            yield Static(path_text, id="agent_path_display")
-
-            with Horizontal(id="agent_btn_row"):
-                yield Button("📁 Browse .exe...", id="btn_agent_browse", variant="primary")
-                yield Button("🗑️ Clear", id="btn_agent_clear", variant="error")
-
-            with Horizontal(id="agent_action_buttons"):
-                yield Button("💾 Save [S]", id="btn_agent_save", variant="success")
-                yield Button("↩️ Back [ESC]", id="btn_agent_cancel", variant="default")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        bid = event.button.id
-        if bid == "btn_agent_browse":
-            self.action_browse()
-        elif bid == "btn_agent_clear":
-            self.action_clear()
-        elif bid == "btn_agent_save":
-            self.action_save()
-        elif bid == "btn_agent_cancel":
-            self.action_cancel()
-
-    def action_browse(self) -> None:
-        def browse_worker():
-            from core.win_dialogs import pick_file
-            chosen = pick_file(
-                dialog_title="Select Agentic Coding Tool (.exe)",
-                filter_name="Executable (*.exe)",
-                filter_ext="*.exe"
-            )
-            if chosen and os.path.exists(chosen):
-                def update_path():
-                    self.current_tool_path = chosen
-                    try:
-                        self.query_one("#agent_path_display", Static).update(chosen)
-                    except Exception:
-                        pass
-                self.app.call_from_thread(update_path)
-
-        import threading
-        threading.Thread(target=browse_worker, daemon=True, name="BrowseWorker").start()
-
-    def action_clear(self) -> None:
-        self.current_tool_path = ""
-        try:
-            self.query_one("#agent_path_display", Static).update("(No coding tool configured)")
-        except Exception:
-            pass
-
-    def action_save(self) -> None:
-        from core.config import save_agent_coding_tool
-        save_agent_coding_tool(self.current_tool_path if self.current_tool_path else None)
-        self.app.notify("Agentic Coding Tool saved!", severity="information")
-        self.dismiss(True)
-
-    def action_cancel(self) -> None:
-        self.dismiss(False)
-
-
-class AiExplainModal(ModalScreen[bool]):
-    """Modal dialog to configure 'Ai Explain' service (provider, URL template, desktop app, language)."""
-
-    DEFAULT_CSS = """
-    AiExplainModal {
+    AiConfigModal, AiExplainModal {
         align: center middle;
     }
     #ai_config_dialog {
-        width: 82;
-        max-height: 85%;
+        width: 76;
+        max-height: 90%;
         height: auto;
-        border: thick #a6e3a1;
+        border: thick #89b4fa;
         background: #1e1e2e;
         padding: 1 2;
         scrollbar-gutter: stable;
@@ -3843,7 +3796,7 @@ class AiExplainModal(ModalScreen[bool]):
     #ai_config_title {
         text-align: center;
         text-style: bold;
-        color: #a6e3a1;
+        color: #89b4fa;
         margin-bottom: 1;
     }
     .ai_label {
@@ -3855,62 +3808,78 @@ class AiExplainModal(ModalScreen[bool]):
     .ai_hint {
         color: #a6adc8;
         margin-bottom: 1;
-    }
-    #ai_preset_row {
+        width: 100%;
         height: auto;
-        align: left middle;
-        margin-top: 0;
+    }
+    #inp_ai_key {
         margin-bottom: 1;
     }
-    #ai_preset_row Button {
-        margin-right: 1;
-        min-width: 12;
-    }
-    #ai_web_section {
-        height: auto;
-        width: 100%;
-    }
-    #inp_ai_url {
-        margin-bottom: 1;
-    }
-    #ai_app_section {
-        height: auto;
-        width: 100%;
-    }
-    #ai_app_path_display {
-        background: #181825;
-        border: solid #45475a;
-        color: #89dceb;
-        padding: 0 1;
+    #ai_model_row {
         height: 3;
-        content-align: left middle;
-        margin-bottom: 1;
-    }
-    #ai_app_btn_row {
-        height: auto;
+        width: 100%;
         align: left middle;
         margin-bottom: 1;
     }
-    #ai_app_btn_row Button {
+    #sel_ai_model {
+        width: 1fr;
+        height: 3;
         margin-right: 1;
+    }
+    #btn_ai_fetch_models {
+        min-width: 14;
+        height: 3;
+    }
+    #ai_test_row {
+        height: auto;
+        min-height: 3;
+        width: 100%;
+        align: left middle;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+    #btn_ai_test_conn {
+        min-width: 18;
+        height: 3;
+        margin-right: 1;
+    }
+    #lbl_ai_test_status {
+        width: 1fr;
+        height: auto;
+        min-height: 1;
+        text-style: bold;
     }
     #ai_lang_row {
-        height: auto;
+        height: 3;
         align: left middle;
         margin-top: 1;
         margin-bottom: 1;
     }
     #btn_ai_lang {
         min-width: 32;
+        height: 3;
     }
     #ai_buttons {
-        height: auto;
+        height: 3;
+        width: 100%;
         align: center middle;
         margin-top: 1;
         margin-bottom: 1;
     }
     #ai_buttons Button {
         margin: 0 1;
+        min-width: 14;
+        height: 3;
+    }
+    .-theme-oled #ai_config_dialog {
+        background: #000000;
+        border: thick #343331;
+    }
+    .-theme-oled #btn_ai_test_conn,
+    .-theme-oled #btn_ai_fetch_models,
+    .-theme-oled #btn_ai_lang,
+    .-theme-oled #ai_buttons Button {
+        background: #282726;
+        color: #ffffff;
     }
     """
 
@@ -3921,66 +3890,50 @@ class AiExplainModal(ModalScreen[bool]):
 
     def __init__(self):
         super().__init__()
-        from core.config import load_ai_explain_config, AI_EXPLAIN_PRESETS
+        from core.config import load_ai_chat_config, load_ai_explain_config, AI_EXPLAIN_PRESETS
         self.presets = AI_EXPLAIN_PRESETS
-        self.cfg = load_ai_explain_config()
-        self.current_provider = self.cfg.get("provider", "gemini")
-        self.current_language = self.cfg.get("language", "de")
-        self.current_url = self.cfg.get("url_template", self.presets.get("gemini", {}).get("url_template", ""))
-        self.current_app_path = self.cfg.get("app_path") or ""
+        self.chat_cfg = load_ai_chat_config()
+        self.explain_cfg = load_ai_explain_config()
+        self.current_provider = self.chat_cfg.get("provider", "gemini")
+        self.current_api_key = self.chat_cfg.get("api_key", "")
+        self.current_model = self.chat_cfg.get("model", "gemini-2.0-flash")
+        self.current_base_url = self.chat_cfg.get("base_url", "https://api.openai.com/v1")
+        self.current_language = self.chat_cfg.get("language", "de")
+        self.current_app_path = self.explain_cfg.get("app_path") or ""
+        self.current_url = self.explain_cfg.get("url_template", "")
+
+        from services.ai_chat_service import fetch_available_models
+        raw_options = fetch_available_models(self.current_api_key, provider=self.current_provider, base_url=self.current_base_url)
+        found = any(m_id == self.current_model for _, m_id in raw_options)
+        if not found and self.current_model:
+            raw_options.insert(0, (f"{self.current_model} (Configured)", self.current_model))
+        self.model_options = raw_options
 
     def compose(self) -> ComposeResult:
         with VerticalScroll(id="ai_config_dialog"):
-            yield Label("🤖 AI Explain Configuration", id="ai_config_title")
+            yield Label("🤖 AI Assistant Configuration", id="ai_config_title")
 
-            yield Label("Mode & Provider Presets:", classes="ai_label")
-            yield Label("Choose a web service preset, custom URL, or a desktop app:", classes="ai_hint")
-            with Horizontal(id="ai_preset_row"):
-                yield Button(
-                    "Google Gemini",
-                    id="btn_ai_preset_gemini",
-                    variant="primary" if self.current_provider == "gemini" else "default",
-                )
-                yield Button(
-                    "ChatGPT",
-                    id="btn_ai_preset_chatgpt",
-                    variant="primary" if self.current_provider == "chatgpt" else "default",
-                )
-                yield Button(
-                    "Perplexity",
-                    id="btn_ai_preset_perplexity",
-                    variant="primary" if self.current_provider == "perplexity" else "default",
-                )
-                yield Button(
-                    "Custom URL",
-                    id="btn_ai_preset_custom",
-                    variant="primary" if self.current_provider == "custom" else "default",
-                )
-                yield Button(
-                    "Desktop App (.exe)",
-                    id="btn_ai_preset_app",
-                    variant="primary" if self.current_provider == "app" else "default",
-                )
+            yield Label("API Key:", classes="ai_label")
+            yield Label("Enter your Google Gemini or OpenAI API key (from Google AI Studio or OpenAI):", classes="ai_hint")
+            yield Input(
+                value=self.current_api_key,
+                placeholder="Paste your API key here (e.g. AIzaSy...)",
+                password=True,
+                id="inp_ai_key",
+            )
 
-            with Vertical(id="ai_web_section"):
-                yield Label("Target URL Template:", classes="ai_label")
-                yield Label("Tip: '{prompt}' is automatically replaced by the URL-encoded prompt.", classes="ai_hint")
-                yield Input(
-                    value=self.current_url,
-                    placeholder="https://gemini.google.com/app",
-                    id="inp_ai_url",
-                )
+            yield Label("AI Model:", classes="ai_label")
+            yield Label("Select an available model from the dropdown or click 'Load Models':", classes="ai_hint")
+            with Horizontal(id="ai_model_row"):
+                init_val = self.current_model if any(m_id == self.current_model for _, m_id in self.model_options) else (self.model_options[0][1] if self.model_options else "gemini-2.0-flash")
+                yield Select(options=self.model_options, value=init_val, id="sel_ai_model")
+                yield Button("🔄 Load Models", id="btn_ai_fetch_models", variant="primary", tooltip="Fetch models available for this API key")
 
-            with Vertical(id="ai_app_section"):
-                yield Label("Desktop App Executable (.exe):", classes="ai_label")
-                yield Label("Select the .exe of your local AI app (e.g. Gemini Desktop, ChatGPT App):", classes="ai_hint")
-                app_disp = self.current_app_path if self.current_app_path else "(No desktop app configured)"
-                yield Static(app_disp, id="ai_app_path_display")
-                with Horizontal(id="ai_app_btn_row"):
-                    yield Button("📁 Browse .exe...", id="btn_ai_app_browse", variant="primary")
-                    yield Button("🗑️ Clear", id="btn_ai_app_clear", variant="error")
+            with Horizontal(id="ai_test_row"):
+                yield Button("🔌 Test Connection", id="btn_ai_test_conn", variant="primary")
+                yield Label("", id="lbl_ai_test_status")
 
-            yield Label("Prompt Language:", classes="ai_label")
+            yield Label("Prompt / Response Language:", classes="ai_label")
             with Horizontal(id="ai_lang_row"):
                 lang_label = "🌐 Language: German (DE)" if self.current_language == "de" else "🌐 Language: English (EN)"
                 yield Button(lang_label, id="btn_ai_lang", variant="success")
@@ -3990,37 +3943,25 @@ class AiExplainModal(ModalScreen[bool]):
                 yield Button("↩️ Back [ESC]", id="btn_ai_cancel", variant="default")
 
     def on_mount(self) -> None:
-        self._update_section_visibility()
+        self._last_fetched_key = self.current_api_key
 
-    def _update_section_visibility(self) -> None:
-        try:
-            web_sec = self.query_one("#ai_web_section", Vertical)
-            app_sec = self.query_one("#ai_app_section", Vertical)
-            if self.current_provider == "app":
-                web_sec.display = False
-                app_sec.display = True
-            else:
-                web_sec.display = True
-                app_sec.display = False
-        except Exception:
-            pass
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "inp_ai_key":
+            val = event.value.strip()
+            if len(val) >= 15 and val != getattr(self, "_last_fetched_key", None):
+                self._last_fetched_key = val
+                self.action_fetch_models()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "inp_ai_key":
+            self.action_fetch_models()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
-        if bid == "btn_ai_preset_gemini":
-            self._select_preset("gemini")
-        elif bid == "btn_ai_preset_chatgpt":
-            self._select_preset("chatgpt")
-        elif bid == "btn_ai_preset_perplexity":
-            self._select_preset("perplexity")
-        elif bid == "btn_ai_preset_custom":
-            self._select_preset("custom")
-        elif bid == "btn_ai_preset_app":
-            self._select_preset("app")
-        elif bid == "btn_ai_app_browse":
-            self.action_browse_app()
-        elif bid == "btn_ai_app_clear":
-            self.action_clear_app()
+        if bid == "btn_ai_fetch_models":
+            self.action_fetch_models()
+        elif bid == "btn_ai_test_conn":
+            self.action_test_connection()
         elif bid == "btn_ai_lang":
             self.action_toggle_language()
         elif bid == "btn_ai_save":
@@ -4028,51 +3969,82 @@ class AiExplainModal(ModalScreen[bool]):
         elif bid == "btn_ai_cancel":
             self.action_cancel()
 
-    def _select_preset(self, preset_key: str) -> None:
-        self.current_provider = preset_key
-        for p in ["gemini", "chatgpt", "perplexity", "custom", "app"]:
-            try:
-                b = self.query_one(f"#btn_ai_preset_{p}", Button)
-                b.variant = "primary" if p == preset_key else "default"
-            except Exception:
-                pass
-
-        self._update_section_visibility()
-
-        if preset_key in self.presets and preset_key not in ("custom", "app"):
-            template_url = self.presets[preset_key]["url_template"]
-            try:
-                inp = self.query_one("#inp_ai_url", Input)
-                inp.value = template_url
-            except Exception:
-                pass
-
-    def action_browse_app(self) -> None:
-        def browse_worker():
-            from core.win_dialogs import pick_file
-            chosen = pick_file(
-                dialog_title="Select Desktop AI App (.exe)",
-                filter_name="Executable (*.exe)",
-                filter_ext="*.exe"
-            )
-            if chosen and os.path.exists(chosen):
-                def update_path():
-                    self.current_app_path = chosen
-                    try:
-                        self.query_one("#ai_app_path_display", Static).update(chosen)
-                    except Exception:
-                        pass
-                self.app.call_from_thread(update_path)
-
-        import threading
-        threading.Thread(target=browse_worker, daemon=True, name="BrowseAiAppWorker").start()
-
-    def action_clear_app(self) -> None:
-        self.current_app_path = ""
+    def action_fetch_models(self) -> None:
+        key = ""
         try:
-            self.query_one("#ai_app_path_display", Static).update("(No desktop app configured)")
+            key = self.query_one("#inp_ai_key", Input).value.strip()
         except Exception:
             pass
+
+        lbl = self.query_one("#lbl_ai_test_status", Label)
+        lbl.update("[yellow]Fetching available models...[/yellow]")
+
+        prov = "openai_compatible" if key.startswith("sk-") else "gemini"
+
+        def worker():
+            from services.ai_chat_service import fetch_available_models
+            options = fetch_available_models(key, provider=prov, base_url=self.current_base_url)
+
+            def update_ui():
+                try:
+                    sel = self.query_one("#sel_ai_model", Select)
+                    sel.set_options(options)
+                    if options:
+                        sel.value = options[0][1]
+                    lbl.update(f"[bold green]✓ Loaded {len(options)} models![/bold green]")
+                except Exception as e:
+                    lbl.update(f"[bold red]✗ Failed to update: {e}[/bold red]")
+
+            self.app.call_from_thread(update_ui)
+
+        import threading
+        threading.Thread(target=worker, daemon=True, name="AiFetchModelsWorker").start()
+
+    def action_test_connection(self) -> None:
+        key = ""
+        model = ""
+        try:
+            key = self.query_one("#inp_ai_key", Input).value.strip()
+            sel = self.query_one("#sel_ai_model", Select)
+            model = sel.value if sel.value != Select.BLANK else "gemini-2.0-flash"
+        except Exception:
+            pass
+
+        lbl = self.query_one("#lbl_ai_test_status", Label)
+        lbl.update("[yellow]Testing connection...[/yellow]")
+
+        prov = "openai_compatible" if key.startswith("sk-") else "gemini"
+        test_cfg = {
+            "provider": prov,
+            "api_key": key,
+            "model": model or ("gemini-2.0-flash" if prov == "gemini" else "gpt-4o-mini"),
+            "base_url": self.current_base_url or "https://api.openai.com/v1",
+            "language": self.current_language,
+        }
+
+        def test_worker():
+            try:
+                from services.ai_chat_service import test_ai_connection
+                success, msg = test_ai_connection(test_cfg)
+            except Exception as e:
+                success, msg = False, str(e)
+
+            def update_lbl():
+                if success:
+                    lbl.update(f"[bold green]✓ {msg}[/bold green]")
+                else:
+                    if "prepayment" in msg.lower():
+                        lbl.update(
+                            "[bold red]✗ Prepayment-Fehler: Dein Google-Projekt erfordert Guthaben (Prepayment).\n"
+                            "Tipp: Erstelle auf aistudio.google.com einen Key in 'New Project' ohne Billing für das kostenlose Free-Tier![/bold red]"
+                        )
+                    else:
+                        lbl.update(f"[bold red]✗ {msg}[/bold red]")
+
+            self.app.call_from_thread(update_lbl)
+
+        import threading
+        threading.Thread(target=test_worker, daemon=True, name="AiTestConnectionWorker").start()
 
     def action_toggle_language(self) -> None:
         self.current_language = "en" if self.current_language == "de" else "de"
@@ -4083,26 +4055,43 @@ class AiExplainModal(ModalScreen[bool]):
             pass
 
     def action_save(self) -> None:
-        from core.config import save_ai_explain_config
-        url = ""
+        from core.config import save_ai_explain_config, save_ai_chat_config
+        key = ""
+        model = ""
         try:
-            url = self.query_one("#inp_ai_url", Input).value.strip()
+            key = self.query_one("#inp_ai_key", Input).value.strip()
+            sel = self.query_one("#sel_ai_model", Select)
+            model = sel.value if sel.value != Select.BLANK else "gemini-2.0-flash"
         except Exception:
-            url = self.current_url
-        if not url:
-            url = self.presets.get(self.current_provider, {}).get("url_template", "https://gemini.google.com/app")
+            pass
 
-        save_ai_explain_config({
-            "provider": self.current_provider,
-            "url_template": url,
-            "app_path": self.current_app_path if self.current_app_path else None,
+        prov = "openai_compatible" if key.startswith("sk-") else "gemini"
+        save_ai_chat_config({
+            "provider": prov,
+            "api_key": key,
+            "model": model or ("gemini-2.0-flash" if prov == "gemini" else "gpt-4o-mini"),
+            "base_url": self.current_base_url or "https://api.openai.com/v1",
             "language": self.current_language,
         })
-        self.app.notify("AI Explain configuration saved!", severity="information")
+
+        save_ai_explain_config({
+            "provider": prov,
+            "url_template": "https://gemini.google.com/app",
+            "app_path": None,
+            "language": self.current_language,
+        })
+        self.app.notify("AI Assistant configuration saved!", severity="information")
         self.dismiss(True)
 
     def action_cancel(self) -> None:
         self.dismiss(False)
+
+    # Legacy dummy method for backwards test compatibility
+    def _select_preset(self, preset_key: str) -> None:
+        self.current_provider = preset_key
+
+
+AiExplainModal = AiConfigModal
 
 
 
@@ -4502,8 +4491,7 @@ class TaskDetailModal(ModalScreen[None]):
         Binding("o", "open_browser", "Open in browser"),
         Binding("d", "download_files", "Download files"),
         Binding("a", "ai_explain", "Ai Explain"),
-        Binding("g", "agent_open", "Agent"),
-        Binding("e", "toggle_status", "Toggle status"),
+                Binding("e", "toggle_status", "Toggle status"),
         Binding("l", "delete_task", "Hide"),
         Binding("w", "restore_task", "Restore"),
         Binding("escape", "close", "Close"),
@@ -4562,7 +4550,6 @@ class TaskDetailModal(ModalScreen[None]):
                         else:
                             yield Button("✨ Restore [W]", id="btn_det_restore", variant="warning")
                     yield Button("🤖 Ai Explain [A]", id="btn_det_ai_explain", variant="warning")
-                    yield Button("🤖 Agent [G]", id="btn_det_agent", variant="primary")
                 yield Button("↩️ Close [ESC]", id="btn_det_close", variant="default")
 
 
@@ -4574,8 +4561,6 @@ class TaskDetailModal(ModalScreen[None]):
             self.action_download_files()
         elif bid == "btn_det_ai_explain":
             self.action_ai_explain()
-        elif bid == "btn_det_agent":
-            self.action_agent_open()
         elif bid == "btn_det_status":
             self.action_toggle_status()
         elif bid == "btn_det_delete":
@@ -4585,62 +4570,107 @@ class TaskDetailModal(ModalScreen[None]):
         elif bid == "btn_det_close":
             self.action_close()
 
-    def action_agent_open(self) -> None:
-        from core.config import load_agent_coding_tool
-        tool_path = load_agent_coding_tool()
-        if not tool_path or not os.path.exists(tool_path):
-            self.app.notify(
-                "Please configure your Agentic Coding Tool in Settings first!",
-                title="🤖 Agent",
-                severity="warning"
-            )
+    def action_download_files(self) -> None:
+        if self.target_task.platform in ["manual", "custom"]:
             return
 
-        def export_worker():
-            from core.win_dialogs import pick_directory
-            chosen_dir = pick_directory(dialog_title="Select Destination Folder for Agent Project")
-            if not chosen_dir:
+        def on_location_chosen(choice: Optional[str]) -> None:
+            if not choice:
                 return
 
-            def on_exported(success: bool, msg: str):
-                if success:
-                    self.app.notify(msg, title="🤖 Agent", severity="information")
-                else:
-                    self.app.notify(msg, title="🤖 Agent", severity="error")
+            if choice == "auto":
+                try:
+                    from services.directory_service import DirectoryService
+                except ImportError:
+                    from directory_service import DirectoryService
+                try:
+                    from core.config import sanitize_filename
+                except ImportError:
+                    from config import sanitize_filename
 
-            from services.ai_agent_service import run_agent_workflow
-            success, files, msg = run_agent_workflow(
-                self.target_task,
-                self.mgr,
-                chosen_dir,
-                exe_path=tool_path,
-                launch_tool=True
-            )
-            self.app.call_from_thread(on_exported, success, msg)
+                matched = DirectoryService.find_matching_directory_for_course(
+                    self.target_task.course, self.target_task.course_full
+                )
+                if not matched:
+                    self.app.notify(
+                        f"No linked folder found for '{self.target_task.course}'.",
+                        title="📥 Download",
+                        severity="warning",
+                    )
+                    return
+                safe_title = sanitize_filename(self.target_task.title)
+                target_dir = os.path.join(matched.get("path", ""), safe_title)
+                os.makedirs(target_dir, exist_ok=True)
+                self._start_download_worker(target_dir)
+
+            elif choice == "manual":
+                def pick_and_download():
+                    try:
+                        from core.win_dialogs import pick_directory
+                    except ImportError:
+                        from win_dialogs import pick_directory
+                    chosen = pick_directory(dialog_title="Select Destination Folder")
+                    if not chosen:
+                        return
+                    self._start_download_worker(chosen)
+
+                import threading
+                threading.Thread(target=pick_and_download, daemon=True, name="ManualFolderPickerWorker").start()
+
+            elif choice == "downloads":
+                self._start_download_worker(dest_dir=None)
+
+        self.app.push_screen(DownloadLocationModal(self.target_task), on_location_chosen)
+
+    def _start_download_worker(self, dest_dir: Optional[str] = None) -> None:
+        self.app.notify("Downloading attachments...", title="📥 Download", severity="information")
+
+        def dl_worker():
+            files = self.mgr.download_task_files(self.target_task, dest_dir=dest_dir)
+
+            def update_ui():
+                target_folder = self.target_task.download_dir or dest_dir
+                if files:
+                    self.app.notify(
+                        f"✓ {len(files)} file(s) saved to: {target_folder}",
+                        title="📥 Download",
+                        severity="information",
+                    )
+                    try:
+                        if target_folder and os.path.exists(target_folder):
+                            os.startfile(target_folder)
+                    except Exception:
+                        pass
+                else:
+                    self.app.notify(
+                        "No downloadable attachments found (angabe.md created).",
+                        title="📥 Download",
+                        severity="warning",
+                    )
+
+            self.app.call_from_thread(update_ui)
 
         import threading
-        threading.Thread(target=export_worker, daemon=True, name="AgentExportWorker").start()
+        threading.Thread(target=dl_worker, daemon=True, name="DownloadWorker").start()
+
+    def action_open_browser(self) -> None:
+        if self.target_task.platform in ["manual", "custom"]:
+            return
+        if self.target_task.url:
+            ui.open_task_in_browser(self.target_task)
+            self.app.notify(f"Opening '{self.target_task.title}' in browser...", severity="information")
+        else:
+            self.app.notify("No URL available for this assignment.", severity="warning")
 
     def action_ai_explain(self) -> None:
+        target_id = self.target_task.id
+        self.dismiss(None)
         try:
-            from services.ai_explain_service import open_ai_explain
-            from core.config import load_ai_explain_config
-            cfg = load_ai_explain_config()
-            success, prompt, target_dest = open_ai_explain(self.target_task)
-            if cfg.get("provider") == "app":
-                self.app.notify(
-                    "AI prompt copied to clipboard & Desktop App launched!",
-                    title="🤖 Ai Explain",
-                    severity="information"
-                )
-            else:
-                self.app.notify(
-                    "AI prompt copied to clipboard & opened in browser!",
-                    title="🤖 Ai Explain",
-                    severity="information"
-                )
-        except Exception as e:
-            self.app.notify(f"Could not launch Ai Explain: {e}", severity="error")
+            app_inst = self.app
+        except Exception:
+            app_inst = getattr(self, "_app", None)
+        if app_inst and hasattr(app_inst, "action_show_ai_chat"):
+            app_inst.action_show_ai_chat(initial_task_id=target_id, auto_explain=True)
 
     def action_toggle_status(self) -> None:
         if self.target_task.platform not in ["manual", "custom"]:
@@ -4671,34 +4701,6 @@ class TaskDetailModal(ModalScreen[None]):
                         existing_del[0].remove()
             except Exception:
                 pass
-
-    def action_open_browser(self) -> None:
-        if self.target_task.platform in ["manual", "custom"]:
-            return
-        if self.target_task.url:
-            ui.open_task_in_browser(self.target_task)
-            self.app.notify(f"Opening '{self.target_task.title}' in browser...", severity="information")
-        else:
-            self.app.notify("No URL available for this assignment.", severity="warning")
-
-    def action_download_files(self) -> None:
-        if self.target_task.platform in ["manual", "custom"]:
-            return
-        self.app.notify("Downloading attachments...", severity="information")
-        def dl_worker():
-            files = self.mgr.download_task_files(self.target_task)
-            def update_ui():
-                if files:
-                    self.app.notify(f"✓ {len(files)} file(s) saved to: {self.target_task.download_dir}", severity="information")
-                    try:
-                        os.startfile(self.target_task.download_dir)
-                    except Exception:
-                        pass
-                else:
-                    self.app.notify("No downloadable attachments found (angabe.md created).", severity="warning")
-            self.app.call_from_thread(update_ui)
-
-        threading.Thread(target=dl_worker, daemon=True, name="DownloadWorker").start()
 
     def action_delete_task(self) -> None:
         if self.target_task.platform in ["manual", "custom"]:
@@ -6599,6 +6601,8 @@ class ExcuseLetterModal(ModalScreen[None]):
         self._update_profile_label()
 
     def action_generate_pdf(self) -> None:
+        from excuse_service import create_excuse_pdf, open_pdf_in_system_viewer
+
         if not self.selected_dates:
             self.app.notify("Please select at least one absence date with [X].", severity="warning")
             return
@@ -7506,6 +7510,835 @@ class ExamsScreen(Screen):
 ExamsModal = ExamsScreen
 
 
+class ChatInputArea(TextArea):
+    """
+    Auto-expanding single-to-multiline prompt input for the AI assistant.
+    - Sends message on Enter
+    - Inserts newline on Shift+Enter (and Ctrl+J / Ctrl+Enter)
+    - Dynamically expands from 1 to max 3 lines as text grows or soft-wraps
+    - Displays vertical scrollbar when content exceeds 3 lines
+    """
+    class Submitted(Message):
+        def __init__(self, value: str) -> None:
+            super().__init__()
+            self.value = value
+
+    def __init__(
+        self,
+        placeholder: str = "Ask a question about this assignment...",
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            text="",
+            show_line_numbers=False,
+            soft_wrap=True,
+            placeholder=placeholder,
+            **kwargs,
+        )
+
+    @property
+    def value(self) -> str:
+        return self.text
+
+    @value.setter
+    def value(self, v: str) -> None:
+        self.text = v or ""
+        self._update_height()
+
+    def on_mount(self) -> None:
+        self._update_height()
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        self._update_height()
+
+    def _update_height(self) -> None:
+        lines = 1
+        try:
+            if hasattr(self, "wrapped_document") and self.wrapped_document:
+                lines = max(1, self.wrapped_document.height)
+            elif hasattr(self, "document") and self.document:
+                lines = max(1, self.document.line_count)
+        except Exception:
+            lines = 1
+        self.styles.height = min(3, max(1, lines))
+        self.show_vertical_scrollbar = (lines > 3)
+
+    def on_key(self, event: events.Key) -> None:
+        key_name = (event.key or "").lower()
+        evt_name = (getattr(event, "name", "") or "").lower()
+        evt_aliases = [str(a).lower() for a in getattr(event, "aliases", [])]
+
+        is_shift = (
+            key_name in ("shift+enter", "shift+return", "ctrl+j", "ctrl+enter", "alt+enter", "shift+linefeed")
+            or "shift" in evt_name
+            or any("shift" in a for a in evt_aliases)
+            or ((key_name in ("enter", "return") or event.character in ("\n", "\r")) and is_shift_pressed_win32())
+        )
+        if is_shift:
+            event.prevent_default()
+            event.stop()
+            try:
+                if self.selected_text:
+                    self.replace("\n", self.selection.start, self.selection.end)
+                else:
+                    self.insert("\n")
+            except Exception:
+                self.insert("\n")
+            self._update_height()
+        elif key_name in ("enter", "return"):
+            event.prevent_default()
+            event.stop()
+            val = self.text
+            self.post_message(self.Submitted(val))
+
+
+class AiChatScreen(Screen):
+    """
+    Interactive full-screen AI chat assistant with browser-style task tabs,
+    deep context extraction, and Gemini / OpenAI API integration.
+    """
+
+    DEFAULT_CSS = """
+    AiChatScreen {
+        layout: vertical;
+        background: $background;
+        height: 100%;
+        overflow: hidden;
+    }
+    #ai_top_bar {
+        height: 1;
+        width: 100%;
+        background: $panel;
+        padding: 0 1;
+        align: left middle;
+    }
+    #ai_tab_scroll {
+        width: 1fr;
+        height: 1;
+        align: left middle;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-size: 0 0;
+    }
+    #ai_tab_scroll Button.ai_tab_btn,
+    .ai_tab_btn {
+        margin-right: 1;
+        min-width: 6;
+        width: auto;
+        height: 1;
+        border: none;
+        background: $surface;
+        color: $text-muted;
+        content-align: center middle;
+    }
+    #ai_tab_scroll Button.ai_tab_btn:hover,
+    .ai_tab_btn:hover {
+        background: $boost;
+        color: $text;
+    }
+    #ai_tab_scroll Button.ai_tab_active,
+    .ai_tab_active {
+        border: none;
+        background: $primary;
+        color: $primary-background;
+        text-style: bold;
+        content-align: center middle;
+    }
+    #ai_tab_scroll Button.ai_tab_active:hover,
+    .ai_tab_active:hover {
+        background: $primary-lighten-1;
+        color: $primary-background;
+    }
+    #ai_task_banner {
+        height: 3;
+        width: 100%;
+        background: $surface;
+        border-top: solid $border;
+        border-bottom: solid $border;
+        padding: 0 1;
+        align: left middle;
+    }
+    #ai_task_banner_title {
+        width: 1fr;
+        text-style: bold;
+        color: $primary;
+    }
+    #ai_task_banner_meta {
+        width: auto;
+        color: $text-muted;
+    }
+    #ai_chat_scroll {
+        height: 1fr;
+        width: 100%;
+        padding: 1 2;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
+    }
+    .ai_msg_container {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
+    .ai_msg_user {
+        border-left: thick $success;
+        background: $surface;
+        padding: 1 2;
+    }
+    .ai_msg_assistant {
+        border-left: thick $primary;
+        background: $panel;
+        padding: 1 2;
+    }
+    .ai_msg_author {
+        text-style: bold;
+        margin-bottom: 0;
+    }
+    .ai_msg_user .ai_msg_author {
+        color: $success;
+    }
+    .ai_msg_assistant .ai_msg_author {
+        color: $primary;
+    }
+    .ai_msg_text {
+        width: 100%;
+        color: $text;
+    }
+    Markdown.ai_msg_markdown {
+        background: transparent;
+        padding: 0;
+        margin: 0;
+    }
+    .ai_msg_assistant MarkdownFence {
+        background: $background;
+        border: solid $border;
+        padding: 0 1;
+        margin: 1 0;
+    }
+    .ai_msg_assistant MarkdownCodeInline {
+        background: $surface-lighten-1;
+        color: $accent;
+        text-style: bold;
+        padding: 0 1;
+    }
+    .ai_thinking_box {
+        height: auto;
+        padding: 0 2;
+        margin-bottom: 1;
+        color: $warning;
+        text-style: bold italic;
+    }
+    #ai_input_bar {
+        dock: bottom;
+        height: auto;
+        min-height: 3;
+        max-height: 5;
+        width: 100%;
+        background: $panel;
+        border-top: solid $border;
+        border-bottom: solid $border;
+        padding: 0 1;
+    }
+    #ai_chat_input,
+    ChatInputArea {
+        width: 1fr;
+        height: 1;
+        min-height: 1;
+        max-height: 3;
+        border: none;
+        background: $surface;
+        color: $text;
+        padding: 0 1;
+        margin-right: 1;
+        scrollbar-size: 1 1;
+        scrollbar-color: $primary $panel;
+    }
+    #ai_chat_input:focus,
+    ChatInputArea:focus {
+        border: none;
+    }
+    #ai_input_btn_box {
+        width: auto;
+        height: 100%;
+        align: right bottom;
+    }
+    #btn_ai_clear_chat {
+        width: 4;
+        min-width: 4;
+        height: 1;
+        margin-right: 1;
+        border: none;
+        background: #e03131;
+        color: #ffffff;
+        content-align: center middle;
+        text-align: center;
+        padding: 0;
+    }
+    #btn_ai_clear_chat:hover {
+        background: #c92a2a;
+    }
+    #btn_ai_back {
+        min-width: 14;
+        height: 1;
+        border: none;
+        background: $surface;
+        color: $text;
+        content-align: center middle;
+        text-align: center;
+    }
+    #btn_ai_back:hover {
+        background: $boost;
+        color: $text;
+    }
+    .ai_empty_placeholder {
+        width: 100%;
+        content-align: center middle;
+        text-align: center;
+        color: $text-muted;
+        padding: 4 2;
+    }
+    .-theme-oled #ai_top_bar {
+        background: #000000;
+        height: 1;
+    }
+    .-theme-oled #ai_tab_scroll {
+        height: 1;
+    }
+    .-theme-oled #ai_task_banner {
+        background: #000000;
+        border-top: solid #343331;
+        border-bottom: solid #343331;
+    }
+    .-theme-oled #ai_input_bar {
+        background: #000000;
+        border-top: solid #343331;
+        border-bottom: solid #343331;
+        height: auto;
+    }
+    .-theme-oled #ai_input_btn_box {
+        width: auto;
+        height: 100%;
+        align: right bottom;
+    }
+    .-theme-oled .ai_msg_user {
+        background: #000000;
+        border-left: thick #66800b;
+    }
+    .-theme-oled .ai_msg_assistant {
+        background: #000000;
+        border-left: thick #205ea6;
+    }
+    .-theme-oled .ai_msg_assistant MarkdownFence {
+        background: #181816;
+        border: solid #343331;
+    }
+    .-theme-oled .ai_msg_assistant MarkdownCodeInline {
+        background: #282726;
+        color: #ffffff;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_btn,
+    .-theme-oled .ai_tab_btn {
+        background: #181816;
+        color: #a6a69c;
+        border: none;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_btn:hover,
+    .-theme-oled .ai_tab_btn:hover {
+        background: #282726;
+        color: #ffffff;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_active,
+    .-theme-oled .ai_tab_active {
+        background: #205ea6;
+        border: none;
+        color: #ffffff;
+        text-style: bold;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_active:hover,
+    .-theme-oled .ai_tab_active:hover {
+        background: #2868b2;
+        color: #ffffff;
+    }
+    .-theme-oled #btn_ai_clear_chat {
+        width: 4;
+        min-width: 4;
+        height: 1;
+        margin-right: 1;
+        content-align: center middle;
+        text-align: center;
+        background: #e03131;
+        color: #ffffff;
+        border: none;
+        padding: 0;
+    }
+    .-theme-oled #btn_ai_clear_chat:hover {
+        background: #c92a2a;
+    }
+    .-theme-oled #ai_chat_input,
+    .-theme-oled ChatInputArea {
+        background: #181816;
+        color: #ffffff;
+        border: none;
+        height: 1;
+        min-height: 1;
+        max-height: 3;
+        scrollbar-size: 1 1;
+        scrollbar-color: #58a6ff #000000;
+    }
+    .-theme-oled #ai_chat_input:focus,
+    .-theme-oled ChatInputArea:focus {
+        border: none;
+    }
+    .-theme-oled #btn_ai_back {
+        background: #282726;
+        color: #ffffff;
+        border: none;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #btn_ai_back:hover {
+        background: #343331;
+    }
+    """
+
+    _last_opened_task_id: Optional[str] = None
+
+    BINDINGS = [
+        Binding("escape", "dismiss_screen", "Back [ESC]"),
+        Binding("ctrl+l", "clear_chat", "Clear Chat"),
+        Binding("left", "prev_tab", "Previous Tab", show=False),
+        Binding("right", "next_tab", "Next Tab", show=False),
+    ]
+
+    def __init__(
+        self,
+        mgr: TaskManager,
+        initial_task_id: Optional[str] = None,
+        auto_explain: bool = False,
+        tasks: Optional[List[Task]] = None,
+    ):
+        super().__init__()
+        self.mgr = mgr
+        self.initial_task_id = initial_task_id
+        self.auto_explain = auto_explain
+        self.tasks_pool: Optional[List[Task]] = list(tasks) if tasks is not None else None
+        self.open_tasks: List[Task] = []
+        self.active_task_idx: int = 0
+        self.active_task: Optional[Task] = None
+        self.chat_history: Dict[str, List[Dict[str, Any]]] = {}
+        self.is_waiting_for_ai: bool = False
+        self._thinking_timer = None
+        self._thinking_step: int = 1
+        from core.config import load_ai_chat_config
+        self.cfg = load_ai_chat_config()
+
+    def compose(self) -> ComposeResult:
+        with Horizontal(id="ai_top_bar"):
+            with HorizontalScroll(id="ai_tab_scroll"):
+                yield Label("Loading assignments...", id="ai_tab_loading")
+
+        with Horizontal(id="ai_task_banner"):
+            yield Label("", id="ai_task_banner_title")
+            yield Label("", id="ai_task_banner_meta")
+
+        with VerticalScroll(id="ai_chat_scroll"):
+            yield Label("Select an assignment tab above to start.", classes="ai_empty_placeholder", id="ai_chat_empty_lbl")
+
+        with Horizontal(id="ai_input_bar"):
+            yield ChatInputArea(id="ai_chat_input", placeholder="Ask a question about this assignment...")
+            with Horizontal(id="ai_input_btn_box"):
+                yield Button("🗑️", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
+                yield Button("↩️ Back [ESC]", id="btn_ai_back", variant="default")
+
+    def on_mount(self) -> None:
+        try:
+            inp = self.query_one("#ai_chat_input", ChatInputArea)
+            inp.focus()
+        except Exception:
+            pass
+
+        self._load_open_tasks()
+        self._populate_tabs()
+        if self.open_tasks:
+            target_idx = self.active_task_idx if (0 <= self.active_task_idx < len(self.open_tasks)) else 0
+            self.select_task(target_idx, is_initial=True)
+            try:
+                self._refresh_chat_display()
+            except Exception:
+                pass
+
+    def _load_open_tasks(self) -> None:
+        tasks = []
+        if self.tasks_pool is not None:
+            tasks = [t for t in self.tasks_pool]
+        else:
+            if hasattr(self.mgr, "get_filtered_tasks"):
+                try:
+                    res = self.mgr.get_filtered_tasks(status_filter="open_only")
+                    if isinstance(res, (list, tuple)):
+                        tasks = [t for t in res if not getattr(t, "is_completed", False)]
+                except Exception:
+                    pass
+            if not tasks and hasattr(self.mgr, "get_tasks"):
+                try:
+                    res = self.mgr.get_tasks()
+                    if isinstance(res, (list, tuple)):
+                        tasks = [
+                            t for t in res
+                            if not getattr(t, "is_completed", False) and str(getattr(t, "status", "")).lower() in ["offen", "ueberfaellig", "open", "overdue"]
+                        ]
+                except Exception:
+                    pass
+            if not tasks and hasattr(self.mgr, "tasks"):
+                raw_tasks = getattr(self.mgr, "tasks", [])
+                if isinstance(raw_tasks, (list, tuple)):
+                    tasks = [
+                        t for t in raw_tasks
+                        if not getattr(t, "is_completed", False) and str(getattr(t, "status", "")).lower() in ["offen", "ueberfaellig", "open", "overdue"]
+                    ]
+            if not tasks and hasattr(self.mgr, "tasks"):
+                raw_tasks = getattr(self.mgr, "tasks", [])
+                if isinstance(raw_tasks, (list, tuple)):
+                    tasks = [t for t in raw_tasks if not getattr(t, "is_completed", False)]
+
+        self.open_tasks = list(tasks)
+        if self.open_tasks:
+            # Determine target task to select:
+            # 1. Explicit initial_task_id (e.g. from Ai Explain button)
+            # 2. Last opened task (from session or persistent cache)
+            # 3. Default to 1st task (index 0)
+            target_id = self.initial_task_id
+            if not target_id:
+                target_id = AiChatScreen._last_opened_task_id
+                if not target_id:
+                    try:
+                        from services.ai_chat_service import load_last_active_ai_task_id
+                        target_id = load_last_active_ai_task_id()
+                    except Exception:
+                        pass
+
+            matched_idx = -1
+            if target_id:
+                for idx, t in enumerate(self.open_tasks):
+                    if t.id == target_id:
+                        matched_idx = idx
+                        break
+
+            if matched_idx >= 0:
+                self.active_task_idx = matched_idx
+                self.active_task = self.open_tasks[matched_idx]
+            elif self.initial_task_id:
+                all_pool = getattr(self.mgr, "tasks", [])
+                found_task = None
+                if isinstance(all_pool, (list, tuple)):
+                    for t in all_pool:
+                        if t.id == self.initial_task_id:
+                            found_task = t
+                            break
+                if found_task:
+                    self.open_tasks.insert(0, found_task)
+                    self.active_task_idx = 0
+                    self.active_task = found_task
+                else:
+                    self.active_task_idx = 0
+                    self.active_task = self.open_tasks[0]
+            else:
+                self.active_task_idx = 0
+                self.active_task = self.open_tasks[0]
+        else:
+            self.active_task_idx = 0
+            self.active_task = None
+
+    def _populate_tabs(self) -> None:
+        tab_container = self.query_one("#ai_tab_scroll", HorizontalScroll)
+        tab_container.remove_children()
+
+        if not self.open_tasks:
+            tab_container.mount(Label("No assignments found matching active filters.", classes="ai_empty_placeholder"))
+            return
+
+        for idx, t in enumerate(self.open_tasks):
+            is_active = (idx == self.active_task_idx)
+            course_code = (t.course or "TASK").strip()
+            if is_active:
+                short_title = t.title[:28] + "..." if len(t.title) > 28 else t.title
+                lbl = Text(f"{course_code}: {short_title}")
+                classes = "ai_tab_btn ai_tab_active"
+            else:
+                lbl = Text(f"{course_code}")
+                classes = "ai_tab_btn ai_tab_inactive"
+
+            btn = Button(lbl, id=f"btn_aitab_{idx}", classes=classes)
+            tab_container.mount(btn)
+
+    def select_task(self, idx: int, is_initial: bool = False) -> None:
+        if idx < 0 or idx >= len(self.open_tasks):
+            return
+
+        old_idx = self.active_task_idx
+        self.active_task_idx = idx
+        self.active_task = self.open_tasks[idx]
+        AiChatScreen._last_opened_task_id = self.active_task.id
+        try:
+            from services.ai_chat_service import save_last_active_ai_task_id
+            save_last_active_ai_task_id(self.active_task.id)
+        except Exception:
+            pass
+
+        for i, t in enumerate(self.open_tasks):
+            try:
+                b = self.query_one(f"#btn_aitab_{i}", Button)
+                course_code = (t.course or "TASK").strip()
+                if i == self.active_task_idx:
+                    short_title = t.title[:28] + "..." if len(t.title) > 28 else t.title
+                    b.label = Text(f"{course_code}: {short_title}")
+                    b.remove_class("ai_tab_inactive")
+                    b.add_class("ai_tab_active")
+                else:
+                    b.label = Text(f"{course_code}")
+                    b.remove_class("ai_tab_active")
+                    b.add_class("ai_tab_inactive")
+                b.refresh(layout=True)
+            except Exception:
+                pass
+
+        try:
+            tab_container = self.query_one("#ai_tab_scroll", HorizontalScroll)
+            tab_container.refresh(layout=True)
+            active_btn = self.query_one(f"#btn_aitab_{self.active_task_idx}", Button)
+            active_btn.scroll_visible(animate=False)
+        except Exception:
+            pass
+
+        t = self.active_task
+        try:
+            self.query_one("#ai_task_banner_title", Label).update(f"{t.title}")
+            meta_str = f"Due: {t.due_date_str or 'No deadline'}"
+            if t.teacher:
+                meta_str += f" | Teacher: {t.teacher}"
+            if getattr(t, "attachments", None):
+                meta_str += f" | 📎 {len(t.attachments)} attachment(s)"
+            self.query_one("#ai_task_banner_meta", Label).update(meta_str)
+        except Exception:
+            pass
+
+        from services.ai_chat_service import load_task_chat_cache
+        self.chat_history[t.id] = load_task_chat_cache(t.id)
+
+        try:
+            self._refresh_chat_display()
+        except Exception:
+            pass
+
+        if is_initial and self.auto_explain:
+            lang = self.cfg.get("language", "de")
+            prompt = (
+                "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt. "
+                "Gehe dabei auf die Aufgabenstellung ein und erkläre, wie man am besten an die Lösung herangeht."
+                if lang == "de" else
+                "Please explain this assignment clearly, practically, and step-by-step. "
+                "Focus on the requirements and provide guidance on how to approach and solve the task."
+            )
+            self.send_user_message(prompt)
+
+    def _refresh_chat_display(self, scroll_to_assistant_top: bool = False) -> None:
+        scroll = self.query_one("#ai_chat_scroll", VerticalScroll)
+        scroll.remove_children()
+
+        task = self.active_task
+        if not task:
+            scroll.mount(Label("No assignment selected.", classes="ai_empty_placeholder"))
+            return
+
+        msgs = self.chat_history.get(task.id, [])
+        if not msgs and not self.is_waiting_for_ai:
+            scroll.mount(Label(
+                f"💬 Chat ready for '{task.title}'!\n\n"
+                "Ask anything about requirements, theory, or step-by-step code examples below.",
+                classes="ai_empty_placeholder"
+            ))
+            return
+
+        last_assistant_bubble = None
+        for m in msgs:
+            role = m.get("role")
+            content = m.get("content", "")
+            if role == "user":
+                bubble = Vertical(
+                    Static(content, classes="ai_msg_text"),
+                    classes="ai_msg_container ai_msg_user"
+                )
+                scroll.mount(bubble)
+            else:
+                bubble = Vertical(
+                    Markdown(content, classes="ai_msg_text ai_msg_markdown"),
+                    classes="ai_msg_container ai_msg_assistant"
+                )
+                scroll.mount(bubble)
+                last_assistant_bubble = bubble
+
+        if self.is_waiting_for_ai:
+            dots = "." * getattr(self, "_thinking_step", 1)
+            scroll.mount(Label(f"Thinking{dots}", classes="ai_thinking_box"))
+            if getattr(self, "_thinking_timer", None) is None:
+                try:
+                    self._thinking_timer = self.set_interval(2.0 / 3.0, self._step_thinking_indicator)
+                except Exception:
+                    pass
+        else:
+            self._stop_thinking_timer()
+
+        if scroll_to_assistant_top and last_assistant_bubble is not None:
+            def _scroll_to_top():
+                try:
+                    last_assistant_bubble.scroll_visible(top=True, animate=False)
+                except Exception:
+                    pass
+            self.call_after_refresh(_scroll_to_top)
+        else:
+            scroll.scroll_end(animate=False)
+
+    def _stop_thinking_timer(self) -> None:
+        if getattr(self, "_thinking_timer", None) is not None:
+            try:
+                self._thinking_timer.stop()
+            except Exception:
+                pass
+            self._thinking_timer = None
+
+    def _step_thinking_indicator(self) -> None:
+        if not self.is_waiting_for_ai:
+            self._stop_thinking_timer()
+            return
+        self._thinking_step = (getattr(self, "_thinking_step", 1) % 3) + 1
+        dots = "." * self._thinking_step
+        try:
+            lbl = self.query_one(".ai_thinking_box", Label)
+            lbl.update(f"Thinking{dots}")
+        except Exception:
+            pass
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id or ""
+        if bid == "btn_ai_clear_chat":
+            self.action_clear_chat()
+        elif bid in ("btn_ai_back", "btn_ai_close_screen"):
+            self.action_dismiss_screen()
+        elif bid.startswith("btn_aitab_"):
+            try:
+                idx = int(bid.replace("btn_aitab_", ""))
+                self.select_task(idx)
+            except Exception:
+                pass
+
+    def on_chat_input_area_submitted(self, event: ChatInputArea.Submitted) -> None:
+        self.action_send_message()
+
+    def on_input_submitted(self, event) -> None:
+        if getattr(getattr(event, "input", None), "id", "") == "ai_chat_input":
+            self.action_send_message()
+
+    def action_send_message(self) -> None:
+        try:
+            inp = self.query_one("#ai_chat_input")
+            text = (getattr(inp, "value", None) or getattr(inp, "text", "")).strip()
+            if not text:
+                return
+            if hasattr(inp, "value"):
+                inp.value = ""
+            elif hasattr(inp, "clear"):
+                inp.clear()
+            self.send_user_message(text)
+        except Exception:
+            pass
+
+    def send_user_message(self, text: str) -> None:
+        if not text or self.is_waiting_for_ai or not self.active_task:
+            return
+
+        task = self.active_task
+        task_id = task.id
+        if task_id not in self.chat_history:
+            self.chat_history[task_id] = []
+
+        from services.ai_chat_service import save_task_chat_cache, build_task_ai_context, send_ai_chat_message
+
+        user_msg = {"role": "user", "content": text, "timestamp": time.time()}
+        self.chat_history[task_id].append(user_msg)
+        save_task_chat_cache(task_id, self.chat_history[task_id])
+
+        self._thinking_step = 1
+        self.is_waiting_for_ai = True
+        self._refresh_chat_display()
+
+        msgs_snapshot = list(self.chat_history[task_id])
+
+        def worker():
+            try:
+                if not task.details_loaded:
+                    try:
+                        self.mgr.load_task_details(task)
+                    except Exception:
+                        pass
+
+                files = []
+                if getattr(task, "attachments", None):
+                    try:
+                        from core.config import CONFIG_DIR
+                        dest = task.download_dir or os.path.join(CONFIG_DIR, "task_files", task.id)
+                        files = self.mgr.download_task_files(task, dest_dir=dest)
+                    except Exception:
+                        pass
+
+                lang = self.cfg.get("language", "de")
+                system_prompt = build_task_ai_context(task, task_files=files, language=lang)
+                reply = send_ai_chat_message(msgs_snapshot, system_prompt=system_prompt, config=self.cfg)
+            except Exception as e:
+                reply = f"Error during AI request: {e}"
+
+            def update_ui():
+                self.is_waiting_for_ai = False
+                self.chat_history[task_id].append({
+                    "role": "assistant",
+                    "content": reply,
+                    "timestamp": time.time()
+                })
+                save_task_chat_cache(task_id, self.chat_history[task_id])
+                self._refresh_chat_display(scroll_to_assistant_top=True)
+
+            self.app.call_from_thread(update_ui)
+
+        threading.Thread(target=worker, daemon=True, name="AiChatRequestWorker").start()
+
+    def action_clear_chat(self) -> None:
+        if not self.active_task:
+            return
+        task_id = self.active_task.id
+        from services.ai_chat_service import clear_task_chat_cache
+        clear_task_chat_cache(task_id)
+        self.chat_history[task_id] = []
+        self._refresh_chat_display()
+        self.app.notify("Chat cleared for current assignment.", severity="information")
+
+    def action_prev_tab(self) -> None:
+        if self.open_tasks and self.active_task_idx > 0:
+            self.select_task(self.active_task_idx - 1)
+
+    def action_next_tab(self) -> None:
+        if self.open_tasks and self.active_task_idx < len(self.open_tasks) - 1:
+            self.select_task(self.active_task_idx + 1)
+
+    def action_dismiss_screen(self) -> None:
+        self._stop_thinking_timer()
+        self.dismiss()
+
+    def on_unmount(self) -> None:
+        self._stop_thinking_timer()
+
+
 class SyncSpinner(Widget):
     """Animated sync spinner in the top right corner during background sync."""
 
@@ -7751,6 +8584,177 @@ class AufgabenDetectorApp(App):
         border: none;
         color: #ffffff;
     }
+    #ai_top_bar {
+        height: 1;
+    }
+    #ai_tab_scroll {
+        height: 1;
+    }
+    #ai_tab_scroll Button.ai_tab_btn {
+        margin-right: 1;
+        min-width: 6;
+        width: auto;
+        height: 1;
+        border: none;
+        background: #1e1e2e;
+        color: #a6adc8;
+        content-align: center middle;
+    }
+    #ai_tab_scroll Button.ai_tab_btn:hover {
+        background: #313244;
+        color: #ffffff;
+    }
+    #ai_tab_scroll Button.ai_tab_active {
+        border: none;
+        background: #89b4fa;
+        color: #11111b;
+        text-style: bold;
+        content-align: center middle;
+    }
+    #ai_tab_scroll Button.ai_tab_active:hover {
+        background: #b4befe;
+        color: #11111b;
+    }
+    .-theme-oled #ai_top_bar {
+        height: 1;
+        background: #000000;
+    }
+    .-theme-oled #ai_tab_scroll {
+        height: 1;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_btn {
+        background: #181816;
+        color: #a6a69c;
+        border: none;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_btn:hover {
+        background: #282726;
+        color: #ffffff;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_active {
+        background: #205ea6;
+        border: none;
+        color: #ffffff;
+        text-style: bold;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #ai_tab_scroll Button.ai_tab_active:hover {
+        background: #2868b2;
+        color: #ffffff;
+    }
+    .-theme-oled #btn_ai_clear_chat {
+        width: 4;
+        min-width: 4;
+        height: 1;
+        margin-right: 1;
+        content-align: center middle;
+        text-align: center;
+        background: #e03131;
+        color: #ffffff;
+        border: none;
+        padding: 0;
+    }
+    .-theme-oled #btn_ai_clear_chat:hover {
+        background: #c92a2a;
+    }
+    #ai_input_bar {
+        dock: bottom;
+        height: auto;
+        min-height: 3;
+        max-height: 5;
+        border-top: solid #313244;
+        border-bottom: solid #313244;
+        padding: 0 1;
+    }
+    #ai_chat_input,
+    ChatInputArea {
+        width: 1fr;
+        height: 1;
+        min-height: 1;
+        max-height: 3;
+        border: none;
+        background: #1e1e2e;
+        color: #cdd6f4;
+        padding: 0 1;
+        margin-right: 1;
+        scrollbar-size: 1 1;
+        scrollbar-color: #89b4fa #181825;
+    }
+    #ai_chat_input:focus,
+    ChatInputArea:focus {
+        border: none;
+    }
+    #ai_input_btn_box {
+        width: auto;
+        height: 100%;
+        align: right bottom;
+    }
+    #btn_ai_clear_chat {
+        width: 4;
+        min-width: 4;
+        height: 1;
+        margin-right: 1;
+        border: none;
+        background: #e03131;
+        color: #ffffff;
+        content-align: center middle;
+        text-align: center;
+        padding: 0;
+    }
+    #btn_ai_clear_chat:hover {
+        background: #c92a2a;
+    }
+    #btn_ai_back {
+        min-width: 14;
+        height: 1;
+        border: none;
+        background: #313244;
+        color: #cdd6f4;
+        content-align: center middle;
+    }
+    #btn_ai_back:hover {
+        background: #45475a;
+        color: #ffffff;
+    }
+    .-theme-oled #ai_input_bar {
+        background: #000000;
+        border-top: solid #343331;
+        border-bottom: solid #343331;
+        height: auto;
+    }
+    .-theme-oled #ai_input_btn_box {
+        width: auto;
+        height: 100%;
+        align: right bottom;
+    }
+    .-theme-oled #ai_chat_input,
+    .-theme-oled ChatInputArea {
+        background: #181816;
+        color: #ffffff;
+        border: none;
+        height: 1;
+        min-height: 1;
+        max-height: 3;
+        scrollbar-size: 1 1;
+        scrollbar-color: #58a6ff #000000;
+    }
+    .-theme-oled #ai_chat_input:focus,
+    .-theme-oled ChatInputArea:focus {
+        border: none;
+    }
+    .-theme-oled #btn_ai_back {
+        background: #282726;
+        color: #ffffff;
+        border: none;
+        height: 1;
+        content-align: center middle;
+    }
+    .-theme-oled #btn_ai_back:hover {
+        background: #343331;
+    }
     .-theme-oled .theme_btn:hover,
     .-theme-oled .theme_btn:focus {
         background: #343331;
@@ -7800,6 +8804,7 @@ class AufgabenDetectorApp(App):
     BINDINGS = [
         Binding("a", "add_task", "Add Task"),
         Binding("e", "show_exams", "Tests & Exams"),
+        Binding("i", "show_ai_chat", "Ai Assistant"),
         Binding("backspace", "open_courses_palette", "Open Course", show=False),
         Binding("slash", "open_courses_palette", "Open Course", show=False),
         Binding("f", "open_filter_menu", "Filter"),
@@ -7882,8 +8887,9 @@ class AufgabenDetectorApp(App):
         dt = DataTable(id="tasks_table", cursor_type="row")
         yield dt
         with Horizontal(id="button_bar"):
-            yield Button("📅 Absences", id="btn_main_absences", variant="primary", tooltip="Untis absences [U]")
-            yield Button("📝 Tests", id="btn_main_exams", variant="primary", tooltip="Exams & tests [E]")
+            yield Button("📋 Absences", id="btn_main_absences", variant="primary", tooltip="Untis absences [U]")
+            yield Button("📅 Tests", id="btn_main_exams", variant="primary", tooltip="Exams & tests [E]")
+            yield Button("🤖 Ai", id="btn_main_ai", variant="primary", tooltip="Ai assistant [I]")
             with Horizontal(id="main_center_buttons"):
                 yield Button("➕ Add", id="btn_main_add", variant="success", tooltip="Add homework [A]")
                 yield Button("🔄 Sync", id="btn_main_sync", variant="success", tooltip="Synchronize assignments [R]")
@@ -7976,6 +8982,18 @@ class AufgabenDetectorApp(App):
             subject_filter=subj,
             timeframe_filter=self.timeframe_filter,
         )
+
+        try:
+            from services.ai_chat_service import cleanup_ai_chats_cache
+            all_m_tasks = getattr(self.mgr, "tasks", [])
+            open_task_ids = {
+                t.id for t in all_m_tasks
+                if not getattr(t, "is_completed", False) and str(getattr(t, "status", "")).lower() in ["offen", "ueberfaellig", "open", "overdue"]
+            }
+            if open_task_ids:
+                cleanup_ai_chats_cache(open_task_ids)
+        except Exception:
+            pass
 
         # Dynamische Breitenberechnung: Verteilt alle 7 Spalten proportional über die gesamte Breite,
         # sodass rechts kein Platz frei bleibt und Assignment maximalen Raum erhält, ohne horizontal zu scrollen.
@@ -8258,6 +9276,8 @@ class AufgabenDetectorApp(App):
             self.action_show_absences()
         elif bid == "btn_main_exams":
             self.action_show_exams()
+        elif bid == "btn_main_ai":
+            self.action_show_ai_chat()
         elif bid == "btn_main_trash":
             self.action_show_trash()
         elif bid == "btn_main_login":
@@ -8349,18 +9369,9 @@ class AufgabenDetectorApp(App):
                 self.notify(f"WebUntis group set to {new_grp}.", severity="information")
                 self.action_open_settings()
             elif action in ("ai_config_menu", "ai_explain_config"):
-                def on_ai_choice(choice: Optional[str]) -> None:
-                    if choice == "explain":
-                        def on_explain_done(saved: bool) -> None:
-                            self.action_open_settings()
-                        self.push_screen(AiExplainModal(), on_explain_done)
-                    elif choice == "agent":
-                        def on_agent_done(saved: bool) -> None:
-                            self.action_open_settings()
-                        self.push_screen(AiAgentConfigModal(), on_agent_done)
-                    else:
-                        self.action_open_settings()
-                self.push_screen(AiConfigChoiceModal(), on_ai_choice)
+                def on_explain_done(saved: bool) -> None:
+                    self.action_open_settings()
+                self.push_screen(AiExplainModal(), on_explain_done)
 
         self.push_screen(SettingsModal(), on_setting_chosen)
 
@@ -8565,6 +9576,13 @@ class AufgabenDetectorApp(App):
         def on_exams_closed(result=None) -> None:
             self.refresh_table()
         self.push_screen(ExamsScreen(), on_exams_closed)
+
+    def action_show_ai_chat(self, initial_task_id: Optional[str] = None, auto_explain: bool = False) -> None:
+        """Opens the interactive full-screen AI chat assistant with assignments matching active main filters."""
+        def on_ai_closed(result=None) -> None:
+            self.refresh_table()
+        visible_tasks = getattr(self, "current_tasks", None)
+        self.push_screen(AiChatScreen(self.mgr, initial_task_id=initial_task_id, auto_explain=auto_explain, tasks=visible_tasks), on_ai_closed)
 
     def action_show_hotkeys(self) -> None:
         """Opens the CommandPalette with all application hotkeys."""
@@ -8949,7 +9967,7 @@ def run_tui():
     """Startet die moderne Textual-TUI-Anwendung."""
     if AUTO_CLEAN_BROWSER_CACHE:
         try:
-            clean_browser_profile_caches()
+            threading.Thread(target=clean_browser_profile_caches, daemon=True, name="BrowserCacheCleanup").start()
         except Exception:
             pass
 
