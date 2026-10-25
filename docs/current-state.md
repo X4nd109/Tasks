@@ -473,14 +473,27 @@
 
 ## 3. Known Issues & Blockers
 
-- **Keine**: Alle 407 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 407 tests — OK`).
+- **Keine**: Alle 409 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 409 tests — OK`).
   - Hinweis: `tests/test_digi4school.py` fragt bei interaktivem `stdin` (`isatty() == True`) nach E-Mail/Passwort. In CI bzw. mit nicht-interaktivem `stdin` laufen alle Tests grün; in einer TTY-Shell ohne Eingabedaten können die zwei Credential-Tests `EOFError` werfen (umgebungsbedingt, unabhängig vom AI-Chat).
 
 ---
 
 ## 4. Session Handoff Notes (Context for Next Agent)
 
-- **Latest Achievement (2026-10-24 — AI Explain Single-Execution Memory & Chat Clear Reset)**:
+- **Latest Achievement (2026-10-25 — Git Cloud-Sync Setup Tutorial & TUI Integration)**:
+  - **Umfassender Setup-Guide (`docs/tutorials/git-sync.md`)**:
+    - Vollständig englischsprachige Schritt-für-Schritt-Anleitung zur Einrichtung von Git Cloud-Sync.
+    - Detaillierte Abschnitte zur Erstellung eines privaten GitHub-Repositories (Datenschutz für Schulnotizen), Erstellung eines Classic Personal Access Tokens (PAT) ohne Ablaufdatum (`No expiration`) mit vollen Rechten (`all scopes`), Token-Kopieren und App-Konfiguration (`🚀 Test & Connect`).
+  - **Asset-Reorganisation (`assets/git-sync-tutorial/`)**:
+    - 8 Screenshots aus `assets/Git Sync Tutorial Screenshots/` nach `assets/git-sync-tutorial/` migriert und sauber nummeriert (`01_create_new_repo.png` bis `08_copy_token.png`).
+  - **TUI-Modal-Integration (`GitSetupModal`)**:
+    - Direkte URL (`https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md`) direkt unterhalb der Beschreibung platziert (ohne redundantes Präfix und ohne Leerzeile darüber).
+    - Dialogbreite auf 76 Zeichen optimiert für sauberes Kopieren der URL im Terminal.
+  - **Qualitätssicherung & Doku**:
+    - Testsuite in `tests/test_git_sync.py` aktualisiert (alle 409 Tests fehlerfrei bestanden).
+    - `AGENTS.md`, `docs/features.md`, `docs/architecture.md`, `docs/changelog.md` und `docs/current-state.md` synchronisiert und auf GitHub gepusht.
+
+- **Previous Achievement (2026-10-24 — AI Explain Single-Execution Memory & Chat Clear Reset)**:
   - **Dauerhafte Deduplizierung (`is_task_ai_explained`, `set_task_ai_explained`)**:
     - Wenn der Benutzer in der Aufgaben-Detailansicht auf `🤖 Ai Explain [A]` klickt, speichert das System in `cache/ai_chats.json` unter `_explained_task_ids`, dass diese Aufgabe bereits erklärt wurde.
     - Bei erneutem Klick auf `Ai Explain [A]` wird die Erklärung nicht nochmals an die KI gesendet, sondern der bestehende Chat direkt angezeigt (inkl. Hinweis `ℹ️ Existing explanation loaded.`).

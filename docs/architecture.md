@@ -68,7 +68,7 @@ graph TD
 
 ```text
 Tasks/
-├── assets/                     # Fonts (GentiumPlus) and app icons (app_icon.ico/png, icons/*.svg)
+├── assets/                     # Fonts, app icons (app_icon.ico/png, icons/*.svg), and tutorial media (git-sync-tutorial/)
 ├── cache/                      # Persistent runtime caches & browser profiles
 │   ├── tasks_cache.json        # Merged Moodle & Teams tasks snapshot
 │   ├── untis_cache.json        # Timetable, absence & exam records
@@ -85,7 +85,10 @@ Tasks/
 │   ├── architecture.md
 │   ├── conventions.md
 │   ├── current-state.md
-│   └── decisions.md
+│   ├── decisions.md
+│   ├── features.md
+│   ├── changelog.md
+│   └── tutorials/              # Step-by-step user guides (git-sync.md)
 ├── installer/                  # Packaging & licensing system
 │   ├── tasks.iss               # Inno Setup 6 compilation script
 │   ├── build_installer.py      # Automated installer builder
