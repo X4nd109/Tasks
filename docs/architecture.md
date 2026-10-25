@@ -238,6 +238,8 @@ sequenceDiagram
 2. **Open-Source Distribution & Packaging Pipeline (`installer/`)**:
    - Universal Windows installers (`Tasks_Setup.exe`) are generated using Inno Setup 6 without machine-specific locks or hardware restrictions.
    - The build script (`installer/build_installer.py`) downloads the official offline Python 3.12 installer on demand, keeping the Git repository lightweight.
+   - Dual-icon packaging guarantees that both `assets/app_icon.ico` (Desktop/Start Menu) and `assets/app_icon.png` (Windows Terminal custom profile) are validated, restored on demand via vector fallbacks or PIL (`ensure_app_icons()`), and enforced at compile-time under `tasks.iss` `[Files]`.
+   - Windows Terminal profiles are registered idempotently with schema-hardening (`profiles.list` vs. legacy array) via `scripts/setup_terminal_profile.bat`.
    - An automated GitHub Actions workflow (`.github/workflows/release.yml`) builds and publishes installers directly to GitHub Releases upon tag creation.
 
 3. **Git Cloud-Sync Security & Concurrency (`src/services/git_sync_service.py`)**:

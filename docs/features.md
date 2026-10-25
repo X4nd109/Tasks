@@ -9,7 +9,7 @@
 
 | Element / View | Typ | Kurzbeschreibung |
 | :--- | :--- | :--- |
-| `Main Task Dashboard` | Screen | Farbcodierte Haupttabelle aller offenen und fälligen Moodle- und Teams-Aufgaben (`AufgabenDetectorApp`) mit priorisierten Spalten (Due Date & Teacher voll erhalten, Assignment flexibel) und jitter-freier Einzeilen-Statusleiste. |
+| `Main Task Dashboard` | Screen | Farbcodierte Haupttabelle aller offenen und fälligen Moodle- und Teams-Aufgaben (`TasksApp`) mit priorisierten Spalten (Due Date & Teacher voll erhalten, Assignment flexibel) und jitter-freier Einzeilen-Statusleiste. |
 | `Tests & Exams Screen` (`[E]`) | Screen | WebUntis Prüfungskalender mit dynamischer Vollbreiten-Verteilung aller 9 Spalten ohne rechten Leerraum und horizontalem Scrollbar-Puffer. |
 | `CommandPalette` (`Backspace` / `/`) | Overlay | Schnellsuchleiste mit `Tab`-Umschaltung zwischen *Courses*, *Schoolbooks* und *Directories*; `Backspace` bei leerer Leiste schließt das Menü; behält Suchtext beim Umschalten. |
 | `Trash / Hidden Screen` (`[G]`) | Modal | Übersicht aller ausgeblendeten oder gelöschten Aufgaben mit Wiederherstellungsoption (`TrashModal`). |
@@ -27,7 +27,7 @@
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v1.1.0`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.0.0`), Themes, Logins und Schülereinstellungen. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
 | `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen und direkter Gemini / OpenAI REST-Anbindung. |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
@@ -133,7 +133,7 @@ Projektweit für alle einzeiligen `Input`-Widgets (CommandPalette, Suchleisten, 
 
 | Feature / Steuerung | Typ | Kurzbeschreibung |
 | :--- | :--- | :--- |
-| `Quantum Prism App-Icon` | Asset | 3D-Vektor-App-Icon im Fluent-Squircle-Design mit Laserstrahlen zu Teams-, Moodle- und Untis-Uhren-Logos. |
+| `Quantum Prism App-Icon` | Asset | 3D-Vektor-App-Icon im Fluent-Squircle-Design; dual bereitgestellt als `app_icon.ico` (Desktop/Startmenü) und `app_icon.png` (Windows Terminal Profil). |
 | `Inno Setup Shortcut-Icons` | Installer | Weist dem Installer und allen Startmenü- und Desktop-Verknüpfungen das App-Icon zu. |
 | `Windows-Terminal Profil-Option` | Installer | Optionale Checkbox auf der Fertigstellen-Seite zur Registrierung des Tasks Profils mit Logo. |
 | `scripts/setup_terminal_profile.bat` | Script | Autarkes Batch/PowerShell-Skript zur Eintragung des Profils in `settings.json`. |
