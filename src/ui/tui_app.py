@@ -5608,7 +5608,6 @@ class GitSetupModal(ModalScreen[bool]):
     }
     #git_setup_desc {
         color: #cdd6f4;
-        margin-bottom: 1;
         text-align: center;
     }
     #git_setup_guide_link {
@@ -5671,7 +5670,7 @@ class GitSetupModal(ModalScreen[bool]):
                 id="git_setup_desc",
             )
             yield Label(
-                "📖 Setup Guide:\nhttps://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md",
+                "https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md",
                 id="git_setup_guide_link",
             )
             yield Label("Repository HTTPS URL:", classes="git_field_label")
