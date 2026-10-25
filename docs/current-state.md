@@ -7,6 +7,13 @@
 
 ## 1. Completed Tasks & Milestones
 
+- [x] **Installer App-Icon Packaging & Terminal-Profile Fix (2026-10-25)**:
+  - **Git Whitelist für PNG-Assets**: In `.gitignore` Ausnahmen für `!assets/*.png` und `!assets/**/*.png` hinzugefügt, sodass `assets/app_icon.png` in Git versioniert und bei Clones/Releases mitgeführt wird.
+  - **Compile-Time Garantie in Inno Setup (`installer/tasks.iss`)**: `Source: "{#SourceDir}\assets\app_icon.png"` und `.ico` werden nun explizit unter `[Files]` deklariert.
+  - **Automatischer Asset-Check & Regeneration (`installer/build_installer.py`)**: `ensure_app_icons()` prüft vor dem Build, ob `app_icon.ico` und `app_icon.png` im Build-Verzeichnis existieren, und stellt sie bei Bedarf automatisch aus Vektor-Fallbacks (`assets/icons/svg_concept8_data_prism.*`) oder via PIL wieder her.
+  - **Fallback im Terminal-Setup-Skript (`scripts/setup_terminal_profile.bat`)**: Falls `app_icon.png` nicht existiert, fällt das Skript nahtlos auf `app_icon.ico` zurück.
+  - **Installer erfolgreich neu generiert**: `Tasks_Setup.exe` enthält nun garantiert beide Icon-Formate.
+
 - [x] **Project Rebranding: Aufgaben-Detector -> Tasks (2026-10-25)**:
   - **Git Remote & Repository**: Auf `https://github.com/X4nd109/Tasks.git` aktualisiert und `GITHUB_REPO = "X4nd109/Tasks"` in `src/core/config.py` verankert.
   - **Core Refactoring**: Hauptklasse zu `TasksApp` umbenannt (inkl. `AufgabenDetectorApp = TasksApp` Alias für vollständige Abwärtskompatibilität).

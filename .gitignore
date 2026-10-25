@@ -31,6 +31,8 @@ directories.json
 data/directories.json
 aufgaben_detector_directories.json
 *.png
+!assets/*.png
+!assets/**/*.png
 *.log
 
 # Local Browser Profiles & Sync Repos

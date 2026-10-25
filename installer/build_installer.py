@@ -118,8 +118,62 @@ def ensure_python_installer(target_path: Path) -> None:
     print(f"  * Downloaded python_installer.exe ({size_mb:.1f} MB)")
 
 
+def ensure_app_icons(assets_dir: Path) -> None:
+    """
+    Guarantees that both app_icon.ico and app_icon.png exist in the given assets directory.
+    If one is missing, it is restored from the vector renders or converted via PIL.
+    """
+    ico_path = assets_dir / "app_icon.ico"
+    png_path = assets_dir / "app_icon.png"
+
+    # Restore or generate PNG if missing
+    if not png_path.exists():
+        fallback_png = PROJECT_ROOT / "assets" / "icons" / "svg_concept8_data_prism.png"
+        if fallback_png.exists():
+            shutil.copy2(fallback_png, png_path)
+            print(f"   * Restored {png_path.name} from vector fallback")
+        elif ico_path.exists():
+            try:
+                from PIL import Image
+                with Image.open(ico_path) as img:
+                    img.save(png_path, format="PNG")
+                print(f"   * Auto-extracted {png_path.name} from {ico_path.name}")
+            except Exception as e:
+                print(f"   [!] Failed to extract PNG from ICO: {e}")
+
+    # Restore or generate ICO if missing
+    if not ico_path.exists():
+        fallback_ico = PROJECT_ROOT / "assets" / "icons" / "svg_concept8_data_prism.ico"
+        if fallback_ico.exists():
+            shutil.copy2(fallback_ico, ico_path)
+            print(f"   * Restored {ico_path.name} from vector fallback")
+        elif png_path.exists():
+            try:
+                from PIL import Image
+                with Image.open(png_path) as img:
+                    img.save(
+                        ico_path,
+                        format="ICO",
+                        sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)],
+                    )
+                print(f"   * Auto-generated {ico_path.name} from {png_path.name}")
+            except Exception as e:
+                print(f"   [!] Failed to convert PNG to ICO: {e}")
+
+    if not ico_path.exists() or not png_path.exists():
+        missing = [p.name for p in (ico_path, png_path) if not p.exists()]
+        raise FileNotFoundError(
+            f"CRITICAL: Required app icon asset(s) missing in {assets_dir}: {', '.join(missing)}"
+        )
+
+
 def copy_project_files(build_dir: Path) -> None:
     """Copies only clean project files into the temporary build folder."""
+    # Ensure source assets directory contains both app_icon.ico and app_icon.png
+    src_assets = PROJECT_ROOT / "assets"
+    if src_assets.exists():
+        ensure_app_icons(src_assets)
+
     copied = 0
 
     for filename in INCLUDE_FILES:
@@ -147,7 +201,9 @@ def copy_project_files(build_dir: Path) -> None:
         else:
             print(f"   [!] Warning: Missing expected directory: {dirname}")
 
-    print(f"   * Copied {copied} files/directories into clean build directory")
+    # Enforce and verify icons in build target directory
+    ensure_app_icons(build_dir / "assets")
+    print(f"   * Copied {copied} files/directories into clean build directory (verified icons)")
 
 
 def build_inno_installer(version: str, output_name: str, build_dir: Path, iscc: str) -> Path:

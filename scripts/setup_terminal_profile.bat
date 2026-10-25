@@ -18,7 +18,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$raw = '%~dp0'.TrimEnd('\'); " ^
   "$rootDir = if (Test-Path (Join-Path $raw 'run.bat')) { $raw } else { Split-Path -Parent $raw }; " ^
   "$runBat = Join-Path $rootDir 'run.bat'; " ^
-  "$iconPath = Join-Path (Join-Path $rootDir 'assets') 'app_icon.png'; " ^
+  "$pngIcon = Join-Path (Join-Path $rootDir 'assets') 'app_icon.png'; " ^
+  "$icoIcon = Join-Path (Join-Path $rootDir 'assets') 'app_icon.ico'; " ^
+  "$iconPath = if (Test-Path $pngIcon) { $pngIcon } elseif (Test-Path $icoIcon) { $icoIcon } else { $pngIcon }; " ^
   "$guid = '{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; " ^
   "$name = 'Tasks'; " ^
   "$candidates = @( " ^

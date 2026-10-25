@@ -51,6 +51,9 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"
 
 [Files]
+; Symbole explizit deklarieren (stellt sicher, dass PNG & ICO immer verpackt werden)
+Source: "{#SourceDir}\assets\app_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
+Source: "{#SourceDir}\assets\app_icon.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; Alle Programm-Dateien aus dem Build-Verzeichnis (rekursiv, inkl. fonts/)
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Offizieller Python 3.12 Installer (wird temporär entpackt und nach Setup gelöscht, falls nötig)

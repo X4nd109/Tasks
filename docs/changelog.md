@@ -9,6 +9,13 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+### Fixed
+- **Installer App-Icon Packaging & Terminal-Profil (`assets/app_icon.png`)**:
+  - `.gitignore` angepasst, sodass Asset-PNGs (`!assets/*.png`, `!assets/**/*.png`) nicht mehr ignoriert und versioniert werden.
+  - `installer/tasks.iss` deklariert `Source: "{#SourceDir}\assets\app_icon.png"` und `.ico` nun explizit unter `[Files]`, um ein Fehlen zur Compile-Zeit unmöglich zu machen.
+  - `installer/build_installer.py` ergänzt um `ensure_app_icons()`: validiert `app_icon.png` und `app_icon.ico` im Build-Ziel und erzeugt sie bei Bedarf automatisch aus Fallback-Vektor-Rendern oder per PIL.
+  - `scripts/setup_terminal_profile.bat` prüft primär auf `app_icon.png` und fällt bei Nichtvorhandensein robust auf `app_icon.ico` zurück.
+
 ---
 
 ## [2.0.0] - 2026-10-25
