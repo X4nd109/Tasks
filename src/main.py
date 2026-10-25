@@ -1,5 +1,5 @@
 """
-main.py - Hauptprogramm des Aufgaben-Detectors für Moodle und Microsoft Teams.
+main.py - Hauptprogramm von Tasks für Moodle und Microsoft Teams.
 Konsolidierte Aufgabenverwaltung.
 """
 

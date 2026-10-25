@@ -1,11 +1,59 @@
-# Current Project State & Session Handoff — Aufgaben-Detector
+# Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-10-24  
-> **Active Milestone**: Release v1.3.0 (Released) — Native In-App AI Assistant, Task Tabs, Smart Download & Performance Polish
+> **Last Updated**: 2026-10-25  
+> **Active Milestone**: Release v2.0.0 (Released) — Tasks Rebranding, New Quantum Prism Icons, Single-Execution Ai Explain & Git-Sync Cleanup
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Project Rebranding: Aufgaben-Detector -> Tasks (2026-10-25)**:
+  - **Git Remote & Repository**: Auf `https://github.com/X4nd109/Tasks.git` aktualisiert und `GITHUB_REPO = "X4nd109/Tasks"` in `src/core/config.py` verankert.
+  - **Core Refactoring**: Hauptklasse zu `TasksApp` umbenannt (inkl. `AufgabenDetectorApp = TasksApp` Alias für vollständige Abwärtskompatibilität).
+  - **Konfiguration & Datenmigration**: Lokale JSON-Dateien zu `tasks_*.json` migriert. Automatische Start-Routine kopiert alte `aufgaben_detector_*.json` verlustfrei und hält Originale als Backup vor.
+  - **Git-Sync Automatisierte Legacy-Bereinigung**: Neue Routine `cleanup_legacy_sync_repo_files(work_dir)` in `git_sync_service.py`, die Alt-Dateien (`aufgaben_detector_*.json`) im Remote-Repository einliest, in die Standarddateien integriert und per `git rm -f` automatisch aus dem Sync-Repo löscht und committet.
+  - **Packaging & Setup**: Inno-Setup-Skript zu `installer/tasks.iss` migriert (`Tasks_Setup.exe`, Installationsverzeichnis `{autopf}\Tasks`). Batch-Dateien (`tasks.bat`, `tasks.cmd`, `run.bat`, `setup.bat`) und Windows-Terminal-Skripte auf `Tasks` umgestellt.
+  - **Dokumentation**: Vollständige Überarbeitung von `AGENTS.md`, `README.md`, allen `docs/*.md`-Dateien und `skills/tasks/SKILL.md`.
+  - **Verifikation**: 409 Tests in der Unittest-Suite fehlerfrei bestanden (100% OK), CLI-Befehle `tasks list` und `python main.py list` erfolgreich validiert.
+
+- [x] **Windows Terminal Profile with App Logo (`scripts/setup_terminal_profile.bat` & `scripts/remove_terminal_profile.bat`)**:
+  - **Reine, autarke Batch-Dateien**: Beide Skripte führen die JSON-Manipulation von Windows Terminal `settings.json` direkt per PowerShell inline aus (analog zu `setup_command.bat`).
+  - Keine redundanten Python-Hilfsskripte mehr nötig (`setup_terminal_profile.py` und `remove_terminal_profile.py` wurden gelöscht).
+  - Trägt das Profil `Aufgaben-Detector` mit GUID `{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}` und `app_icon.png` ein bzw. entfernt es rückstandslos.
+  - Beide Skripte unterstützen `/silent` für das Setup und den Uninstaller.
+  - Inno-Setup-Installer frisch neu kompiliert.
+
+- [x] **Single-Execution `Ai Explain` Memory & Chat-Clear Reset (2026-10-25)**:
+  - **Persistenter Erklärungs-Status (`cache/ai_chats.json`)**: Neue Liste `_explained_task_ids` speichert pro Aufgabe, ob bereits eine erfolgreiche KI-Erklärung vorliegt.
+  - **`is_task_ai_explained(task_id)`** (`src/services/ai_chat_service.py`):
+    - Liest den Cache unter `CACHE_LOCK`; leere/fehlende Task-IDs, unbekannte Tasks sowie Tasks ohne Nachrichten liefern `False`.
+    - Marker-Treffer in `_explained_task_ids` ⇒ `True`.
+    - **Retroaktive Erkennung** für ältere Caches ohne Marker: User-Nachricht mit `is_explain`-Flag bzw. Prompt-Marker (`erkläre mir diese aufgabe` / `explain this assignment`) **und** mindestens eine Assistant-Antwort, die nicht mit `Error:` bzw. `AI request failed:` beginnt.
+  - **`set_task_ai_explained(task_id, explained=True)`**: Setzt bzw. entfernt den Marker dedupliziert und schreibt den Cache atomar; bei ungültigem Marker-Typ wird die Liste automatisch repariert.
+  - **`AiChatScreen.select_task(..., is_initial=True)`**: Der Auto-Explain-Prompt wird nur noch beim ersten Mal gesendet (`send_user_message(prompt, is_explain=True)`). Ist die Aufgabe bereits erklärt, wird der bestehende Verlauf geladen und `Existing explanation loaded.` als Notification angezeigt (in `try/except` gekapselt).
+  - **`AiChatScreen.send_user_message(..., is_explain=False)`**: Markiert die User-Nachricht mit `"is_explain": True` und setzt den persistenten Marker erst im Worker-`update_ui()`, wenn die Antwort nicht mit `Error:` / `AI request failed:` beginnt (Fehler zählen also nicht als erklärt).
+  - **Sofortiger Reset beim Chat-Löschen**: `action_clear_chat` ruft zusätzlich `set_task_ai_explained(task_id, False)` auf; `clear_task_chat_cache` entfernt Verlauf **und** Marker, sodass der nächste `Ai Explain [A]`-Klick wieder erklärt.
+  - **`cleanup_ai_chats_cache`**: Filtert `_explained_task_ids` auf noch offene/aktive Aufgaben; verwaiste Marker werden ebenfalls entfernt und Unterstrich-Schlüssel (`_last_active_task_id`) bleiben unberührt.
+  - **Tests**: 21 neue Service-Tests in `tests/test_ai_chat_service.py` (`TestAiExplainedState`) und 5 neue UI-Tests in `tests/test_ai_chat_ui.py` (`TestAiExplainSingleExecution`) – inkl. Fehlerantworten, retroaktiver Erkennung, Clear-Reset, Cleanup und synchron ausgeführter Worker-Threads.
+
+- [x] **Desktop Shortcut & Installer Icons (`assets/app_icon.ico` & Inno Setup)**:
+  - 8 handgefertigte **SVG-Vektor-Icons** mit Fluent-Squircle, transparenten Alpha-Ecken und leuchtenden Gradienten entworfen.
+  - **Quantum Prism Convergence (`svg_concept8_data_prism`)** verfeinert: 120°-Tri-Radial-Symmetrie mit 3 Strahlen (Teams nach links oben, Moodle nach rechts oben, WebUntis-Uhr-Icon im zentrierten App-Tile exakt in Moodle-Größe gerade nach unten), echten Logos an den Ecken, zentralem Kristallprisma und entfernter 4. Emissionslinie/Häkchen.
+  - Das verfeinerte Quantum-Prism-Icon wurde als Standard-Icon `assets/app_icon.ico` eingerichtet.
+  - `installer/aufgaben_detector.iss` um `SetupIconFile` und `IconFilename: "{app}\assets\app_icon.ico"` für Desktop- & Startmenü-Verknüpfungen ergänzt.
+  - Installer-Build erfolgreich getestet (`AufgabenDetector_Setup.exe` trägt das neue Vektor-Icon).
+
+- [x] **AI Explain Single-Execution Memory & Chat Clear Reset**:
+  - **Dauerhafte Deduplizierung (`is_task_ai_explained`, `set_task_ai_explained`)**:
+    - Klickt der Nutzer in `TaskDetailModal` auf `🤖 Ai Explain [A]`, merkt sich das System per `_explained_task_ids` in `cache/ai_chats.json`, dass die Aufgabe bereits erklärt wurde.
+    - Beim erneuten Klick auf `Ai Explain [A]` wird die Erklärung nicht nochmals doppelt an die KI geschickt, sondern der bestehende Chat direkt geöffnet und mit `ℹ️ Existing explanation loaded.` bestätigt.
+  - **Reset beim Chat-Leeren**:
+    - Klick auf `🗑️` (Clear Chat) oder `Ctrl+L` leert den Chat und setzt den Erklärungsstatus der Aufgabe zurück (`clear_task_chat_cache` & `set_task_ai_explained(task_id, False)`), sodass erneutes `Ai Explain [A]` wieder eine neue Erklärung triggert.
+  - **Fehler-Resilienz & Abwärtskompatibilität**:
+    - Tritt ein Fehler auf (z. B. fehlender API-Key oder Netzwerkabbruch), wird die Aufgabe nicht fälschlich als erklärt markiert.
+    - Vorherige Chatverläufe mit Erklärungs-Prompts werden rückwirkend erkannt.
+    - `cleanup_ai_chats_cache` entfernt verwaiste IDs abgeschlossener Aufgaben automatisch aus `_explained_task_ids`.
+  - **Umfassende Testabdeckung**: 104 AI-Tests erfolgreich (alle 407 Tests im Gesamtprojekt grün).
 
 - [x] **In-App AI Chat Assistant & Browser-Style Task Tabs (`AiChatScreen` & `AiConfigModal`)**:
   - **Interaktiver Vollbild-Assistent (`AiChatScreen`)**:
@@ -79,7 +127,7 @@
   - **Lesefreundliches Scrollen bei KI-Antworten (Start von oben)**:
     - Bei Eintreffen einer Antwort der KI wird das Chatfenster nicht mehr an das absolute Ende (Zeile 50) gescrollt.
     - Stattdessen wird die neue Assistant-Nachricht mit `last_assistant_bubble.scroll_visible(top=True, animate=False)` via `call_after_refresh` exakt an die Oberkante des Fensters ausgerichtet, sodass der Benutzer die Antwort sofort von der ersten Zeile an lesen kann.
-  - **Umfassende Testabdeckung**: 78 dedizierte AI-Tests (50 in `test_ai_chat_service.py`, 13 in `test_ai_explain.py`, 15 in `test_ai_chat_ui.py`), Gesamtsuite erfolgreich.
+  - **Umfassende Testabdeckung**: 104 dedizierte AI-Tests (71 in `test_ai_chat_service.py`, 13 in `test_ai_explain.py`, 20 in `test_ai_chat_ui.py`), Gesamtsuite erfolgreich.
 
 - [x] **AI Chat Service Foundation (`src/services/ai_chat_service.py`)**:
   - **Attachment Text Extraction (`extract_attachment_text`)**: PDFs via PyMuPDF (`fitz.open`, whitespace-cleaned, capped at `max_chars`), text/source formats (`.txt`, `.md`, `.py`, `.c`, `.cpp`, `.java`, `.html`, `.css`, `.json`, `.csv`, `.xml`) with UTF-8/latin-1 fallback, binary placeholder `[Binary file: <name>]`, and graceful error notes for unreadable files.
@@ -401,11 +449,25 @@
 
 ## 3. Known Issues & Blockers
 
-- **Keine**: Alle 381 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 381 tests — OK`).
+- **Keine**: Alle 407 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 407 tests — OK`).
+  - Hinweis: `tests/test_digi4school.py` fragt bei interaktivem `stdin` (`isatty() == True`) nach E-Mail/Passwort. In CI bzw. mit nicht-interaktivem `stdin` laufen alle Tests grün; in einer TTY-Shell ohne Eingabedaten können die zwei Credential-Tests `EOFError` werfen (umgebungsbedingt, unabhängig vom AI-Chat).
 
 ---
 
 ## 4. Session Handoff Notes (Context for Next Agent)
+
+- **Latest Achievement (2026-10-24 — AI Explain Single-Execution Memory & Chat Clear Reset)**:
+  - **Dauerhafte Deduplizierung (`is_task_ai_explained`, `set_task_ai_explained`)**:
+    - Wenn der Benutzer in der Aufgaben-Detailansicht auf `🤖 Ai Explain [A]` klickt, speichert das System in `cache/ai_chats.json` unter `_explained_task_ids`, dass diese Aufgabe bereits erklärt wurde.
+    - Bei erneutem Klick auf `Ai Explain [A]` wird die Erklärung nicht nochmals an die KI gesendet, sondern der bestehende Chat direkt angezeigt (inkl. Hinweis `ℹ️ Existing explanation loaded.`).
+  - **Reset beim Chat-Leeren**:
+    - Klickt der Nutzer auf `🗑️` (Clear Chat) oder drückt `Ctrl+L`, wird die Aufgabe aus `_explained_task_ids` entfernt (`clear_task_chat_cache` & `set_task_ai_explained(task_id, False)`).
+    - Ein nachfolgender Klick auf `Ai Explain [A]` erklärt die Aufgabe wieder vollständig von Grund auf.
+  - **Fehler-Resilienz & Abwärtskompatibilität**:
+    - Tritt ein Fehler auf (z. B. fehlender API-Key oder Netzwerkfehler), wird die Aufgabe nicht fälschlich als erklärt markiert.
+    - Vorherige Chatverläufe mit Erklärungs-Prompts werden rückwirkend erkannt.
+    - `cleanup_ai_chats_cache` entfernt verwaiste IDs abgeschlossener Aufgaben automatisch aus `_explained_task_ids`.
+  - **Umfassende Testabdeckung**: 104 AI-Tests erfolgreich (alle 407 Tests im Gesamtprojekt grün).
 
 - **Release v1.3.0 Milestone Summary (2026-10-24)**:
   - **In-App AI Chat Assistant (`AiChatScreen`)**: Vollständiger Ersatz des alten externen Web-Ai-Systems durch ein integriertes Vollbild-Terminal-Interface.

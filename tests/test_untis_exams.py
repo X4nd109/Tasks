@@ -32,7 +32,7 @@ from untis_service import (
     get_cached_untis_person_id,
     extract_exam_subgroup,
 )
-from tui_app import AufgabenDetectorApp, ExamsModal, ExamDetailModal
+from tui_app import TasksApp, AufgabenDetectorApp, ExamsModal, ExamDetailModal
 from textual.widgets import Label
 from task_manager import TaskManager
 

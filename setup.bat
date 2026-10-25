@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title Aufgaben-Detector - Setup
+title Tasks - Setup
 
 set "IS_SILENT=0"
 if /i "%~1"=="/silent" set "IS_SILENT=1"
@@ -9,7 +9,7 @@ if /i "%~1"=="--silent" set "IS_SILENT=1"
 if /i "%~1"=="-s" set "IS_SILENT=1"
 
 echo =======================================================
-echo          Aufgaben-Detector - Setup ^& Installation
+echo          Tasks - Setup ^& Installation
 echo =======================================================
 echo.
 

@@ -2,12 +2,38 @@
 test_ai_chat_ui.py - Tests for the In-App AI Chat Assistant TUI screen and configuration.
 """
 
+import json
 import os
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 from core.models import Task, TaskAttachment
-from tui_app import AufgabenDetectorApp, AiChatScreen, AiConfigModal, TaskDetailModal
+from services import ai_chat_service
+from services.ai_chat_service import (
+    is_task_ai_explained,
+    load_task_chat_cache,
+    save_task_chat_cache,
+    set_task_ai_explained,
+)
+from tui_app import TasksApp, AufgabenDetectorApp, AiChatScreen, AiConfigModal, TaskDetailModal
+
+
+class _ImmediateThread:
+    """Thread stand-in that runs the worker synchronously inside the test."""
+
+    def __init__(self, *args, **kwargs):
+        self._target = kwargs.get("target") or (args[0] if args else None)
+
+    def start(self):
+        if self._target is not None:
+            self._target()
+
+    def join(self, timeout=None):
+        return None
+
+    def is_alive(self):
+        return False
 
 
 class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
@@ -441,6 +467,207 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
                 with patch.object(assistant_bubble, "scroll_visible") as mock_scroll_visible:
                     cb()
                     mock_scroll_visible.assert_called_once_with(top=True, animate=False)
+
+
+class TestAiExplainSingleExecution(unittest.IsolatedAsyncioTestCase):
+    """The ``Ai Explain [A]`` prompt must only be sent once per assignment."""
+
+    EXPLAIN_USER = (
+        "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt."
+    )
+
+    def setUp(self):
+        self.sample_task1 = Task(
+            id="task_swp_1",
+            platform="moodle",
+            course="SWP",
+            course_full="Softwareentwicklung",
+            title="LinkedList und Generics",
+            due_date_str="Montag, 26. Okt., 23:59",
+            status="offen",
+            status_display="Nicht abgegeben",
+            url="https://moodle.spengergasse.at/mod/assign/view.php?id=101",
+            teacher="BIM",
+            description="Implementiere eine doppelt verkettete Liste in Java.",
+            details_loaded=True,
+        )
+        self.sample_task2 = Task(
+            id="task_amec_2",
+            platform="moodle",
+            course="AMEC",
+            course_full="Angewandte Mechatronik",
+            title="Schrittmotor A4988",
+            due_date_str="Dienstag, 27. Okt., 14:00",
+            status="ueberfaellig",
+            status_display="Überfällig",
+            url="https://moodle.spengergasse.at/mod/assign/view.php?id=102",
+            teacher="KRD",
+            description="Steuere einen Schrittmotor an.",
+            details_loaded=True,
+        )
+
+        self.mock_mgr = MagicMock()
+        self.mock_mgr.get_filtered_tasks.return_value = [
+            self.sample_task1,
+            self.sample_task2,
+        ]
+        self.mock_mgr.get_tasks.return_value = [self.sample_task1, self.sample_task2]
+        self.mock_mgr.tasks = [self.sample_task1, self.sample_task2]
+
+        AiChatScreen._last_opened_task_id = None
+        self._use_temp_cache()
+        ai_chat_service.save_last_active_ai_task_id("")
+
+    def tearDown(self):
+        AiChatScreen._last_opened_task_id = None
+
+    def _use_temp_cache(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = os.path.join(tmp.name, "cache", "ai_chats.json")
+        patcher = patch.object(ai_chat_service, "CACHE_FILE", path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return path
+
+    def _seed_explained_history(self, task_id, reply="Hier ist die Erklärung."):
+        save_task_chat_cache(
+            task_id,
+            [
+                {"role": "user", "content": self.EXPLAIN_USER, "is_explain": True},
+                {"role": "assistant", "content": reply},
+            ],
+        )
+
+    async def test_auto_explain_is_not_resent_when_already_explained(self):
+        from textual.app import App
+
+        self._seed_explained_history("task_swp_1")
+        set_task_ai_explained("task_swp_1", True)
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            with patch.object(AiChatScreen, "send_user_message") as mock_send:
+                screen = AiChatScreen(self.mock_mgr, auto_explain=True)
+                await app.push_screen(screen)
+                await pilot.pause()
+
+                self.assertEqual(screen.active_task.id, "task_swp_1")
+                mock_send.assert_not_called()
+                # The persisted explanation is loaded instead.
+                self.assertEqual(len(screen.chat_history["task_swp_1"]), 2)
+
+    async def test_auto_explain_is_sent_for_unexplained_task(self):
+        from textual.app import App
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            with patch.object(AiChatScreen, "send_user_message") as mock_send:
+                screen = AiChatScreen(self.mock_mgr, auto_explain=True)
+                await app.push_screen(screen)
+                await pilot.pause()
+
+                self.assertEqual(screen.active_task.id, "task_swp_1")
+                mock_send.assert_called_once()
+                args, kwargs = mock_send.call_args
+                self.assertTrue(kwargs.get("is_explain"))
+
+    async def test_successful_explanation_persists_explained_state(self):
+        from textual.app import App
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            with patch.object(AiChatScreen, "send_user_message"):
+                screen = AiChatScreen(self.mock_mgr)
+                await app.push_screen(screen)
+                await pilot.pause()
+
+            screen.active_task = self.sample_task1
+            screen.chat_history["task_swp_1"] = []
+
+            with patch("tui_app.threading.Thread", _ImmediateThread), patch.object(
+                app, "call_from_thread", side_effect=lambda cb, *a, **kw: cb(*a, **kw)
+            ), patch(
+                "services.ai_chat_service.send_ai_chat_message",
+                return_value="Schritt 1: Analysiere die Aufgabe.",
+            ):
+                screen.send_user_message(self.EXPLAIN_USER, is_explain=True)
+
+            self.assertFalse(screen.is_waiting_for_ai)
+            self.assertTrue(screen.chat_history["task_swp_1"][0]["is_explain"])
+            self.assertTrue(is_task_ai_explained("task_swp_1"))
+            self.assertEqual(
+                load_task_chat_cache("task_swp_1")[-1]["content"],
+                "Schritt 1: Analysiere die Aufgabe.",
+            )
+
+    async def test_failed_explanation_does_not_set_explained_state(self):
+        from textual.app import App
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            with patch.object(AiChatScreen, "send_user_message"):
+                screen = AiChatScreen(self.mock_mgr)
+                await app.push_screen(screen)
+                await pilot.pause()
+
+            screen.active_task = self.sample_task1
+            screen.chat_history["task_swp_1"] = []
+
+            with patch("tui_app.threading.Thread", _ImmediateThread), patch.object(
+                app, "call_from_thread", side_effect=lambda cb, *a, **kw: cb(*a, **kw)
+            ), patch(
+                "services.ai_chat_service.send_ai_chat_message",
+                return_value="Error: No API key configured.",
+            ):
+                screen.send_user_message(self.EXPLAIN_USER, is_explain=True)
+
+            self.assertFalse(is_task_ai_explained("task_swp_1"))
+            with open(ai_chat_service.CACHE_FILE, "r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+            self.assertNotIn("task_swp_1", raw.get("_explained_task_ids", []))
+
+    async def test_clear_chat_resets_explained_state(self):
+        from textual.app import App
+
+        self._seed_explained_history("task_swp_1")
+        set_task_ai_explained("task_swp_1", True)
+        self.assertTrue(is_task_ai_explained("task_swp_1"))
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            with patch.object(AiChatScreen, "send_user_message"):
+                screen = AiChatScreen(self.mock_mgr)
+                await app.push_screen(screen)
+                await pilot.pause()
+
+            screen.active_task = self.sample_task1
+            screen.chat_history["task_swp_1"] = load_task_chat_cache("task_swp_1")
+
+            screen.action_clear_chat()
+
+            self.assertEqual(screen.chat_history["task_swp_1"], [])
+            self.assertFalse(is_task_ai_explained("task_swp_1"))
+
+        with open(ai_chat_service.CACHE_FILE, "r", encoding="utf-8") as fh:
+            raw = json.load(fh)
+        self.assertNotIn("task_swp_1", raw)
+        self.assertNotIn("task_swp_1", raw.get("_explained_task_ids", []))
 
 
 if __name__ == "__main__":

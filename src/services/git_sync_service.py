@@ -201,6 +201,82 @@ def is_valid_git_repo(work_dir: str) -> bool:
     return ok and out.strip() == "true"
 
 
+def cleanup_legacy_sync_repo_files(work_dir: str) -> bool:
+    """
+    Erkennt veraltete 'aufgaben_detector_*.json'-Dateien im Git-Sync-Repository,
+    migriert deren Inhalt bei Bedarf in die Standarddateien und entfernt sie per 'git rm -f',
+    damit das Remote-Repository sauber bereinigt wird.
+    """
+    if not work_dir or not os.path.exists(work_dir):
+        return False
+    repo_data_dir = os.path.join(work_dir, "data")
+    os.makedirs(repo_data_dir, exist_ok=True)
+    cleaned = False
+
+    # 1. Config: aufgaben_detector_config.json -> config.json
+    for old_cfg in [
+        os.path.join(work_dir, "aufgaben_detector_config.json"),
+        os.path.join(repo_data_dir, "aufgaben_detector_config.json"),
+    ]:
+        if os.path.exists(old_cfg):
+            target_cfg = os.path.join(work_dir, "config.json")
+            if not os.path.exists(target_cfg):
+                try:
+                    shutil.copy2(old_cfg, target_cfg)
+                except Exception:
+                    pass
+            rel = os.path.relpath(old_cfg, work_dir).replace("\\", "/")
+            try:
+                os.remove(old_cfg)
+            except Exception:
+                pass
+            _run_git_cmd(["rm", "-f", rel], cwd=work_dir)
+            cleaned = True
+
+    # 2. Data files: aufgaben_detector_*.json -> data/*.json
+    mapping = [
+        ("aufgaben_detector_custom_tasks.json", "custom_tasks.json"),
+        ("aufgaben_detector_custom_exams.json", "custom_exams.json"),
+        ("aufgaben_detector_deleted_manual_tasks.json", "deleted_manual_tasks.json"),
+        ("aufgaben_detector_hidden_tasks.json", "hidden_tasks.json"),
+        ("aufgaben_detector_deleted_tasks.json", "deleted_tasks.json"),
+    ]
+    for old_name, new_name in mapping:
+        for old_dir in [work_dir, repo_data_dir]:
+            old_p = os.path.join(old_dir, old_name)
+            if os.path.exists(old_p):
+                new_p = os.path.join(repo_data_dir, new_name)
+                if not os.path.exists(new_p):
+                    try:
+                        shutil.copy2(old_p, new_p)
+                    except Exception:
+                        pass
+                rel = os.path.relpath(old_p, work_dir).replace("\\", "/")
+                try:
+                    os.remove(old_p)
+                except Exception:
+                    pass
+                _run_git_cmd(["rm", "-f", rel], cwd=work_dir)
+                cleaned = True
+
+    # 3. Alle weiteren aufgaben_detector_*.json im gesamten Repo entfernen
+    for root, _, files in os.walk(work_dir):
+        if ".git" in root:
+            continue
+        for f in files:
+            if f.startswith("aufgaben_detector_") and f.endswith(".json"):
+                f_p = os.path.join(root, f)
+                rel = os.path.relpath(f_p, work_dir).replace("\\", "/")
+                try:
+                    os.remove(f_p)
+                except Exception:
+                    pass
+                _run_git_cmd(["rm", "-f", rel], cwd=work_dir)
+                cleaned = True
+
+    return cleaned
+
+
 # ---------------------------------------------------------
 # Smart JSON-Merge Hilfsfunktionen
 # ---------------------------------------------------------
@@ -473,8 +549,8 @@ class GitSyncService:
                     _run_git_cmd(["remote", "add", "origin", auth_url], cwd=work_dir)
 
             # Git Identität für automatische Commits setzen
-            _run_git_cmd(["config", "user.name", "Aufgaben Detector"], cwd=work_dir)
-            _run_git_cmd(["config", "user.email", "aufgaben-detector@local"], cwd=work_dir)
+            _run_git_cmd(["config", "user.name", "Tasks"], cwd=work_dir)
+            _run_git_cmd(["config", "user.email", "tasks@local"], cwd=work_dir)
             # Verhindert LF/CRLF Warnungen
             _run_git_cmd(["config", "core.autocrlf", "false"], cwd=work_dir)
 
@@ -585,6 +661,7 @@ class GitSyncService:
             repo_data_dir = os.path.join(work_dir, "data")
             repo_config_file = os.path.join(work_dir, "config.json")
             os.makedirs(repo_data_dir, exist_ok=True)
+            cleanup_legacy_sync_repo_files(work_dir)
 
             has_updates = False
 
@@ -799,6 +876,7 @@ class GitSyncService:
 
             repo_data_dir = os.path.join(work_dir, "data")
             os.makedirs(repo_data_dir, exist_ok=True)
+            cleanup_legacy_sync_repo_files(work_dir)
 
             # README sicherstellen
             readme_path = os.path.join(work_dir, "README.md")
@@ -806,8 +884,8 @@ class GitSyncService:
                 try:
                     with open(readme_path, "w", encoding="utf-8") as f:
                         f.write(
-                            "# Aufgaben Detector - Private Cloud Sync\n\n"
-                            "Automatisches Backup- und Synchronisations-Repository für den **Aufgaben Detector**.\n\n"
+                            "# Tasks - Private Cloud Sync\n\n"
+                            "Automatisches Backup- und Synchronisations-Repository für **Tasks**.\n\n"
                             "Beinhaltet:\n"
                             "- `config.json`: Benutzereinstellungen, Farb-Theme & Stundenplan-Konfiguration\n"
                             "- `data/custom_tasks.json`: Manuell erstellte Aufgaben\n"
@@ -889,8 +967,8 @@ class GitSyncService:
             branch = cfg.get("branch", "main")
             auth_url = build_authenticated_url(cfg["repo_url"], cfg.get("token", ""))
             _run_git_cmd(["remote", "set-url", "origin", auth_url], cwd=work_dir)
-            _run_git_cmd(["config", "user.name", "Aufgaben Detector"], cwd=work_dir)
-            _run_git_cmd(["config", "user.email", "aufgaben-detector@local"], cwd=work_dir)
+            _run_git_cmd(["config", "user.name", "Tasks"], cwd=work_dir)
+            _run_git_cmd(["config", "user.email", "tasks@local"], cwd=work_dir)
 
             if status_out.strip():
                 ok_com, _, err_com = _run_git_cmd(["commit", "-m", commit_message], cwd=work_dir)

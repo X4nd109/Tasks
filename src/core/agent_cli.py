@@ -361,7 +361,7 @@ def format_task_detail_text(task: Task, mgr: TaskManager) -> str:
 
 def format_guide_text() -> str:
     """Kompakter Agent-Leitfaden mit minimalem Token-Footprint."""
-    return """# Aufgaben Detector - Agent CLI Reference
+    return """# Tasks - Agent CLI Reference
 
 Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
 

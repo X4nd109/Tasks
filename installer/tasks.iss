@@ -1,20 +1,20 @@
 ; ─────────────────────────────────────────────────────────────────────────────
-; aufgaben_detector.iss
-; Inno Setup Script für den Aufgaben-Detector Installer
+; tasks.iss
+; Inno Setup Script für den Tasks Installer
 ;
 ; Wird von build_installer.py automatisch befüllt (Defines werden vorne
 ; eingefügt: RecipientName, SourceDir, OutputDir, InstallerDir).
 ; ─────────────────────────────────────────────────────────────────────────────
 
-#define AppName "Aufgaben-Detector"
+#define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "1.1.0"
+#define AppVersion "2.0.0"
 #endif
 #define AppPublisher "Alexander Endl"
-#define AppURL "https://github.com/X4nd109/Aufgaben-Detector"
+#define AppURL "https://github.com/X4nd109/Tasks"
 
 #ifndef OutputBaseFilename
-#define OutputBaseFilename "AufgabenDetector_Setup"
+#define OutputBaseFilename "Tasks_Setup"
 #endif
 
 [Setup]
@@ -29,6 +29,7 @@ AllowNoIcons=yes
 ; OutputDir ist absolut (via #define gesetzt von build_installer.py)
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseFilename}
+SetupIconFile={#SourceDir}\assets\app_icon.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -57,11 +58,11 @@ Source: "{#InstallerDir}\python_installer.exe"; DestDir: "{tmp}"; Flags: ignorev
 
 [Icons]
 ; Startmenü: run.bat als primärer Starter (verwendet das richtige Python automatisch)
-Name: "{group}\{#AppName} starten"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Aufgaben-Detector starten"
+Name: "{group}\{#AppName} starten"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Tasks starten"; IconFilename: "{app}\assets\app_icon.ico"
 ; Startmenü: setup.bat für Ersteinrichtung / Reparatur
-Name: "{group}\{#AppName} Setup && Reparatur"; Filename: "{app}\setup.bat"; WorkingDir: "{app}"; Comment: "Python und Abhängigkeiten installieren"
+Name: "{group}\{#AppName} Setup && Reparatur"; Filename: "{app}\setup.bat"; WorkingDir: "{app}"; Comment: "Python und Abhängigkeiten installieren"; IconFilename: "{app}\assets\app_icon.ico"
 ; Desktop (optional)
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Aufgaben-Detector starten"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Tasks starten"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
 ; Deinstallation
 Name: "{group}\{#AppName} deinstallieren"; Filename: "{uninstallexe}"
 
@@ -86,15 +87,25 @@ Filename: "{app}\scripts\setup_command.bat"; \
   Description: "Globalen Terminal-Befehl 'tasks' einrichten (empfohlen)"; \
   Check: ShouldSetupTasksCommand
 
-; 4. Programm starten (optional)
+; 4. Windows-Terminal-Profil mit Logo einrichten (als Checkbox auf Fertigstellen-Seite)
+Filename: "{app}\scripts\setup_terminal_profile.bat"; \
+  Parameters: "/silent"; \
+  WorkingDir: "{app}"; \
+  Flags: postinstall shellexec; \
+  Description: "Windows-Terminal-Profil mit Logo einrichten (empfohlen)"; \
+  Check: ShouldSetupTerminalProfile
+
+; 5. Programm starten (optional)
 Filename: "{app}\run.bat"; \
   WorkingDir: "{app}"; \
   Flags: postinstall shellexec nowait skipifsilent unchecked; \
-  Description: "Aufgaben-Detector jetzt starten"
+  Description: "Tasks jetzt starten"
 
 [UninstallRun]
 ; Vor dem Löschen der Dateien: Terminal-Befehl 'tasks' aus dem User-PATH entfernen
 Filename: "{cmd}"; Parameters: "/c ""{app}\scripts\remove_command.bat /silent"""; Flags: runhidden; RunOnceId: "RemoveTasksCommand"
+; Vor dem Löschen der Dateien: Windows-Terminal-Profil entfernen
+Filename: "{cmd}"; Parameters: "/c ""{app}\scripts\remove_terminal_profile.bat /silent"""; Flags: runhidden; RunOnceId: "RemoveTerminalProfile"
 
 [UninstallDelete]
 ; Beim Deinstallieren nur temporäre Caches entfernen (config.json und Aufgaben bleiben für Neuinstallationen erhalten)
@@ -106,6 +117,14 @@ function ShouldSetupTasksCommand: Boolean;
 begin
   // Überspringen, wenn Setup mit /NOTASKS=1 oder /UPDATE=1 aufgerufen wird
   Result := (ExpandConstant('{param:notasks|0}') <> '1') and (ExpandConstant('{param:update|0}') <> '1');
+end;
+
+function ShouldSetupTerminalProfile: Boolean;
+begin
+  Result := (ExpandConstant('{param:noterminal|0}') <> '1') and
+            (ExpandConstant('{param:update|0}') <> '1') and
+            (DirExists(ExpandConstant('{localappdata}\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe')) or
+             FileExists(ExpandConstant('{localappdata}\Microsoft\Windows Terminal\settings.json')));
 end;
 
 function IsPythonInstalled: Boolean;

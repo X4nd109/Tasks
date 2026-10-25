@@ -40,6 +40,10 @@ AI_CHATS_CACHE_FILE: str = CACHE_FILE
 
 CACHE_LOCK = threading.RLock()
 
+# Marker key inside the chat cache holding the task IDs whose assignment was
+# already explained by the assistant (prevents duplicate auto-explanations).
+EXPLAINED_IDS_KEY: str = "_explained_task_ids"
+
 TEXT_EXTENSIONS: Set[str] = {
     ".txt", ".md", ".py", ".c", ".cpp", ".java",
     ".html", ".css", ".json", ".csv", ".xml",
@@ -610,18 +614,132 @@ def save_task_chat_cache(task_id: str, messages: List[Dict[str, Any]]) -> None:
 
 
 def clear_task_chat_cache(task_id: str) -> None:
-    """Remove the persisted chat history of a single task."""
+    """Remove the persisted chat history of a single task.
+
+    The "already explained" marker for the task is dropped as well so the next
+    ``Ai Explain`` action sends the prompt again.
+    """
     if not task_id:
         return
+    key = str(task_id)
     with CACHE_LOCK:
         data = _read_cache()
-        if str(task_id) not in data:
+        changed = False
+
+        if key in data:
+            data.pop(key, None)
+            changed = True
+
+        explained_ids = data.get(EXPLAINED_IDS_KEY)
+        if isinstance(explained_ids, list):
+            filtered = [tid for tid in explained_ids if str(tid) != key]
+            if len(filtered) != len(explained_ids):
+                data[EXPLAINED_IDS_KEY] = filtered
+                changed = True
+
+        if not changed:
             return
-        data.pop(str(task_id), None)
         try:
             _write_cache(data)
         except Exception as exc:  # pragma: no cover - defensive
             print(f"Warning: Could not clear AI chat cache: {exc}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
+# "Already explained" state (prevents duplicate auto-explanations)
+# ---------------------------------------------------------------------------
+
+EXPLAIN_PROMPT_MARKERS: Tuple[str, ...] = (
+    "erkläre mir diese aufgabe",
+    "explain this assignment",
+)
+
+AI_ERROR_PREFIXES: Tuple[str, ...] = ("Error:", "AI request failed:")
+
+
+def _is_error_reply(content: Any) -> bool:
+    """Return True if an assistant message is actually an error report."""
+    text = str(content or "")
+    return text.startswith(AI_ERROR_PREFIXES)
+
+
+def _is_explain_request(message: Dict[str, Any]) -> bool:
+    """Return True if a chat message is an auto-explain prompt."""
+    if not isinstance(message, dict) or message.get("role") != "user":
+        return False
+    if message.get("is_explain"):
+        return True
+    content = str(message.get("content") or "").lower()
+    return any(marker in content for marker in EXPLAIN_PROMPT_MARKERS)
+
+
+def is_task_ai_explained(task_id: str) -> bool:
+    """
+    Return True if the task already has a successful AI explanation in its
+    persisted chat history.
+
+    This is used to avoid sending the automatic ``Ai Explain`` prompt twice.
+    Older cache entries (written before the marker existed) are detected
+    retroactively by inspecting the stored messages.
+    """
+    if not task_id:
+        return False
+
+    key = str(task_id)
+    with CACHE_LOCK:
+        data = _read_cache()
+
+    if key not in data:
+        return False
+
+    messages = data.get(key)
+    if not isinstance(messages, list) or not messages:
+        return False
+
+    explained_ids = data.get(EXPLAINED_IDS_KEY)
+    if isinstance(explained_ids, list) and key in [str(tid) for tid in explained_ids]:
+        return True
+
+    # Retroactive fallback for caches written before the marker existed.
+    if not any(_is_explain_request(m) for m in messages):
+        return False
+
+    return any(
+        isinstance(m, dict)
+        and m.get("role") == "assistant"
+        and not _is_error_reply(m.get("content"))
+        for m in messages
+    )
+
+
+def set_task_ai_explained(task_id: str, explained: bool = True) -> None:
+    """Persist (or reset) the "already explained" marker for a single task."""
+    if not task_id:
+        return
+
+    key = str(task_id)
+    with CACHE_LOCK:
+        data = _read_cache()
+        explained_ids = data.get(EXPLAINED_IDS_KEY)
+        if not isinstance(explained_ids, list):
+            explained_ids = []
+        data[EXPLAINED_IDS_KEY] = explained_ids
+
+        if explained:
+            if key not in [str(tid) for tid in explained_ids]:
+                explained_ids.append(key)
+        else:
+            data[EXPLAINED_IDS_KEY] = [
+                tid for tid in explained_ids if str(tid) != key
+            ]
+
+        try:
+            _write_cache(data)
+        except Exception as exc:  # pragma: no cover - defensive
+            print(
+                f"Warning: Could not save AI explain state: {exc}",
+                file=sys.stderr,
+            )
 
 
 def load_last_active_ai_task_id() -> Optional[str]:
@@ -650,6 +768,9 @@ def cleanup_ai_chats_cache(active_open_task_ids: Set[str]) -> int:
     """
     Purge chat histories whose task is no longer open/active.
 
+    Stale "already explained" markers are dropped as well, so the returned
+    count only reflects removed chat sessions.
+
     Returns the number of removed chat sessions.
     """
     active = {str(tid) for tid in (active_open_task_ids or set())}
@@ -660,11 +781,21 @@ def cleanup_ai_chats_cache(active_open_task_ids: Set[str]) -> int:
             return 0
 
         stale_keys = [key for key in data.keys() if str(key) not in active and not str(key).startswith("_")]
-        if not stale_keys:
-            return 0
+        changed = False
 
         for key in stale_keys:
             data.pop(key, None)
+            changed = True
+
+        explained_ids = data.get(EXPLAINED_IDS_KEY)
+        if isinstance(explained_ids, list):
+            filtered = [tid for tid in explained_ids if str(tid) in active]
+            if len(filtered) != len(explained_ids):
+                data[EXPLAINED_IDS_KEY] = filtered
+                changed = True
+
+        if not changed:
+            return 0
 
         try:
             _write_cache(data)

@@ -1,4 +1,4 @@
-# Changelog — Aufgaben-Detector
+# Changelog — Tasks
 
 Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokumentiert.
 
@@ -8,6 +8,49 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 ---
 
 ## [Unreleased]
+
+---
+
+## [2.0.0] - 2026-10-25
+
+### Changed
+- **Vollständiges Rebranding von Aufgaben-Detector zu Tasks**:
+  - Offizieller Projekt- und Repository-Name auf **Tasks** (`X4nd109/Tasks`) umgestellt.
+  - Hauptklasse in `src/ui/tui_app.py` zu `TasksApp` refaktoriert (inkl. `AufgabenDetectorApp = TasksApp` Alias für vollständige Abwärtskompatibilität).
+  - TUI-, CLI- und Konsolentitel auf `Tasks` harmonisiert.
+  - Lokale Konfigurationsdateien von `aufgaben_detector_*.json` zu `tasks_*.json` migriert (mit automatischer Backup-Kopie vorhandener Daten beim ersten Start).
+  - Installer von `installer/aufgaben_detector.iss` zu `installer/tasks.iss` migriert, Ausgabedatei zu `Tasks_Setup.exe` und Installationsverzeichnis zu `{autopf}\Tasks`.
+  - Windows Terminal-Profil von `Aufgaben-Detector` auf `Tasks` aktualisiert.
+  - **Git-Sync Auto-Cleanup**: `cleanup_legacy_sync_repo_files()` migriert und bereinigt alte `aufgaben_detector_*.json`-Dateien im Remote-Sync-Repository automatisch per `git rm -f`.
+
+### Added
+- **Desktop & Installer Icons (`assets/app_icon.ico` & `assets/icons/`)**:
+  - 8 moderne, handgefertigte **SVG-Vektor-Icons** mit Fluent-Squircle, transparenten Ecken und leuchtenden Verläufen entworfen:
+    - **SVG Konzept 8 (Verfeinert & Neuer Standard ⭐)**: *Quantum Prism Convergence* — 3 Datenlaserstrahlen im 120°-Winkel (Teams nach links oben, Moodle nach rechts oben, WebUntis Mobile-Uhr mit Stift-Zeigern gerade nach unten) mit echten Plattform-Logos und zentralem Kristallprisma ohne extra Emissionsstrahl/Haken.
+    - **SVG Konzept 1**: *Radar & Tasks* — Leuchtendes Clipboard mit Checkmarks & Radarstrahl auf Obsidian-Badge.
+    - **SVG Konzept 2**: *Cyber Reticle* — Sci-Fi HUD Zieloptik mit Abtastlaser und Dokument.
+    - **SVG Konzept 3**: *3D Prism Check* — Geometrischer Facetten-Checkmark mit Sonar-Wellen.
+    - **SVG Konzept 4**: *School Hub & Digital Book* — Digitales Buch mit Moodle/Teams/Untis Orbit-Knoten.
+    - **SVG Konzept 5**: *Cyber Owl Sentinel* — Low-Poly Cyber-Eule mit Scanner-Linsenaugen.
+    - **SVG Konzept 6**: *Terminal & Radar* — Developer-Terminalfenster mit Ampel-Buttons, `> tasks --sync` und Sonar-Grid.
+    - **SVG Konzept 7**: *Deadline Shield & Hourglass* — Cyber-Schild mit leuchtender Zeitschleifen-Sanduhr & Haken.
+  - Automatischer Build-Generator (`scripts/build_svg_icons.py`), der aus den SVGs pixelgenaue Alpha-PNGs und Multi-Size-Windows-`.ico` (16–256px) rendert.
+  - Das verfeinerte Quantum Prism Icon wurde als primäres Standard-Icon in `assets/app_icon.ico` hinterlegt.
+- **Inno Setup Installer Shortcut-Icons & Windows Terminal Option**:
+  - `installer/tasks.iss` um `SetupIconFile={#SourceDir}\assets\app_icon.ico` erweitert (Installer-EXE trägt nun das App-Icon).
+  - Desktop- und Startmenü-Verknüpfungen mit `IconFilename: "{app}\assets\app_icon.ico"` ausgestattet, sodass keine Standard-Batch-Symbole mehr verwendet werden.
+  - Neues Checkbox-Feature auf der Fertigstellen-Seite: `[x] Windows-Terminal-Profil mit Logo einrichten (empfohlen)` samt automatischer Deinstallation beim Uninstaller.
+  - Vollständig autarke Skripte `scripts/setup_terminal_profile.bat` und `scripts/remove_terminal_profile.bat` (arbeiten rein über PowerShell inline, ohne Python-Abhängigkeit oder `.py`-Hilfsdateien).
+- **Persistentes Gedächtnis für `Ai Explain` (Deduplizierung)**:
+  - `is_task_ai_explained(task_id)` und `set_task_ai_explained(task_id, explained)` in `src/services/ai_chat_service.py`.
+  - Verhindert, dass beim erneuten Klick auf `🤖 Ai Explain [A]` in den Aufgaben-Details dieselbe Aufgabe redundant nochmals an die KI gesendet und doppelt erklärt wird.
+  - Das System lädt unmittelbar den bestehenden Chatverlauf und bestätigt dies mit dem dezenten Hinweis `ℹ️ Existing explanation loaded.`.
+  - **Automatischer Reset beim Chat-Leeren**: Klickt der Benutzer im AI-Menü auf `🗑️` (Clear Chat) oder drückt `Ctrl+L`, wird auch der Erklärungsstatus zurückgesetzt.
+  - **Fehler-Resilienz**: Schlägt eine KI-Anfrage fehl (z. B. fehlender API-Key oder Netzwerkfehler), wird die Aufgabe nicht fälschlich als erklärt markiert.
+  - **Rückwirkende Erkennung**: Bereits vor dem Update bestehende Chat-Verläufe mit Erklärungs-Prompts werden rückwirkend erkannt.
+- **Windows Terminal Profile mit App-Logo (`scripts/setup_terminal_profile.bat`, `scripts/remove_terminal_profile.bat`)**:
+  - Neues Profil `Tasks` (GUID `{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}`) in der Windows Terminal `settings.json` mit `assets/app_icon.png` als Icon, Projektordner als Startverzeichnis und `cmd.exe /c "<abs>\run.bat"` als Startbefehl.
+  - Bereinigt frühere `Aufgaben-Detector`-Einträge automatisch.
 
 ---
 

@@ -16,9 +16,11 @@ from services.ai_chat_service import (
     cleanup_ai_chats_cache,
     clear_task_chat_cache,
     extract_attachment_text,
+    is_task_ai_explained,
     load_task_chat_cache,
     save_task_chat_cache,
     send_ai_chat_message,
+    set_task_ai_explained,
     test_ai_connection,
 )
 
@@ -685,6 +687,231 @@ class TestChatCache(unittest.TestCase):
         # Saving afterwards repairs the file instead of crashing.
         save_task_chat_cache("task-1", [{"role": "user", "content": "A"}])
         self.assertEqual(self._read_raw()["task-1"][0]["content"], "A")
+
+
+EXPLAIN_PROMPT_DE = (
+    "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt."
+)
+EXPLAIN_PROMPT_EN = (
+    "Please explain this assignment clearly, practically, and step-by-step."
+)
+
+
+class TestAiExplainedState(unittest.TestCase):
+    """Tests for the persisted single-execution ``Ai Explain`` marker."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmpdir = self._tmp.name
+        self.cache_path = os.path.join(self.tmpdir, "cache", "ai_chats.json")
+        self._patcher = patch.object(ai_chat_service, "CACHE_FILE", self.cache_path)
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._tmp.cleanup()
+
+    # -- helpers ---------------------------------------------------------
+    def _write_raw(self, data):
+        os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+        with open(self.cache_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+
+    def _read_raw(self):
+        with open(self.cache_path, "r", encoding="utf-8") as fh:
+            return json.load(fh)
+
+    # -- is_task_ai_explained -------------------------------------------
+    def test_empty_task_id_is_not_explained(self):
+        self.assertFalse(is_task_ai_explained(""))
+        self.assertFalse(is_task_ai_explained(None))
+
+    def test_unknown_task_is_not_explained(self):
+        self.assertFalse(is_task_ai_explained("unknown"))
+
+    def test_task_without_messages_is_not_explained(self):
+        self._write_raw({"task-1": []})
+        self.assertFalse(is_task_ai_explained("task-1"))
+
+    def test_marker_marks_task_as_explained(self):
+        save_task_chat_cache("task-1", [{"role": "user", "content": "Hallo"}])
+        set_task_ai_explained("task-1", True)
+        self.assertTrue(is_task_ai_explained("task-1"))
+
+    def test_marker_without_messages_is_not_explained(self):
+        # A marker alone (no persisted messages) does not count.
+        self._write_raw({"_explained_task_ids": ["task-1"]})
+        self.assertFalse(is_task_ai_explained("task-1"))
+
+    def test_retroactive_detection_german_prompt(self):
+        save_task_chat_cache(
+            "task-1",
+            [
+                {"role": "user", "content": EXPLAIN_PROMPT_DE},
+                {"role": "assistant", "content": "Hier ist die Erklärung..."},
+            ],
+        )
+        self.assertTrue(is_task_ai_explained("task-1"))
+
+    def test_retroactive_detection_english_prompt(self):
+        save_task_chat_cache(
+            "task-1",
+            [
+                {"role": "user", "content": EXPLAIN_PROMPT_EN},
+                {"role": "assistant", "content": "Here is the explanation..."},
+            ],
+        )
+        self.assertTrue(is_task_ai_explained("task-1"))
+
+    def test_retroactive_detection_via_is_explain_flag(self):
+        save_task_chat_cache(
+            "task-1",
+            [
+                {"role": "user", "content": "Something custom", "is_explain": True},
+                {"role": "assistant", "content": "Answer"},
+            ],
+        )
+        self.assertTrue(is_task_ai_explained("task-1"))
+
+    def test_error_reply_is_not_counted_as_explained(self):
+        for error_text in (
+            "Error: Could not reach Gemini: boom",
+            "AI request failed: timeout",
+            "Error: No API key configured.",
+        ):
+            with self.subTest(error=error_text):
+                save_task_chat_cache(
+                    "task-1",
+                    [
+                        {"role": "user", "content": EXPLAIN_PROMPT_DE, "is_explain": True},
+                        {"role": "assistant", "content": error_text},
+                    ],
+                )
+                self.assertFalse(is_task_ai_explained("task-1"))
+
+    def test_normal_conversation_is_not_explained(self):
+        save_task_chat_cache(
+            "task-1",
+            [
+                {"role": "user", "content": "Wie fange ich an?"},
+                {"role": "assistant", "content": "Fang mit der Theorie an."},
+            ],
+        )
+        self.assertFalse(is_task_ai_explained("task-1"))
+
+    def test_explain_prompt_without_assistant_reply_is_not_explained(self):
+        save_task_chat_cache(
+            "task-1",
+            [{"role": "user", "content": EXPLAIN_PROMPT_DE, "is_explain": True}],
+        )
+        self.assertFalse(is_task_ai_explained("task-1"))
+
+    # -- set_task_ai_explained ------------------------------------------
+    def test_set_marker_creates_list_and_deduplicates(self):
+        set_task_ai_explained("task-1", True)
+        set_task_ai_explained("task-1", True)
+        set_task_ai_explained("task-2", True)
+
+        raw = self._read_raw()
+        self.assertEqual(raw["_explained_task_ids"], ["task-1", "task-2"])
+
+    def test_set_marker_false_removes_all_occurrences(self):
+        self._write_raw(
+            {
+                "task-1": [{"role": "user", "content": "x"}],
+                "_explained_task_ids": ["task-1", "task-2", "task-1"],
+            }
+        )
+        set_task_ai_explained("task-1", False)
+
+        self.assertEqual(self._read_raw()["_explained_task_ids"], ["task-2"])
+        self.assertFalse(is_task_ai_explained("task-1"))
+
+    def test_set_marker_with_empty_task_id_is_noop(self):
+        set_task_ai_explained("", True)
+        set_task_ai_explained(None, True)
+        self.assertFalse(os.path.exists(self.cache_path))
+
+    def test_set_marker_repairs_invalid_marker_type(self):
+        self._write_raw({
+            "task-1": [{"role": "user", "content": "x"}],
+            "_explained_task_ids": "broken",
+        })
+        set_task_ai_explained("task-1", True)
+        self.assertEqual(self._read_raw()["_explained_task_ids"], ["task-1"])
+
+    # -- clear_task_chat_cache ------------------------------------------
+    def test_clear_resets_explained_state(self):
+        save_task_chat_cache(
+            "task-1",
+            [
+                {"role": "user", "content": EXPLAIN_PROMPT_DE, "is_explain": True},
+                {"role": "assistant", "content": "Erklärung"},
+            ],
+        )
+        set_task_ai_explained("task-1", True)
+        self.assertTrue(is_task_ai_explained("task-1"))
+
+        clear_task_chat_cache("task-1")
+
+        self.assertFalse(is_task_ai_explained("task-1"))
+        raw = self._read_raw()
+        self.assertNotIn("task-1", raw)
+        self.assertNotIn("task-1", raw.get("_explained_task_ids", []))
+
+    def test_clear_only_removes_own_marker(self):
+        set_task_ai_explained("task-1", True)
+        set_task_ai_explained("task-2", True)
+
+        clear_task_chat_cache("task-1")
+
+        self.assertEqual(self._read_raw()["_explained_task_ids"], ["task-2"])
+
+    # -- cleanup_ai_chats_cache -----------------------------------------
+    def test_cleanup_purges_inactive_explained_ids(self):
+        for task_id in ("open-1", "closed-1"):
+            save_task_chat_cache(
+                task_id,
+                [
+                    {"role": "user", "content": EXPLAIN_PROMPT_DE, "is_explain": True},
+                    {"role": "assistant", "content": "Erklärung"},
+                ],
+            )
+            set_task_ai_explained(task_id, True)
+
+        removed = cleanup_ai_chats_cache({"open-1"})
+
+        self.assertEqual(removed, 1)
+        raw = self._read_raw()
+        self.assertIn("open-1", raw)
+        self.assertNotIn("closed-1", raw)
+        self.assertEqual(raw["_explained_task_ids"], ["open-1"])
+        self.assertTrue(is_task_ai_explained("open-1"))
+
+    def test_cleanup_keeps_active_explained_ids(self):
+        save_task_chat_cache("open-1", [{"role": "user", "content": "x"}])
+        set_task_ai_explained("open-1", True)
+
+        self.assertEqual(cleanup_ai_chats_cache({"open-1"}), 0)
+        self.assertEqual(self._read_raw()["_explained_task_ids"], ["open-1"])
+
+    def test_cleanup_purges_explained_ids_without_chat_history(self):
+        # A dangling marker (no chat entry) is removed as well.
+        self._write_raw({"_explained_task_ids": ["closed-1"]})
+
+        self.assertEqual(cleanup_ai_chats_cache({"open-1"}), 0)
+        self.assertEqual(self._read_raw()["_explained_task_ids"], [])
+
+    def test_cleanup_preserves_other_underscore_keys(self):
+        self._write_raw({
+            "_last_active_task_id": "task-1",
+            "_explained_task_ids": ["task-1"],
+        })
+
+        self.assertEqual(cleanup_ai_chats_cache({str("task-1")}), 0)
+        raw = self._read_raw()
+        self.assertEqual(raw["_last_active_task_id"], "task-1")
+        self.assertEqual(raw["_explained_task_ids"], ["task-1"])
 
 
 if __name__ == "__main__":

@@ -174,7 +174,7 @@ def ensure_dependencies(requirements_path: str = None) -> bool:
     else:
         print(
             "\nInstallation declined.\n"
-            "Please install the required packages to run Aufgaben-Detector:\n"
+            "Please install the required packages to run Tasks:\n"
             f"  {install_cmd}\n",
             file=sys.stderr,
         )

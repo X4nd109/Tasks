@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title tasks
+title Tasks
 
 REM -----------------------------------------------------------------
 REM Python-Interpreter finden

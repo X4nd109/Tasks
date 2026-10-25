@@ -1,9 +1,9 @@
 ---
 name: tasks
-description: Manage and access school assignments, materials, books, and courses via the Aufgaben-Detector CLI.
+description: Manage and access school assignments, materials, books, and courses via the Tasks CLI.
 ---
 
-# Aufgaben-Detector CLI Reference (tasks)
+# Tasks CLI Reference (tasks)
 
 Use the `tasks` CLI to query assignments, download exercise files, link directories, and access schoolbooks without opening any GUI or browser.
 

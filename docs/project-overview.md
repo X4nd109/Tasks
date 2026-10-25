@@ -1,4 +1,4 @@
-# Project Overview — Aufgaben-Detector
+# Project Overview — Tasks
 
 ## 1. Vision & Purpose
 
@@ -11,7 +11,7 @@ Students in technical colleges (specifically HTL Spengergasse, Class 3AHWII) mus
 Checking each portal manually is tedious, prone to missed deadlines, and lacks unified offline search and quick access. Furthermore, autonomous AI agents requiring homework context need a fast, low-overhead interface rather than dealing with slow, interactive browser sessions.
 
 ### Vision
-**Aufgaben-Detector** provides a unified, local-first command hub that aggregates all assignments, absences, and exams into a single pane of glass. It provides both:
+**Tasks** provides a unified, local-first command hub that aggregates all assignments, absences, and exams into a single pane of glass. It provides both:
 - An interactive **Textual Terminal User Interface (TUI)** with full mouse, keyboard, and color theme support.
 - A blazing-fast (`< 0.1s`), token-efficient **Headless Agent CLI** (`tasks.bat`) designed for autonomous agents and developer automation.
 
@@ -51,7 +51,7 @@ Checking each portal manually is tedious, prone to missed deadlines, and lacks u
   - No secret tokens, credentials, or cookies exposed to AI contexts or remote servers.
 - **Open-Source Distribution & Automated Releases**:
   - MIT licensed for transparent community use and development.
-  - Generates universal Windows installers (`AufgabenDetector_Setup.exe`) via Inno Setup with automatic Python bundling.
+  - Generates universal Windows installers (`Tasks_Setup.exe`) via Inno Setup with automatic Python bundling.
   - Automated CI/CD release workflow via GitHub Actions.
 
 ### Non-Goals (Out of Scope)

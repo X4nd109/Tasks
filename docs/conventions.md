@@ -1,4 +1,4 @@
-# Development Conventions & Standards — Aufgaben-Detector
+# Development Conventions & Standards — Tasks
 
 ## 1. Code Style & Formatting
 

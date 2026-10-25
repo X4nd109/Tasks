@@ -11,7 +11,7 @@ from textual.widgets import Label, Button
 from textual.containers import Horizontal, Vertical
 from src.core.config import APP_VERSION, get_app_version
 from src.services.update_service import parse_version, is_newer_version, check_for_updates
-from tui_app import SettingsModal, UpdateReminderModal, AufgabenDetectorApp
+from tui_app import SettingsModal, UpdateReminderModal, TasksApp
 
 
 class TestUpdateService(unittest.TestCase):
@@ -58,8 +58,8 @@ class TestUpdateService(unittest.TestCase):
         mock_response.status = 200
         mock_data = {
             "tag_name": "v1.0.3",
-            "name": "Aufgaben-Detector v1.0.3",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.3",
+            "name": "Tasks v1.0.3",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.3",
             "body": "Bug fixes and improvements",
             "published_at": "2026-10-19T18:00:00Z",
         }
@@ -80,8 +80,8 @@ class TestUpdateService(unittest.TestCase):
         mock_response.status = 200
         mock_data = {
             "tag_name": "v1.0.2",
-            "name": "Aufgaben-Detector v1.0.2",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.2",
+            "name": "Tasks v1.0.2",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.2",
         }
         mock_response.read.return_value = json.dumps(mock_data).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
@@ -107,8 +107,8 @@ class TestUpdateService(unittest.TestCase):
         mock_response.status = 200
         mock_data = {
             "tag_name": "v1.0.6",
-            "name": "Aufgaben-Detector v1.0.6",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.6",
+            "name": "Tasks v1.0.6",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.6",
             "assets": [
                 {
                     "name": "source_code.zip",
@@ -116,8 +116,8 @@ class TestUpdateService(unittest.TestCase):
                     "size": 1024,
                 },
                 {
-                    "name": "AufgabenDetector_Setup.exe",
-                    "browser_download_url": "https://github.com/.../AufgabenDetector_Setup.exe",
+                    "name": "Tasks_Setup.exe",
+                    "browser_download_url": "https://github.com/.../Tasks_Setup.exe",
                     "size": 45000000,
                 },
             ],
@@ -127,8 +127,8 @@ class TestUpdateService(unittest.TestCase):
 
         res = check_for_updates(current_version="1.0.4")
         self.assertIsNotNone(res)
-        self.assertEqual(res["installer_name"], "AufgabenDetector_Setup.exe")
-        self.assertEqual(res["installer_url"], "https://github.com/.../AufgabenDetector_Setup.exe")
+        self.assertEqual(res["installer_name"], "Tasks_Setup.exe")
+        self.assertEqual(res["installer_url"], "https://github.com/.../Tasks_Setup.exe")
         self.assertEqual(res["installer_size"], 45000000)
 
     @patch("urllib.request.urlopen")
@@ -195,7 +195,7 @@ class TestUpdateService(unittest.TestCase):
         os.environ.pop("RUN_FROM_BATCH", None)
 
         with tempfile.TemporaryDirectory() as fake_app:
-            installer_path = os.path.join(fake_app, "AufgabenDetector_Setup.exe")
+            installer_path = os.path.join(fake_app, "Tasks_Setup.exe")
             ok = launch_update_and_restart(installer_path, app_dir=fake_app)
             self.assertTrue(ok)
 
@@ -229,7 +229,7 @@ class TestUpdateService(unittest.TestCase):
         os.environ["RUN_FROM_BATCH"] = "1"
         try:
             with tempfile.TemporaryDirectory() as fake_app:
-                installer_path = os.path.join(fake_app, "AufgabenDetector_Setup.exe")
+                installer_path = os.path.join(fake_app, "Tasks_Setup.exe")
                 ok = launch_update_and_restart(installer_path, app_dir=fake_app)
                 self.assertTrue(ok)
 
@@ -285,7 +285,7 @@ class TestUpdateService(unittest.TestCase):
         mgr.tasks = [t for t in mgr.tasks if t.id != welcome_id]
 
         # Simuliere Update-Flag
-        update_dir = os.path.join(tempfile.gettempdir(), "AufgabenDetector_Update")
+        update_dir = os.path.join(tempfile.gettempdir(), "Tasks_Update")
         os.makedirs(update_dir, exist_ok=True)
         flag_file = os.path.join(update_dir, "update_just_applied.txt")
         with open(flag_file, "w") as f:
@@ -315,7 +315,7 @@ class TestUpdateUI(unittest.IsolatedAsyncioTestCase):
     async def test_settings_modal_version_tag(self):
         """Prüft, dass im SettingsModal die Versionsanzeige vorhanden und korrekt formatiert ist."""
         modal = SettingsModal()
-        app = AufgabenDetectorApp(self.mgr, sync_on_startup=False)
+        app = TasksApp(self.mgr, sync_on_startup=False)
         async with app.run_test() as pilot:
             await app.push_screen(modal)
             version_label = modal.query_one("#settings_version_tag", Label)
@@ -328,11 +328,11 @@ class TestUpdateUI(unittest.IsolatedAsyncioTestCase):
             "current_version": "1.0.2",
             "latest_version": "1.0.3",
             "tag_name": "v1.0.3",
-            "name": "Aufgaben-Detector v1.0.3",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.3",
+            "name": "Tasks v1.0.3",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.3",
         }
         modal = UpdateReminderModal(info)
-        app = AufgabenDetectorApp(self.mgr, sync_on_startup=False)
+        app = TasksApp(self.mgr, sync_on_startup=False)
         async with app.run_test() as pilot:
             await app.push_screen(modal)
             # Dismiss button drücken
@@ -350,17 +350,17 @@ class TestUpdateUI(unittest.IsolatedAsyncioTestCase):
             "current_version": "1.0.2",
             "latest_version": "1.0.3",
             "tag_name": "v1.0.3",
-            "name": "Aufgaben-Detector v1.0.3",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.3",
+            "name": "Tasks v1.0.3",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.3",
         }
         modal = UpdateReminderModal(info)
-        app = AufgabenDetectorApp(self.mgr, sync_on_startup=False)
+        app = TasksApp(self.mgr, sync_on_startup=False)
         async with app.run_test() as pilot:
             await app.push_screen(modal)
             btn_open = modal.query_one("#btn_update_open")
             btn_open.press()
             await pilot.pause()
-            mock_browser_open.assert_called_once_with("https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.3")
+            mock_browser_open.assert_called_once_with("https://github.com/X4nd109/Tasks/releases/tag/v1.0.3")
 
     @patch("tui_app.download_update_installer", return_value=True)
     @patch("tui_app.launch_update_and_restart", return_value=True)
@@ -370,14 +370,14 @@ class TestUpdateUI(unittest.IsolatedAsyncioTestCase):
             "current_version": "1.0.2",
             "latest_version": "1.0.3",
             "tag_name": "v1.0.3",
-            "name": "Aufgaben-Detector v1.0.3",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.3",
-            "installer_url": "https://github.com/.../AufgabenDetector_Setup.exe",
-            "installer_name": "AufgabenDetector_Setup.exe",
+            "name": "Tasks v1.0.3",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.3",
+            "installer_url": "https://github.com/.../Tasks_Setup.exe",
+            "installer_name": "Tasks_Setup.exe",
             "installer_size": 45000000,
         }
         modal = UpdateReminderModal(info)
-        app = AufgabenDetectorApp(self.mgr, sync_on_startup=False)
+        app = TasksApp(self.mgr, sync_on_startup=False)
         async with app.run_test() as pilot:
             await app.push_screen(modal)
             btn_install = modal.query_one("#btn_update_install")
@@ -393,10 +393,10 @@ class TestUpdateUI(unittest.IsolatedAsyncioTestCase):
             "latest_version": "1.0.6",
             "tag_name": "v1.0.6",
             "name": "v1.0.6",
-            "html_url": "https://github.com/X4nd109/Aufgaben-Detector/releases/tag/v1.0.6",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.6",
         }
         modal = UpdateReminderModal(info)
-        app = AufgabenDetectorApp(self.mgr, sync_on_startup=False)
+        app = TasksApp(self.mgr, sync_on_startup=False)
         async with app.run_test() as pilot:
             await app.push_screen(modal)
             title_lbl = modal.query_one("#update_title", Label)

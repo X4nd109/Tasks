@@ -1,4 +1,4 @@
-# Architecture Decision Records (ADRs) — Aufgaben-Detector
+# Architecture Decision Records (ADRs) — Tasks
 
 This document records high-impact architectural choices, library selections, and design decisions to maintain technical consistency across development sessions and agent interactions.
 
@@ -403,3 +403,25 @@ This document records high-impact architectural choices, library selections, and
 - **Consequences**:
   - Positive: Application startup latency is reduced by ~40% (from 1.88s down to 1.12s); memory and token footprints are reduced; Filter dialog is fully responsive across small terminal windows.
   - Negative: Import or configuration errors in lazy-loaded subsystems will surface when the respective feature is first invoked rather than during application bootstrap.
+
+---
+
+## ADR-023: Project Rebranding to Tasks & Automatic Git-Sync Cleanup
+
+- **Date**: 2026-10-25
+- **Status**: Accepted
+- **Context**:
+  1. The project name "Aufgaben-Detector" was localized and overly verbose for daily CLI and desktop use. The user renamed the remote GitHub repository from `X4nd109/Aufgaben-Detector` to `X4nd109/Tasks`.
+  2. Internal configuration and cache filenames (`aufgaben_detector_*.json`), application classes (`TasksApp`), packaging targets (`Tasks_Setup.exe`), and terminal profiles required clean alignment with the new brand "Tasks".
+  3. Existing users synchronizing data via private Git backup repositories might retain legacy `aufgaben_detector_*.json` files that could cause confusion or duplicate states.
+- **Decision**:
+  1. **Clean Rebranding**:
+     - Declare `GITHUB_REPO = "X4nd109/Tasks"`, rename core app to `TasksApp`, update installer to `installer/tasks.iss` producing `Tasks_Setup.exe`.
+     - Update Windows Terminal profile to `Tasks` and batch scripts to `title Tasks`.
+  2. **Startup Configuration Migration**:
+     - On first startup, automatically copy any existing `aufgaben_detector_*.json` files to `tasks_*.json`, preserving the originals as local backups.
+  3. **Automated Git Sync Legacy Cleanup**:
+     - Implement `cleanup_legacy_sync_repo_files(work_dir)` in `git_sync_service.py` to inspect the Git Sync repository during `pull` and `push`, merge contents of legacy `aufgaben_detector_*.json` into canonical `config.json` / `data/*.json`, and execute `git rm -f` to cleanly purge old files from the remote repository.
+- **Consequences**:
+  - Positive: Clean, concise brand across CLI, TUI, docs, and installer; automatic zero-friction data migration; remote backup repos are automatically cleaned up.
+  - Negative: None. Backward compatibility aliases and auto-migration safeguard existing environments.

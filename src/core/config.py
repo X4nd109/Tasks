@@ -1,5 +1,5 @@
 """
-config.py - Konfiguration und Pfade für den Aufgaben-Detector.
+config.py - Konfiguration und Pfade für Tasks.
 """
 
 import contextlib
@@ -18,8 +18,8 @@ WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "1.3.0"
-GITHUB_REPO = "X4nd109/Aufgaben-Detector"
+APP_VERSION = "2.0.0"
+GITHUB_REPO = "X4nd109/Tasks"
 
 
 def get_app_version(prefix: bool = True) -> str:
@@ -54,7 +54,7 @@ def _get_writable_cache_dir() -> str:
     Ermittelt ein beschreibbares Cache-Verzeichnis.
     Bevorzugt den Ordner neben den Programm-Dateien (Installations-Ordner).
     Falls dieser nicht beschreibbar ist (z.B. C:\\Program Files), wird
-    %LOCALAPPDATA%\\AufgabenDetector\\cache als Fallback verwendet.
+    %LOCALAPPDATA%\\Tasks\\cache als Fallback verwendet.
     """
     local_cache = os.path.join(WORKSPACE_DIR, "cache")
     try:
@@ -66,7 +66,7 @@ def _get_writable_cache_dir() -> str:
         return local_cache
     except (PermissionError, OSError):
         appdata = os.environ.get("LOCALAPPDATA", USERPROFILE)
-        fallback = os.path.join(appdata, "AufgabenDetector", "cache")
+        fallback = os.path.join(appdata, "Tasks", "cache")
         os.makedirs(fallback, exist_ok=True)
         return fallback
 
@@ -76,7 +76,28 @@ CONFIG_DIR = _get_writable_cache_dir()
 
 # Konfigurationsdatei für Benutzer-Einstellungen & Themes
 CONFIG_FILE = os.path.join(WORKSPACE_DIR, "config.json")
-APP_CONFIG_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_config.json")
+# Automatische Migration von bestehenden aufgaben_detector_*.json nach tasks_*.json (Backup bleibt erhalten)
+for _legacy_cfg_name, _new_cfg_name in [
+    ("aufgaben_detector_config.json", "tasks_config.json"),
+    ("aufgaben_detector_cache.json", "tasks_cache.json"),
+    ("aufgaben_detector_deleted_tasks.json", "tasks_deleted_tasks.json"),
+    ("aufgaben_detector_deleted_manual_tasks.json", "tasks_deleted_manual_tasks.json"),
+    ("aufgaben_detector_hidden_tasks.json", "tasks_hidden_tasks.json"),
+    ("aufgaben_detector_custom_tasks.json", "tasks_custom_tasks.json"),
+    ("aufgaben_detector_custom_exams.json", "tasks_custom_exams.json"),
+    ("aufgaben_detector_schoolbooks.json", "tasks_schoolbooks.json"),
+    ("aufgaben_detector_directories.json", "tasks_directories.json"),
+]:
+    _legacy_p = os.path.join(CONFIG_DIR, _legacy_cfg_name)
+    _migrated_p = os.path.join(CONFIG_DIR, _new_cfg_name)
+    if os.path.exists(_legacy_p) and not os.path.exists(_migrated_p):
+        try:
+            import shutil
+            shutil.copy2(_legacy_p, _migrated_p)
+        except Exception:
+            pass
+
+APP_CONFIG_FILE = os.path.join(CONFIG_DIR, "tasks_config.json")
 
 
 def _load_moodle_base_url() -> str:
@@ -234,21 +255,21 @@ UNTIS_URL = _load_untis_url()
 UNTIS_GROUP = _load_untis_group()
 UNTIS_SCHOOL = _load_untis_school()
 
-CACHE_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_cache.json")
+CACHE_FILE = os.path.join(CONFIG_DIR, "tasks_cache.json")
 DELETED_TASKS_FILE = os.path.join(DATA_DIR, "deleted_tasks.json")
-APP_DELETED_TASKS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_deleted_tasks.json")
+APP_DELETED_TASKS_FILE = os.path.join(CONFIG_DIR, "tasks_deleted_tasks.json")
 DELETED_MANUAL_TASKS_FILE = os.path.join(DATA_DIR, "deleted_manual_tasks.json")
-APP_DELETED_MANUAL_TASKS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_deleted_manual_tasks.json")
+APP_DELETED_MANUAL_TASKS_FILE = os.path.join(CONFIG_DIR, "tasks_deleted_manual_tasks.json")
 HIDDEN_TASKS_FILE = os.path.join(DATA_DIR, "hidden_tasks.json")
-APP_HIDDEN_TASKS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_hidden_tasks.json")
+APP_HIDDEN_TASKS_FILE = os.path.join(CONFIG_DIR, "tasks_hidden_tasks.json")
 CUSTOM_TASKS_FILE = os.path.join(DATA_DIR, "custom_tasks.json")
-APP_CUSTOM_TASKS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_custom_tasks.json")
+APP_CUSTOM_TASKS_FILE = os.path.join(CONFIG_DIR, "tasks_custom_tasks.json")
 CUSTOM_EXAMS_FILE = os.path.join(DATA_DIR, "custom_exams.json")
-APP_CUSTOM_EXAMS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_custom_exams.json")
+APP_CUSTOM_EXAMS_FILE = os.path.join(CONFIG_DIR, "tasks_custom_exams.json")
 SCHOOLBOOKS_FILE = os.path.join(DATA_DIR, "schoolbooks.json")
-APP_SCHOOLBOOKS_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_schoolbooks.json")
+APP_SCHOOLBOOKS_FILE = os.path.join(CONFIG_DIR, "tasks_schoolbooks.json")
 DIRECTORIES_FILE = os.path.join(DATA_DIR, "directories.json")
-APP_DIRECTORIES_FILE = os.path.join(CONFIG_DIR, "aufgaben_detector_directories.json")
+APP_DIRECTORIES_FILE = os.path.join(CONFIG_DIR, "tasks_directories.json")
 MOODLE_COOKIE_FILE = os.path.join(CONFIG_DIR, "moodle_session_cookies.json")
 TEAMS_PROFILE_DIR = os.path.join(CONFIG_DIR, "teams_browser_profile")
 os.makedirs(TEAMS_PROFILE_DIR, exist_ok=True)
@@ -1108,8 +1129,8 @@ def load_all_course_links() -> list[dict]:
             except Exception:
                 pass
 
-    # B. Aus synchronisierten Aufgaben (aufgaben_detector_cache.json)
-    cache_tasks_p = os.path.join(CONFIG_DIR, "aufgaben_detector_cache.json")
+    # B. Aus synchronisierten Aufgaben (tasks_cache.json)
+    cache_tasks_p = CACHE_FILE
     if os.path.exists(cache_tasks_p):
         try:
             with open(cache_tasks_p, "r", encoding="utf-8") as f:

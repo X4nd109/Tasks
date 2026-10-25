@@ -1,4 +1,4 @@
-# Feature & UI Element Catalog — Aufgaben-Detector
+# Feature & UI Element Catalog — Tasks
 
 > **Zweck**: Eindeutige, token-effiziente Begriffswelt für Buttons, UI-Elemente und Features zwischen Benutzer und Agent.  
 > **Regel**: Maximal 1 prägnanter Satz pro Eintrag. Exakte Bezeichnungen gemäß TUI- und CLI-Codebase.
@@ -52,7 +52,7 @@
 | `Open in browser` | `[O]` / `btn_open_browser` | Öffnet die offizielle Abgabeseite der Aufgabe direkt im Standard-Webbrowser. |
 | `Download files` | `[D]` / `btn_det_download` | Öffnet das englischsprachige `DownloadLocationModal` zur Zielwahl (Auto-Dir [1], Explorer [2], Downloads [3]). |
 | `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
-| `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung. |
+| `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung (dedupliziert: bereits erklärte Aufgaben öffnen direkt den bestehenden Chat, Reset bei Clear Chat). |
 | `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
 | `Toggle status` | `[E]` / `btn_toggle_status` | Schaltet den Erledigt-Status einer Aufgabe zwischen offen und abgeschlossen um. |
 | `Hide / Delete` | `[L]` / `btn_delete_task` | Verschiebt eine Aufgabe in den lokalen Papierkorb (`deleted_tasks.json`). |
@@ -126,5 +126,17 @@ Projektweit für alle einzeiligen `Input`-Widgets (CommandPalette, Suchleisten, 
 | `STRG + Entf` | Wort rechts löschen | Löscht das gesamte Wort rechts vom Cursor (`delete_right_word` / `delete_word_right`). |
 | `Tippen / Backspace` | Markierung überschreiben | Ersetzt oder löscht aktive Textauswahlen sofort bei der nächsten Eingabe. |
 | `STRG + C` / `X` / `V` | Clipboard | Kopiert, schneidet aus oder fügt aus der Windows-Zwischenablage ein. |
+
+---
+
+## 7. Installer & Windows-Terminal Integration
+
+| Feature / Steuerung | Typ | Kurzbeschreibung |
+| :--- | :--- | :--- |
+| `Quantum Prism App-Icon` | Asset | 3D-Vektor-App-Icon im Fluent-Squircle-Design mit Laserstrahlen zu Teams-, Moodle- und Untis-Uhren-Logos. |
+| `Inno Setup Shortcut-Icons` | Installer | Weist dem Installer und allen Startmenü- und Desktop-Verknüpfungen das App-Icon zu. |
+| `Windows-Terminal Profil-Option` | Installer | Optionale Checkbox auf der Fertigstellen-Seite zur Registrierung des Tasks Profils mit Logo. |
+| `scripts/setup_terminal_profile.bat` | Script | Autarkes Batch/PowerShell-Skript zur Eintragung des Profils in `settings.json`. |
+| `scripts/remove_terminal_profile.bat` | Script | Autarkes Batch/PowerShell-Skript zur rückstandslosen Entfernung des Profils beim Deinstallieren. |
 
 

@@ -392,6 +392,41 @@ class TestGitSyncService(unittest.TestCase):
         self.assertIn("manual_test_del_123", mgr.deleted_ids)
         self.assertNotIn("manual_test_del_123", [t.id for t in mgr.tasks])
 
+    def test_cleanup_legacy_sync_repo_files(self):
+        """Prüft die automatische Migration und Bereinigung veralteter aufgaben_detector_*.json Dateien im Sync-Repo."""
+        import tempfile
+        from unittest.mock import patch
+        import git_sync_service
+        from git_sync_service import cleanup_legacy_sync_repo_files
+
+        with tempfile.TemporaryDirectory() as tmp_repo:
+            repo_data = os.path.join(tmp_repo, "data")
+            os.makedirs(repo_data, exist_ok=True)
+
+            # Erzeuge veraltete Dateien
+            old_cfg = os.path.join(tmp_repo, "aufgaben_detector_config.json")
+            with open(old_cfg, "w") as f:
+                f.write('{"test_key": "val"}')
+
+            old_tasks = os.path.join(repo_data, "aufgaben_detector_custom_tasks.json")
+            with open(old_tasks, "w") as f:
+                f.write('[{"id": "task_1"}]')
+
+            # Mock git rm Befehl
+            with patch.object(git_sync_service, "_run_git_cmd") as mock_git:
+                mock_git.return_value = (True, "", "")
+                changed = cleanup_legacy_sync_repo_files(tmp_repo)
+
+            self.assertTrue(changed)
+            # Alte Dateien müssen physisch gelöscht worden sein
+            self.assertFalse(os.path.exists(old_cfg))
+            self.assertFalse(os.path.exists(old_tasks))
+            # Neue Standarddateien müssen existieren
+            new_cfg = os.path.join(tmp_repo, "config.json")
+            self.assertTrue(os.path.exists(new_cfg))
+            new_tasks = os.path.join(repo_data, "custom_tasks.json")
+            self.assertTrue(os.path.exists(new_tasks))
+
 
 if __name__ == "__main__":
     unittest.main()

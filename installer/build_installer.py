@@ -5,13 +5,13 @@ build_installer.py - Creates the official open-source Inno Setup installer.
 Usage:
     python installer/build_installer.py
     python installer/build_installer.py --version 1.0.0
-    python installer/build_installer.py --output-name AufgabenDetector_Setup
+    python installer/build_installer.py --output-name Tasks_Setup
 
 What it does:
   1. Verifies/downloads official Python 3.12 installer for offline bundling.
   2. Copies only clean source files into a temporary build directory.
      (NO caches, credentials, tokens, or personal config!)
-  3. Compiles the Inno Setup script into installer/dist/AufgabenDetector_Setup.exe.
+  3. Compiles the Inno Setup script into installer/dist/Tasks_Setup.exe.
   4. Cleans up temporary build files.
 
 Requirements:
@@ -152,7 +152,7 @@ def copy_project_files(build_dir: Path) -> None:
 
 def build_inno_installer(version: str, output_name: str, build_dir: Path, iscc: str) -> Path:
     """Compiles the Inno Setup script into dist/."""
-    iss_template = INSTALLER_DIR / "aufgaben_detector.iss"
+    iss_template = INSTALLER_DIR / "tasks.iss"
     if not iss_template.exists():
         print(f"ERROR: {iss_template} not found!")
         sys.exit(1)
@@ -204,17 +204,17 @@ def build_inno_installer(version: str, output_name: str, build_dir: Path, iscc: 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Builds the official open-source Aufgaben-Detector Inno Setup installer."
+        description="Builds the official open-source Tasks Inno Setup installer."
     )
     parser.add_argument(
         "--version",
-        default="1.1.0",
-        help="Release version string (e.g. '1.1.0'). Defaults to 1.1.0.",
+        default="2.0.0",
+        help="Release version string (e.g. '2.0.0'). Defaults to 2.0.0.",
     )
     parser.add_argument(
         "--output-name",
-        default="AufgabenDetector_Setup",
-        help="Base filename of output installer (without .exe). Defaults to 'AufgabenDetector_Setup'.",
+        default="Tasks_Setup",
+        help="Base filename of output installer (without .exe). Defaults to 'Tasks_Setup'.",
     )
     parser.add_argument(
         "--keep-build",
@@ -238,7 +238,7 @@ def main():
             pass
 
     print("\n" + "=" * 54)
-    print("  Aufgaben-Detector Installer Builder")
+    print("  Tasks Installer Builder")
     print(f"  Version: {version}")
     print(f"  Output:  {output_name}.exe")
     print("=" * 54 + "\n")

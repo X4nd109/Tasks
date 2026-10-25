@@ -68,7 +68,7 @@ def check_for_updates(
     req = urllib.request.Request(
         api_url,
         headers={
-            "User-Agent": f"Aufgaben-Detector/{current_version}",
+            "User-Agent": f"Tasks/{current_version}",
             "Accept": "application/vnd.github.v3+json",
         },
     )
@@ -126,7 +126,7 @@ def check_for_updates(
 def get_update_temp_dir() -> str:
     """Gibt das dedizierte temporäre Verzeichnis für Update-Downloads zurück."""
     base_temp = tempfile.gettempdir()
-    update_dir = os.path.join(base_temp, "AufgabenDetector_Update")
+    update_dir = os.path.join(base_temp, "Tasks_Update")
     os.makedirs(update_dir, exist_ok=True)
     return update_dir
 
@@ -158,7 +158,7 @@ def download_update_installer(
     req = urllib.request.Request(
         download_url,
         headers={
-            "User-Agent": f"Aufgaben-Detector/{APP_VERSION}",
+            "User-Agent": f"Tasks/{APP_VERSION}",
             "Accept": "*/*",
         },
     )
@@ -232,7 +232,7 @@ def launch_update_and_restart(installer_path: str, app_dir: Optional[str] = None
     runner_script = os.path.join(temp_dir, "apply_update.cmd")
     script_content = f"""@echo off
 chcp 65001 >nul
-title Aufgaben-Detector Update
+title Tasks Update
 
 :: 1. Kurz warten bis der Python-Prozess beendet ist
 timeout /t 2 /nobreak >nul 2>nul

@@ -1,6 +1,6 @@
-# AGENTS.md — Aufgaben-Detector Master Index & Guidelines
+# AGENTS.md — Tasks Master Index & Guidelines
 
-> **Project**: Aufgaben-Detector (Moodle, Microsoft Teams & WebUntis)  
+> **Project**: Tasks (Moodle, Microsoft Teams & WebUntis)  
 > **Tech Stack**: Python 3.10+, Textual, Playwright, Requests, ReportLab / PyMuPDF  
 > **Documentation Root**: `docs/`
 

@@ -1,5 +1,5 @@
 """
-src package initialization - registriert Subpakete und Pfade für den Aufgaben-Detector.
+src package initialization - registriert Subpakete und Pfade für Tasks.
 """
 import os
 import sys

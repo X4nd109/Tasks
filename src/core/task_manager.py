@@ -162,14 +162,14 @@ class TaskManager:
             platform="manual",
             course="SETUP",
             course_full="Getting Started",
-            title="Welcome to Aufgaben Detector! Complete your setup",
+            title="Welcome to Tasks! Complete your setup",
             due_date_str="Action required",
             status="open",
             status_display="Open",
             url="",
             teacher="INFO",
             description=(
-                "Welcome to Aufgaben Detector!\n\n"
+                "Welcome to Tasks!\n\n"
                 "Please complete your initial setup:\n"
                 "1. Student Profile: Click '⚙️ Settings' in the bottom bar, then '⚙️ School & Student Config' (set your name, class, and school details for excuse PDFs).\n"
                 "2. School Platform Logins: Click '⚙️ Settings', then '🔑 Login':\n"
@@ -211,7 +211,7 @@ class TaskManager:
                     pass
 
         # Update-Flag aus In-App Update Runner prüfen
-        update_flag = os.path.join(tempfile.gettempdir(), "AufgabenDetector_Update", "update_just_applied.txt")
+        update_flag = os.path.join(tempfile.gettempdir(), "Tasks_Update", "update_just_applied.txt")
         has_update_flag = os.path.exists(update_flag)
         if has_update_flag:
             try:

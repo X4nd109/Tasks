@@ -281,7 +281,7 @@ def authenticate_untis_api(session: requests.Session, base_url: str, school: str
         "params": {
             "user": user,
             "password": passw,
-            "client": "AufgabenDetector"
+            "client": "Tasks"
         },
         "jsonrpc": "2.0"
     }

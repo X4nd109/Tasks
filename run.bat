@@ -1,11 +1,11 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title Aufgaben-Detector
+title Tasks
 
 set "RUN_FROM_BATCH=1"
-set "UPDATE_FLAG_FILE=%TEMP%\AufgabenDetector_Update\pending_update.txt"
-set "UPDATE_APPLIED_FILE=%TEMP%\AufgabenDetector_Update\update_just_applied.txt"
+set "UPDATE_FLAG_FILE=%TEMP%\Tasks_Update\pending_update.txt"
+set "UPDATE_APPLIED_FILE=%TEMP%\Tasks_Update\update_just_applied.txt"
 
 cls
 
@@ -45,7 +45,7 @@ if not defined PYTHON_EXE (
     echo  [!] Python wurde auf diesem Computer nicht gefunden!
     echo =======================================================
     echo.
-    echo  Der Aufgaben-Detector benoetigt Python.
+    echo  Tasks benoetigt Python.
     echo.
     set /p "RUN_SETUP=Moechtest du das Setup jetzt starten? (J/N): "
     if /i "!RUN_SETUP!"=="J" (
@@ -74,12 +74,12 @@ if exist "%UPDATE_FLAG_FILE%" (
     set /p INSTALLER_EXE=<"%UPDATE_FLAG_FILE%"
 )
 if not defined INSTALLER_EXE (
-    set "INSTALLER_EXE=%TEMP%\AufgabenDetector_Update\AufgabenDetector_Setup.exe"
+    set "INSTALLER_EXE=%TEMP%\Tasks_Update\Tasks_Setup.exe"
 )
 
 echo.
 echo =======================================================
-echo  [*] Aktualisiere Aufgaben-Detector im gleichen Fenster...
+echo  [*] Aktualisiere Tasks im gleichen Fenster...
 echo =======================================================
 echo.
 

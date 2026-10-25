@@ -1,4 +1,4 @@
-# Architecture & System Design — Aufgaben-Detector
+# Architecture & System Design — Tasks
 
 ## 1. High-Level Architecture
 
@@ -67,8 +67,8 @@ graph TD
 ## 2. Directory Structure & Key Modules
 
 ```text
-Aufgaben Detector/
-├── assets/                     # Fonts (GentiumPlus) and graphic assets
+Tasks/
+├── assets/                     # Fonts (GentiumPlus) and app icons (app_icon.ico/png, icons/*.svg)
 ├── cache/                      # Persistent runtime caches & browser profiles
 │   ├── tasks_cache.json        # Merged Moodle & Teams tasks snapshot
 │   ├── untis_cache.json        # Timetable, absence & exam records
@@ -87,12 +87,14 @@ Aufgaben Detector/
 │   ├── current-state.md
 │   └── decisions.md
 ├── installer/                  # Packaging & licensing system
-│   ├── aufgaben_detector.iss   # Inno Setup 6 compilation script
+│   ├── tasks.iss               # Inno Setup 6 compilation script
 │   ├── build_installer.py      # Automated installer builder
 │   └── generate_license.py     # HMAC-SHA256 license generator
 ├── scripts/                    # Windows environment helper scripts
 │   ├── setup_command.bat       # Registers 'tasks' in user PATH
-│   └── remove_command.bat      # Unregisters 'tasks' from user PATH
+│   ├── remove_command.bat      # Unregisters 'tasks' from user PATH
+│   ├── setup_terminal_profile.bat      # Autarkes Batch/PowerShell-Skript zur Registrierung des Windows-Terminal-Profils
+│   └── remove_terminal_profile.bat     # Autarkes Batch/PowerShell-Skript zur Entfernung des Windows-Terminal-Profils
 ├── src/
 │   ├── core/                   # System core & data management
 │   │   ├── agent_cli.py        # Token-efficient headless CLI engine
@@ -119,7 +121,9 @@ Aufgaben Detector/
 │       ├── tui_app.py          # Interactive Textual TUI
 │       └── ui.py               # Rich terminal rendering utilities
 ├── tests/                      # Automated test suite (pytest / unittest)
-│   ├── test_agent_feature.py   # Unit tests for agent project packaging & tool launcher
+│   ├── test_agent_cli.py       # Unit tests for CLI agent & skill commands
+│   ├── test_ai_chat_service.py # Unit tests for AI Chat attachment extraction, dispatch & explain state
+│   ├── test_ai_chat_ui.py      # Unit tests for AI Assistant TUI screen, tabs & deduplication
 │   ├── test_ai_explain.py      # Unit tests for AI Explain prompt generation & desktop app launcher
 │   ├── test_auth_logins.py     # Unit tests for Moodle HTTP & Untis login & server resolution
 │   ├── test_schoolbooks.py     # Unit tests for schoolbooks & git isolation
@@ -232,7 +236,7 @@ sequenceDiagram
    - The CLI and TUI output only public assignment texts; no private auth headers or session tokens are printed or logged.
 
 2. **Open-Source Distribution & Packaging Pipeline (`installer/`)**:
-   - Universal Windows installers (`AufgabenDetector_Setup.exe`) are generated using Inno Setup 6 without machine-specific locks or hardware restrictions.
+   - Universal Windows installers (`Tasks_Setup.exe`) are generated using Inno Setup 6 without machine-specific locks or hardware restrictions.
    - The build script (`installer/build_installer.py`) downloads the official offline Python 3.12 installer on demand, keeping the Git repository lightweight.
    - An automated GitHub Actions workflow (`.github/workflows/release.yml`) builds and publishes installers directly to GitHub Releases upon tag creation.
 

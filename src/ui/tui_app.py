@@ -1,5 +1,5 @@
 """
-tui_app.py - Moderne, interaktive Terminal-Benutzeroberfläche mit echten Maus-Buttons für den Aufgaben Detector.
+tui_app.py - Moderne, interaktive Terminal-Benutzeroberfläche für Tasks.
 Basiert auf Textual & Rich. Unterstützt vollständige Mausbedienung sowie Tastatur-Shortcuts.
 """
 
@@ -3431,7 +3431,7 @@ class UpdateReminderModal(ModalScreen[None]):
         except Exception:
             return
 
-        filename = self.update_info.get("installer_name") or "AufgabenDetector_Setup.exe"
+        filename = self.update_info.get("installer_name") or "Tasks_Setup.exe"
         target_path = os.path.join(get_update_temp_dir(), filename)
 
         def progress_cb(cur: int, tot: int, pct: float) -> None:
@@ -8134,15 +8134,27 @@ class AiChatScreen(Screen):
             pass
 
         if is_initial and self.auto_explain:
-            lang = self.cfg.get("language", "de")
-            prompt = (
-                "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt. "
-                "Gehe dabei auf die Aufgabenstellung ein und erkläre, wie man am besten an die Lösung herangeht."
-                if lang == "de" else
-                "Please explain this assignment clearly, practically, and step-by-step. "
-                "Focus on the requirements and provide guidance on how to approach and solve the task."
+            from services.ai_chat_service import (
+                is_task_ai_explained,
+                set_task_ai_explained,
             )
-            self.send_user_message(prompt)
+            if not is_task_ai_explained(t.id):
+                lang = self.cfg.get("language", "de")
+                prompt = (
+                    "Bitte erkläre mir diese Aufgabe verständlich, praxisnah und Schritt für Schritt. "
+                    "Gehe dabei auf die Aufgabenstellung ein und erkläre, wie man am besten an die Lösung herangeht."
+                    if lang == "de" else
+                    "Please explain this assignment clearly, practically, and step-by-step. "
+                    "Focus on the requirements and provide guidance on how to approach and solve the task."
+                )
+                self.send_user_message(prompt, is_explain=True)
+            else:
+                # The assignment was already explained in a previous session:
+                # load the persisted explanation instead of sending it again.
+                try:
+                    self.app.notify("Existing explanation loaded.", severity="information")
+                except Exception:
+                    pass
 
     def _refresh_chat_display(self, scroll_to_assistant_top: bool = False) -> None:
         scroll = self.query_one("#ai_chat_scroll", VerticalScroll)
@@ -8255,7 +8267,7 @@ class AiChatScreen(Screen):
         except Exception:
             pass
 
-    def send_user_message(self, text: str) -> None:
+    def send_user_message(self, text: str, is_explain: bool = False) -> None:
         if not text or self.is_waiting_for_ai or not self.active_task:
             return
 
@@ -8267,6 +8279,8 @@ class AiChatScreen(Screen):
         from services.ai_chat_service import save_task_chat_cache, build_task_ai_context, send_ai_chat_message
 
         user_msg = {"role": "user", "content": text, "timestamp": time.time()}
+        if is_explain:
+            user_msg["is_explain"] = True
         self.chat_history[task_id].append(user_msg)
         save_task_chat_cache(task_id, self.chat_history[task_id])
 
@@ -8307,6 +8321,17 @@ class AiChatScreen(Screen):
                     "timestamp": time.time()
                 })
                 save_task_chat_cache(task_id, self.chat_history[task_id])
+                if (
+                    is_explain
+                    and isinstance(reply, str)
+                    and not reply.startswith("Error:")
+                    and not reply.startswith("AI request failed:")
+                ):
+                    try:
+                        from services.ai_chat_service import set_task_ai_explained
+                        set_task_ai_explained(task_id, True)
+                    except Exception:
+                        pass
                 self._refresh_chat_display(scroll_to_assistant_top=True)
 
             self.app.call_from_thread(update_ui)
@@ -8317,8 +8342,9 @@ class AiChatScreen(Screen):
         if not self.active_task:
             return
         task_id = self.active_task.id
-        from services.ai_chat_service import clear_task_chat_cache
+        from services.ai_chat_service import clear_task_chat_cache, set_task_ai_explained
         clear_task_chat_cache(task_id)
+        set_task_ai_explained(task_id, False)
         self.chat_history[task_id] = []
         self._refresh_chat_display()
         self.app.notify("Chat cleared for current assignment.", severity="information")
@@ -8393,9 +8419,9 @@ class SyncSpinner(Widget):
             self._timer = None
 
 
-class AufgabenDetectorApp(App):
+class TasksApp(App):
     """
-    Hauptanwendung des Aufgaben-Detectors mit moderner Terminal-TUI und Maus-Buttons.
+    Hauptanwendung von Tasks mit moderner Terminal-TUI und Maus-Buttons.
     """
 
     TITLE = "TASKS"
@@ -8915,6 +8941,10 @@ class AufgabenDetectorApp(App):
         if not self.is_headless:
             self._start_update_checker()
 
+        # Win32 Console Icon setzen (falls im klassischen conhost CMD-Fenster ausgeführt)
+        if sys.platform == "win32" and not self.is_headless:
+            self._set_win32_console_icon()
+
         # Starte Hintergrund-Thread für Maus-Zurück-Taste (Seitentaste XBUTTON1 / "Hinten")
         self._terminal_hwnd = get_terminal_window_hwnd() or _CACHED_TERMINAL_HWND
         if sys.platform == "win32" and not self.is_headless:
@@ -8922,6 +8952,28 @@ class AufgabenDetectorApp(App):
 
         # Sicherstellen, dass das Terminal-Layout beim Start sauber synchronisiert ist
         self.call_after_refresh(self._sync_initial_viewport)
+
+    def _set_win32_console_icon(self) -> None:
+        """Sets the window icon for classic conhost console windows via WM_SETICON."""
+        try:
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                assets_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets")
+                ico_path = os.path.join(assets_dir, "app_icon.ico")
+                if os.path.exists(ico_path):
+                    IMAGE_ICON = 1
+                    LR_LOADFROMFILE = 0x00000010
+                    hicon_sm = ctypes.windll.user32.LoadImageW(None, ico_path, IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+                    hicon_big = ctypes.windll.user32.LoadImageW(None, ico_path, IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+                    WM_SETICON = 0x0080
+                    ICON_SMALL = 0
+                    ICON_BIG = 1
+                    if hicon_sm:
+                        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_sm)
+                    if hicon_big:
+                        ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+        except Exception:
+            pass
 
     def _start_update_checker(self) -> None:
         """Startet die Prüfung auf neuere GitHub-Releases in einem Hintergrund-Thread."""
@@ -9896,7 +9948,7 @@ class AufgabenDetectorApp(App):
                 # Prüfe ob Taste 4 (XBUTTON1) gedrückt ist (MSB = 1)
                 is_pressed = bool(user32.GetAsyncKeyState(VK_XBUTTON1) & 0x8000)
                 if is_pressed and not prev_pressed:
-                    # Nur auslösen, wenn Aufgaben Detector das aktive/fokussierte Fenster ist
+                    # Nur auslösen, wenn Tasks das aktive/fokussierte Fenster ist
                     if is_app_window_foreground(self, self._terminal_hwnd):
                         self.call_from_thread(self.action_navigate_back)
                 prev_pressed = is_pressed
@@ -9972,7 +10024,7 @@ def run_tui():
             pass
 
     ensure_terminal_window_size(target_cols=123, min_height_px=680)
-    app = AufgabenDetectorApp()
+    app = TasksApp()
     try:
         app.run()
     finally:
@@ -9991,6 +10043,10 @@ def run_tui():
             except Exception:
                 pass
     return getattr(app, "return_code", 0) or 0
+
+
+# Abwärtskompatibilitäts-Alias für Legacy-Imports
+AufgabenDetectorApp = TasksApp
 
 
 if __name__ == "__main__":

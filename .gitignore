@@ -57,3 +57,4 @@ Thumbs.db
 .first_run_completed
 .last_cli_tasks.json
 aufgaben_detector_*.json
+tasks_*.json

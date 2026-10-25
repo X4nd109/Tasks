@@ -1,10 +1,10 @@
-# 📚 Aufgaben-Detector (Moodle, Teams & WebUntis)
+# 📚 Tasks (Moodle, Teams & WebUntis)
 
-[![Release](https://img.shields.io/github/v/release/X4nd109/Aufgaben-Detector?color=blue&label=Release)](https://github.com/X4nd109/Aufgaben-Detector/releases/latest)
+[![Release](https://img.shields.io/github/v/release/X4nd109/Tasks?color=blue&label=Release)](https://github.com/X4nd109/Tasks/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6.svg)](https://microsoft.com/windows)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
-[![Tests: 381 passing](https://img.shields.io/badge/Tests-381%20passing-brightgreen.svg)](tests/)
+[![Tests: 409 passing](https://img.shields.io/badge/Tests-409%20passing-brightgreen.svg)](tests/)
 
 Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all school assignments from **Moodle** and **Microsoft Teams**, timetable absences and exam schedules from **WebUntis**, as well as schoolbooks and **Digi4School** in one unified view.
 
@@ -72,7 +72,7 @@ Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all sch
 
 ### Option 1: Windows Installer (Recommended)
 Download the latest standalone setup wizard directly from GitHub:  
-👉 **[Download AufgabenDetector_Setup.exe (GitHub Releases)](https://github.com/X4nd109/Aufgaben-Detector/releases/latest)**
+👉 **[Download Tasks_Setup.exe (GitHub Releases)](https://github.com/X4nd109/Tasks/releases/latest)**
 
 * **On-Demand Python Setup:** Automatically detects Python or silently installs official Python 3.12 if missing.
 * **Zero Configuration:** Creates Desktop and Start Menu shortcuts, and registers the global `tasks` command in your User PATH.
@@ -84,8 +84,8 @@ Download the latest standalone setup wizard directly from GitHub:
 
 1. **Clone the repository:**
    ```powershell
-   git clone https://github.com/X4nd109/Aufgaben-Detector.git
-   cd Aufgaben-Detector
+   git clone https://github.com/X4nd109/Tasks.git
+   cd Tasks
    ```
 
 2. **Run setup:**
@@ -151,7 +151,7 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 | `L` | Open Login Menu (Moodle, Teams, WebUntis) |
 | `O` | Open Settings (Themes, Untis group, Excuse profile, AI config) |
 | `T` / `Ctrl+P` | Switch color theme (22 curated themes with instant preview) |
-| `Q` | Quit Aufgaben-Detector |
+| `Q` | Quit Tasks |
 
 ### Assignment Details Modal
 | Key | Action |
@@ -215,7 +215,7 @@ tasks sync
 ## 📂 Project Structure
 
 ```text
-Aufgaben-Detector/
+Tasks/
 ├── assets/                     # Static assets (fonts, icons)
 │   └── fonts/                  # GentiumPlus font family for PDF generation
 ├── cache/                      # Local browser profiles & cache files (untracked)
@@ -232,8 +232,8 @@ Aufgaben-Detector/
 │   ├── current-state.md        # Session Handoff & Active Milestones
 │   └── decisions.md            # Architecture Decision Records (ADRs)
 ├── installer/                  # Inno Setup 6 Packaging Pipeline
-│   ├── build_installer.py      # Builds AufgabenDetector_Setup.exe
-│   └── aufgaben_detector.iss   # Inno Setup script template
+│   ├── build_installer.py      # Builds Tasks_Setup.exe
+│   └── tasks.iss               # Inno Setup script template
 ├── scripts/                    # Windows helper scripts
 │   ├── setup_command.bat       # Adds global 'tasks' command to User PATH
 │   └── remove_command.bat      # Removes 'tasks' command from User PATH
@@ -273,7 +273,7 @@ Aufgaben-Detector/
 
 ## 🔨 Building the Installer & CI/CD
 
-Aufgaben-Detector provides an automated packaging workflow using Inno Setup 6 and GitHub Actions:
+Tasks provides an automated packaging workflow using Inno Setup 6 and GitHub Actions:
 
 1. Install **Inno Setup 6**: [https://jrsoftware.org/isdl.php](https://jrsoftware.org/isdl.php)
 2. Execute the build script:
@@ -281,7 +281,7 @@ Aufgaben-Detector provides an automated packaging workflow using Inno Setup 6 an
    python installer/build_installer.py
    ```
    * Automatically downloads the official Python 3.12 installer on demand.
-   * Produces the universal `installer/dist/AufgabenDetector_Setup.exe`.
+   * Produces the universal `installer/dist/Tasks_Setup.exe`.
 
 Every Git tag push (e.g. `git tag v1.0.0 && git push origin v1.0.0`) triggers the GitHub Actions workflow (`.github/workflows/release.yml`), compiling the installer on a Windows virtual runner and attaching the output binary to the GitHub Release.
 
@@ -292,7 +292,7 @@ Every Git tag push (e.g. `git tag v1.0.0 && git push origin v1.0.0`) triggers th
 * **Personal Study & Private Use Only**: The Digi4School integration and textbook downloader are provided exclusively for individual, personal study and offline learning by students who hold lawful licenses and valid access codes (in accordance with the private copy exception under § 42 of the Austrian Copyright Act / UrhG).
 * **No DRM Circumvention or Piracy**: This project does not crack copy protection, bypass paywalls, or distribute copyrighted textbook contents. All downloads require the user's own active, legitimate credentials and access codes entered locally on their machine.
 * **Prohibition of Redistribution**: Users must never upload, share, distribute, or publicly rehost downloaded textbooks (e.g. to cloud drives, chat groups, or file-sharing platforms). Doing so constitutes copyright infringement.
-* **Independent Project**: *Aufgaben-Detector* is an independent open-source project and is not affiliated with, authorized, maintained, or endorsed by Digi4School, the Austrian Federal Ministry (BMBWF), Moodle Pty Ltd, Microsoft Corporation, or Untis GmbH. All registered trademarks belong to their respective owners.
+* **Independent Project**: *Tasks* is an independent open-source project and is not affiliated with, authorized, maintained, or endorsed by Digi4School, the Austrian Federal Ministry (BMBWF), Moodle Pty Ltd, Microsoft Corporation, or Untis GmbH. All registered trademarks belong to their respective owners.
 
 ---
 

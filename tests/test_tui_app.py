@@ -17,6 +17,7 @@ import src
 
 from config import ALLOWED_THEMES, DEFAULT_THEME, load_saved_theme, save_saved_theme, load_all_course_links
 from tui_app import (
+    TasksApp,
     AufgabenDetectorApp,
     AddTaskModal,
     StatusFilterModal,
@@ -85,6 +86,12 @@ class TestAufgabenDetectorTUI(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         from config import save_enabled_platforms, DEFAULT_ENABLED_PLATFORMS
         save_enabled_platforms(dict(DEFAULT_ENABLED_PLATFORMS))
+
+    def test_tasks_app_class_and_alias(self):
+        """Prüft, dass TasksApp existiert und AufgabenDetectorApp als Alias bereitsteht."""
+        self.assertIs(TasksApp, AufgabenDetectorApp)
+        app = TasksApp()
+        self.assertEqual(app.TITLE, "TASKS")
 
     async def test_tui_buttons_and_interactions(self):
         app = AufgabenDetectorApp(self.mgr)
