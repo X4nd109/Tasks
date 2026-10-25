@@ -779,14 +779,14 @@ def ensure_terminal_window_size(target_cols: int = 123, min_height_px: int = 680
                         if updated and updated[0] >= target_cols:
                             break
 
-        # Terminal-Titel auf 'tasks' setzen
+        # Terminal-Titel auf 'Tasks' setzen
         if sys.platform == "win32":
             try:
-                ctypes.windll.kernel32.SetConsoleTitleW("tasks")
+                ctypes.windll.kernel32.SetConsoleTitleW("Tasks")
             except Exception:
                 pass
         try:
-            sys.stdout.write("\033]0;tasks\007")
+            sys.stdout.write("\033]0;Tasks\007")
             sys.stdout.flush()
         except Exception:
             pass

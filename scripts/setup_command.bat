@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Setup tasks command
+title Tasks - Command einrichten
 
 echo ======================================================================
 echo   Richte globalen Terminal-Befehl 'tasks' fuer dieses System ein...

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title Aufgaben-Detector - Command entfernen
+title Tasks - Command entfernen
 
 echo ======================================================================
 echo   Entferne globalen Terminal-Befehl 'tasks' aus dem PATH...

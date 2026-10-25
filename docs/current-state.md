@@ -7,6 +7,17 @@
 
 ## 1. Completed Tasks & Milestones
 
+- [x] **Terminal Window Title Capitalization Fix (2026-10-25)**:
+  - In `src/ui/tui_app.py` (`adjust_terminal_size_smart`) wurde der gesetzte Fenstertitel von kleingeschriebenem `"tasks"` auf großgeschriebenes `"Tasks"` korrigiert (`SetConsoleTitleW("Tasks")` und `\033]0;Tasks\007`).
+  - Batch-Skripte `scripts/setup_command.bat` und `scripts/remove_command.bat` vereinheitlicht.
+  - Installer `Tasks_Setup.exe` frisch neu generiert und lokale Testinstallation synchronisiert.
+
+- [x] **Windows Terminal Profile-Skripte: JSON-Schema-Härtung (2026-10-25)**:
+  - `setup_terminal_profile.bat` / `remove_terminal_profile.bat`: Schema-Erkennung erfolgt nicht mehr über PowerShell-Truthiness, sondern explizit (`profiles` als Objekt mit `list` vs. Legacy-Array). Ein **leeres** `profiles.list` führte zuvor dazu, dass `profiles` durch ein Array ersetzt und `profiles.defaults` verloren ging.
+  - `remove_terminal_profile.bat` schreibt `settings.json` nur noch, wenn tatsächlich ein Profil entfernt wurde (idempotent, keine unnötigen Rewrites).
+  - `setup_terminal_profile.bat` gibt bei fehlender/unlesbarer `settings.json` Exit-Code 1 zurück und überspringt im interaktiven Modus die irreführende Erfolgsmeldung.
+  - Verifiziert mit Sandbox-`%LOCALAPPDATA%`: modernes Schema, leere Liste mit `defaults`, Legacy-Array, doppelte Ausführung (keine Duplikate), fehlendes Windows Terminal (Setup `1`, Remove `0`).
+
 - [x] **Installer App-Icon Packaging & Terminal-Profile Fix (2026-10-25)**:
   - **Git Whitelist für PNG-Assets**: In `.gitignore` Ausnahmen für `!assets/*.png` und `!assets/**/*.png` hinzugefügt, sodass `assets/app_icon.png` in Git versioniert und bei Clones/Releases mitgeführt wird.
   - **Compile-Time Garantie in Inno Setup (`installer/tasks.iss`)**: `Source: "{#SourceDir}\assets\app_icon.png"` und `.ico` werden nun explizit unter `[Files]` deklariert.

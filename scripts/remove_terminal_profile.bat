@@ -27,10 +27,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  $jsonText = [System.IO.File]::ReadAllText($settingsFile, [System.Text.Encoding]::UTF8); " ^
   "  $data = $jsonText | ConvertFrom-Json; " ^
   "} catch { exit 0 }; " ^
-  "$list = if ($data.profiles.list) { $data.profiles.list } elseif ($data.profiles) { $data.profiles } else { $null }; " ^
-  "if (-not $list) { exit 0 }; " ^
+  "if ($data.profiles -is [System.Array]) { " ^
+  "  $data.profiles = [PSCustomObject]@{ list = @($data.profiles) }; " ^
+  "}; " ^
+  "if ($null -eq $data.profiles -or $null -eq $data.profiles.list) { exit 0 }; " ^
+  "$list = @($data.profiles.list); " ^
   "$newList = @($list | Where-Object { $_.guid -ne $guid -and $_.name -ne $name -and $_.name -ne 'Aufgaben-Detector' }); " ^
-  "if ($data.profiles.list) { $data.profiles.list = $newList } else { $data.profiles = $newList }; " ^
+  "if ($newList.Count -eq $list.Count) { exit 0 }; " ^
+  "$data.profiles.list = $newList; " ^
   "$newJson = $data | ConvertTo-Json -Depth 32; " ^
   "[System.IO.File]::WriteAllText($settingsFile, $newJson + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)); " ^
   "if ('%SILENT%' -ne '1') { " ^

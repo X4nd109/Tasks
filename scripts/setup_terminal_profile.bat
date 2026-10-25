@@ -30,7 +30,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$settingsFile = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1; " ^
   "if (-not $settingsFile) { " ^
   "  if ('%SILENT%' -ne '1') { Write-Host '[-] Windows Terminal settings.json nicht gefunden.' -ForegroundColor Yellow }; " ^
-  "  exit 0; " ^
+  "  exit 1; " ^
   "}; " ^
   "try { " ^
   "  $jsonText = [System.IO.File]::ReadAllText($settingsFile, [System.Text.Encoding]::UTF8); " ^
@@ -39,12 +39,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  if ('%SILENT%' -ne '1') { Write-Host ('[-] Fehler beim Parsen von settings.json: ' + $_) -ForegroundColor Red }; " ^
   "  exit 1; " ^
   "}; " ^
-  "$list = if ($data.profiles.list) { $data.profiles.list } elseif ($data.profiles) { $data.profiles } else { $null }; " ^
-  "if (-not $list) { " ^
-  "  if (-not $data.profiles) { $data | Add-Member -MemberType NoteProperty -Name 'profiles' -Value ([PSCustomObject]@{}) -Force }; " ^
-  "  if (-not $data.profiles.list) { $data.profiles | Add-Member -MemberType NoteProperty -Name 'list' -Value @() -Force }; " ^
-  "  $list = $data.profiles.list; " ^
+  "if ($data.profiles -is [System.Array]) { " ^
+  "  $data.profiles = [PSCustomObject]@{ list = @($data.profiles) }; " ^
+  "} elseif ($null -eq $data.profiles) { " ^
+  "  $data | Add-Member -MemberType NoteProperty -Name 'profiles' -Value ([PSCustomObject]@{ list = @() }) -Force; " ^
+  "} elseif ($null -eq $data.profiles.list) { " ^
+  "  $data.profiles | Add-Member -MemberType NoteProperty -Name 'list' -Value @() -Force; " ^
   "}; " ^
+  "$list = @($data.profiles.list); " ^
   "$entry = [ordered]@{ " ^
   "  guid = $guid; " ^
   "  name = $name; " ^
@@ -56,7 +58,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "}; " ^
   "$newList = @($list | Where-Object { $_.guid -ne $guid -and $_.name -ne $name -and $_.name -ne 'Aufgaben-Detector' }); " ^
   "$newList += [PSCustomObject]$entry; " ^
-  "if ($data.profiles.list) { $data.profiles.list = $newList } else { $data.profiles = $newList }; " ^
+  "$data.profiles.list = $newList; " ^
   "$newJson = $data | ConvertTo-Json -Depth 32; " ^
   "[System.IO.File]::WriteAllText($settingsFile, $newJson + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)); " ^
   "if ('%SILENT%' -ne '1') { " ^
@@ -64,6 +66,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host ('    Icon:  ' + $iconPath) -ForegroundColor Cyan; " ^
   "  Write-Host ('    Start: ' + $runBat) -ForegroundColor Cyan; " ^
   "}; "
+
+if errorlevel 1 (
+    if "%SILENT%"=="0" (
+        echo.
+        echo [!] Das Windows-Terminal-Profil konnte nicht eingerichtet werden.
+        echo.
+        pause
+    )
+    exit /b 1
+)
 
 if "%SILENT%"=="0" (
     echo.
