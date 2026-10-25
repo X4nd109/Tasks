@@ -33,6 +33,7 @@
 | [`docs/conventions.md`](docs/conventions.md) | Code-Style, Zero-Knowledge-Regeln, CLI-Standards | Beim Schreiben von Code/Tests |
 | [`docs/decisions.md`](docs/decisions.md) | Architecture Decision Records (ADRs) | Vor Architekturentscheidungen |
 | [`docs/features.md`](docs/features.md) | Feature- & UI-Katalog (Buttons, Shortcuts, Views) | Bearbeitung von UI/Features |
+| [`docs/tutorials/git-sync.md`](docs/tutorials/git-sync.md) | Schritt-für-Schritt Git Cloud-Sync Setup Guide | Cloud-Sync Einrichtung & Support |
 | [`docs/changelog.md`](docs/changelog.md) | Versionierung & Historie (Keep a Changelog) | Releases & Versionsvergleiche |
 
 ---

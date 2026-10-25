@@ -176,6 +176,7 @@ class TestGitSyncService(unittest.TestCase):
         self.assertTrue(hasattr(modal, "compose"))
         self.assertTrue(hasattr(modal, "_save_and_sync"))
         self.assertTrue(hasattr(modal, "_disconnect_git"))
+        self.assertIn("#git_setup_guide_link", modal.DEFAULT_CSS)
 
     def test_theme_select_modal(self):
         from tui_app import ThemeSelectModal

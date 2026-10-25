@@ -7,6 +7,12 @@
 
 ## 1. Completed Tasks & Milestones
 
+- [x] **Git Cloud-Sync Setup Tutorial & TUI Integration (2026-10-25)**:
+  - **Umfassende englische Anleitung**: `docs/tutorials/git-sync.md` mit detaillierten Abschnitten zur Repository-Erstellung (Private Repository), Erstellung eines Classic Personal Access Tokens (PAT) ohne Ablaufdatum (`No expiration`) mit vollen Rechten (`all scopes`), Token-Kopieren und App-Konfiguration (`🚀 Test & Connect`).
+  - **Screenshots reorganisiert**: 8 Screenshots aus `assets/Git Sync Tutorial Screenshots/` nach `assets/git-sync-tutorial/` migriert und nummeriert (`01_create_new_repo.png` bis `08_copy_token.png`).
+  - **TUI-Integration (`GitSetupModal`)**: Infotext mit direkter GitHub-URL (`https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md`) unterhalb der Beschreibung eingefügt (`#git_setup_guide_link`), Dialogbreite auf 76 Zeichen optimiert für sauberes Kopieren der URL im Terminal.
+  - **Testsuite & Doku**: Struktur-Test in `tests/test_git_sync.py` aktualisiert, `AGENTS.md`, `docs/features.md`, `docs/changelog.md` und `docs/current-state.md` synchronisiert.
+
 - [x] **Terminal Window Title Capitalization Fix (2026-10-25)**:
   - In `src/ui/tui_app.py` (`adjust_terminal_size_smart`) wurde der gesetzte Fenstertitel von kleingeschriebenem `"tasks"` auf großgeschriebenes `"Tasks"` korrigiert (`SetConsoleTitleW("Tasks")` und `\033]0;Tasks\007`).
   - Batch-Skripte `scripts/setup_command.bat` und `scripts/remove_command.bat` vereinheitlicht.

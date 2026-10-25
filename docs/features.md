@@ -36,7 +36,7 @@
 | `TeamsSetupModal` | Modal | Geführter Teams-Login via Playwright-Chromium mit Passkey-, 2FA- oder Kennwort-Unterstützung. |
 | `MoodleLoginModal` | Modal | Eingabe von Moodle-Benutzername (oder E-Mail mit automatischem Domain-Stripping) und Passwort mit blitzschneller HTTP-Authentifizierung und Fehleranzeige. |
 | `UntisSetupModal` | Modal | Konfiguration von WebUntis-Schulname (Standard: spengergasse, Domain-Bereinigung & API-Suche), Benutzer und Passwort mit exakter Fehlerrückmeldung. |
-| `GitSetupModal` | Modal | Einrichtungsdialog für cloudbasierten Git-Sync über privates Repository mit Token-Verschleierung. |
+| `GitSetupModal` | Modal | Einrichtungsdialog für cloudbasierten Git-Sync über privates Repository mit Token-Verschleierung und integriertem Link zum Setup-Guide (`docs/tutorials/git-sync.md`). |
 | `SchoolbookUrlModal` | Modal | Dialog zur Vergabe von Buchtitel und Web-URL für digitale Schulbücher. |
 | `Digi4SchoolDownloadModal` | Modal | Anmelde- und Zugangscode-Eingabe für den automatischen Digi4School-Buchdownload. |
 | `Digi4SchoolDetectModal` | Modal | Ladedialog zur automatischen Vorab-Erkennung von Buchtitel und Gesamtseitenzahl über Digi4School. |

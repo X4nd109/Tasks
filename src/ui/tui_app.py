@@ -5594,7 +5594,7 @@ class GitSetupModal(ModalScreen[bool]):
         align: center middle;
     }
     #git_setup_dialog {
-        width: 68;
+        width: 76;
         height: auto;
         border: thick #a6e3a1;
         background: #1e1e2e;
@@ -5608,6 +5608,11 @@ class GitSetupModal(ModalScreen[bool]):
     }
     #git_setup_desc {
         color: #cdd6f4;
+        margin-bottom: 1;
+        text-align: center;
+    }
+    #git_setup_guide_link {
+        color: #89b4fa;
         margin-bottom: 1;
         text-align: center;
     }
@@ -5664,6 +5669,10 @@ class GitSetupModal(ModalScreen[bool]):
             yield Label(
                 "Synchronize assignments, exams & notes via private Git repository.",
                 id="git_setup_desc",
+            )
+            yield Label(
+                "📖 Setup Guide:\nhttps://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md",
+                id="git_setup_guide_link",
             )
             yield Label("Repository HTTPS URL:", classes="git_field_label")
             yield Input(placeholder="https://github.com/user/my-backup.git", id="inp_git_url", classes="git_field")

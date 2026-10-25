@@ -9,6 +9,13 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+### Added
+- **Git Cloud-Sync Setup Tutorial (`docs/tutorials/git-sync.md`)**:
+  - Ausführliche englischsprachige Schritt-für-Schritt-Anleitung zur Einrichtung von Git Cloud-Sync (Erstellung eines privaten GitHub-Repositories, Generierung eines klassischen Personal Access Tokens (PAT) ohne Ablaufdatum und mit vollen Rechten/Scopes sowie Konfiguration in der Tasks-App).
+  - 8 illustrierende Screenshots in `assets/git-sync-tutorial/` (`01_create_new_repo.png` bis `08_copy_token.png`).
+- **Setup-Guide-Link im `GitSetupModal`**:
+  - Direkter Infotext mit Link auf das Online-Tutorial (`https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md`) im Einrichtungsdialog der TUI (`#git_setup_guide_link`) hinzugefügt.
+
 ### Fixed
 - **Terminal-Fenstertitel Großschreibung ("Tasks")**:
   - `src/ui/tui_app.py`: `adjust_terminal_size_smart()` setzt den Fenstertitel per Windows-API (`SetConsoleTitleW`) und OSC-Escape-Sequenz (`\033]0;Tasks\007`) nun korrekt auf `"Tasks"` (Großbuchstabe T) anstelle des kleingeschriebenen `"tasks"`.
