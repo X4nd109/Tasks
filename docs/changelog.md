@@ -9,12 +9,77 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-26
+
 ### Added
+- **AI-Menü: Back-Button exakt wie im Tests-Menü (Breite & Styling) & 1 Zeile nach unten versetzt**:
+  - `src/ui/tui_app.py`: `#btn_ai_back` Label auf `"↩️ Back"` vereinheitlicht und `min-width: 4;` gesetzt (vorher 12), wodurch die Breite exakt 9 Zeichen wie bei `#btn_exams_back` beträgt.
+  - `#ai_input_btn_box` auf `align: right bottom;` umgestellt, wodurch der Button um 1 Zeile nach unten rückt und bündig mit der Unterkante von `#ai_chat_input` abschließt.
+  - Der Clear-Chat-Button (`#btn_ai_clear_chat`) trägt nun das Textlabel `"Clear"` (statt Emoji `🗑️`), wurde verbreitert (`min-width: 9; padding: 0 1;`) und dockt über `#ai_chat_toolbar` (`align: right middle; margin: 0; padding: 0;`) direkt unter dem Aufgaben-Banner bündig an der rechten Bildschirmecke an.
+- **Gezielte Zuweisung des 3-Zeilen-Verhaltens (`ChatInputArea`) auf Freitextfelder**:
+  - `src/ui/tui_app.py`: Die 3-Zeilen-Eingabelogik (`ChatInputArea`) mit dynamischem Zeilensprung (Mitte -> Oben -> Mitte -> Unten -> Scrollen) und feiner Randlinie rundherum (`border: solid`) bleibt exklusiv aktiv für:
+    - AI-Chat Menü (`#ai_chat_input`)
+    - Aufgaben-Beschreibung in `AddTaskModal` (`#inp_add_desc`)
+    - Prüfungsstoff in `AddExamModal` (`#inp_add_exam_topics`) und `ExamDetailModal` (`#inp_exam_topics`)
+  - Alle restlichen Felder (Fach, Titel, Datum, Uhrzeit, Lehrer, Raum, Einstellungen, Login-Credentials, URLs) wurden wieder zu kompakten Standard-`Input`-Feldern zurückgesetzt.
+- **Anwendungsweites 3-Zeilen-Verhalten für Formular-Schriftfelder (`ChatInputArea`)**:
+  - `src/ui/tui_app.py`: Rollout des 3-Zeilen-Verhaltens mit dynamischem Zeilensprung (Zeile 1 mittig -> Zeile 2 oben/mitte -> Zeile 3 oben/mitte/unten -> Zeile 4+ Bottom-Scroll mit Scrollbar) auf alle Formular- und Texteingabefelder in sämtlichen Dialogen (`AddTaskModal`, `AddExamModal`, `ExamDetailModal`, `SettingsModal`, `MoodleLoginModal`, `TeamsSetupModal`, `UntisSetupModal`, `GitSetupModal`, `Digi4SchoolDownloadModal`, `SchoolbookUrlModal`).
+  - Reine Suchleisten (`UnifiedCommandPalette`, `SubjectFilterModal`) und sensible Passwortfelder (`password=True`) verbleiben wie vorgegeben 1-zeilig.
+  - Vollständige Duck-Typing- und Metaklassen-Kompatibilität (`isinstance(..., Input)` und `issubclass(..., Input)` via `_MessagePumpMeta`), sodass alle Abfragen (`query_one(..., Input)`) und Event-Handler (`Input.Submitted`, `Input.Changed`) unverändert funktionieren.
+  - Neue Unittest-Suite in `tests/test_form_inputs_3lines.py` hinzugefügt.
+- **AI-Menü: Konstante 3-Zeilen Schreibleiste mit dynamischem Zeilensprung (`ChatInputArea`)**:
+  - `src/ui/tui_app.py`: Schreibleiste im AI-Assistenten ist nun von Beginn an konstant 3 Zeilen hoch (`height: 3;`).
+  - **Dynamischer Zeilensprung**:
+    - Bei 1 Zeile (bzw. leerem Eingabefeld mit Platzhalter) steht der Cursor in der mittleren Zeile (`padding: 1 1 1 1`).
+    - Bei 2 Zeilen springt Zeile 1 in die obere Zeile und Zeile 2 wird in der Mitte getippt (`padding: 0 1 1 1`).
+    - Bei 3 Zeilen wird in der unteren Zeile getippt (`padding: 0 1 0 1`).
+    - Ab 4 Zeilen verbleibt die Schreibzeile unten, ältere Zeilen scrollen nach oben weg und die Scrollbar blendet sich ein.
+  - **3-Zeilen hoher Back-Button (`#btn_ai_back`)**:
+    - Label vereinheitlicht auf `"↩ Back"` (analog zur Prüfungs- und Fehlstundenansicht).
+    - Höhe auf 3 Zeilen (`height: 3; min-width: 12;`) vergrößert im Standard-Button-Design.
+  - **Kompakter Clear-Chat-Button (`#btn_ai_clear_chat`)**:
+    - Bleibt bei 1 Zeile Höhe mit `🗑️` und ist unten bündig im Container platziert.
+  - Volle Farbanpassung für Standard- und OLED-Theme (`.-theme-oled`).
+  - Aktualisierte Unittests in `tests/test_ai_chat_ui.py`.
+- **Backspace-Suchmenü (`UnifiedCommandPalette`) Feste 3-Tab-Boxen & Top-Docking**:
+  - `src/ui/tui_app.py`: Die Suchpalette dockt nun bündig an der Fensteroberkante an (`margin-top: 0;`).
+  - **Feste 3-Tab-Boxen nebeneinander**: 3 gleich große Boxen in fixer Reihenfolge nebeneinander (`Courses` links, `Schoolbooks` Mitte, `Directories` rechts) ohne Positionswechsel.
+  - **Farben & Typografie**: Der jeweils aktive Tab hat weiße Schrift auf farbigem Hintergrund (Courses: Cyan `#04a5e5`, Schoolbooks: Rot `#e64553`, Directories: Grün `#40a02b`). Inaktive Tabs sind dezent ausgegraut mit sanftem Hover-Highlighting.
+  - **Interaktion**: Navigation vorwärts per `Tab` und rückwärts per `Shift+Tab` sowie Direktwechsel per Mausklick auf jede der 3 Boxen (mit automatischem Fokus-Erhalt im Suchfeld).
+  - Neuer automatisierter Integrationstest `test_palette_tabs_layout_and_switch` in `tests/test_directories.py`.
+- **Interaktive Spaltensortierung in der Haupttabelle (`TasksApp`)**:
+  - `src/ui/tui_app.py`: Klick auf Spaltenheader (`Platform`, `Subject`, `Due Date`, `Status`, `Teacher`) sortiert die Tabelle aufsteigend (`↑`) bzw. absteigend (`↓`) im 2-Wege-Toggle.
+  - **Start-Sortierung**: Beim Programmstart wird die Tabelle automatisch nach Fälligkeitsdatum absteigend sortiert (`Due Date ↓`, nächste Fälligkeit zuerst oben).
+  - **Vollständige Pfeil-Sichtbarkeit auf allen Spalten**: Dynamische Breitenberechnung garantiert ausreichend Platz (`Platform ↑/↓`, `Subject ↑/↓`, `Due Date ↑/↓`, `Status ↑/↓`, `Teacher ↑/↓`), sodass der Sortierpfeil auf jeder Spalte vollständig sichtbar ist und niemals abgeschnitten wird.
+  - **Sequenzielle `#`-Nummerierung**: Die Zeilennummerierung in Spalte `#` ist bei jeder Sortierung immer fortlaufend von 1 oben nach unten aufsteigend (1..N). Direktauswahl über `1`–`9` öffnet die jeweilige Zeile.
+  - **Hover-Highlighting**: Sortierbare Spalten-Header heben sich bei Maus-Hover subtil mit Akzent-Hintergrund (`datatable--header-hover`) hervor; `#` und `Assignment` sind nicht sortierbar und bleiben unberührt.
+  - Neue Unittests `test_table_column_sorting_and_persistent_ids` und `test_tasks_data_table_hover_highlight` in `tests/test_tui_app.py`.
+- **Exit Shortcut `Ctrl+C` in TUI mit Eingabefeld-Schutz (Input/TextArea Guard)**:
+  - `src/ui/tui_app.py`: `Binding("ctrl+c", "quit_app", "Quit", show=False)` hinzugefügt.
+  - **Schutz beim Kopieren in Schriftfeldern**: Befindet sich der Fokus in einem Eingabefeld (`Input`, `TextArea` etc.) oder ist Text markiert, wird das Beenden unterbunden, sodass `Strg + C` regulär für das Kopieren von Text in die Zwischenablage zur Verfügung steht.
+  - Button-Tooltip von `❌ Exit` auf `Exit [Q / Ctrl+C]` erweitert.
+  - Neuer Unittest `test_ctrl_c_quits_app` in `tests/test_tui_app.py`.
 - **Git Cloud-Sync Setup Tutorial (`docs/tutorials/git-sync.md`)**:
   - Ausführliche englischsprachige Schritt-für-Schritt-Anleitung zur Einrichtung von Git Cloud-Sync (Erstellung eines privaten GitHub-Repositories, Generierung eines klassischen Personal Access Tokens (PAT) ohne Ablaufdatum und mit vollen Rechten/Scopes sowie Konfiguration in der Tasks-App).
   - 8 illustrierende Screenshots in `assets/git-sync-tutorial/` (`01_create_new_repo.png` bis `08_copy_token.png`).
 - **Setup-Guide-Link im `GitSetupModal`**:
   - Direkter Infotext mit Link auf das Online-Tutorial (`https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md`) im Einrichtungsdialog der TUI (`#git_setup_guide_link`) hinzugefügt.
+
+### Changed
+- **Statusleiste Overhaul: Direkt benachbarte Farb-Badges (Pills), Zentrierung & Formatierung**:
+  - `src/ui/tui_app.py`: Alle Status-Pills (`To Do`, `Moodle`, `Teams`, `Manual`, `Next`, `Sync`) liegen nun direkt nebeneinander und sind gemeinsam als Gruppe horizontal zentriert.
+  - Sämtliche Emojis (`📋`, `🎓`, `👥`, `✏️`, `📝`, `🕒`) wurden entfernt.
+  - **Next-Exam Formatierung**: Das Datums-Präfix und die Klammern wurden entfernt (`Next: [Fach] in [Tage]d`).
+  - **Sync-Zeit Formatierung**: `Sync: [HH:MM]` zeigt bei heutigen Synchronisationen die Uhrzeit bzw. das Datum des letzten Syncs an.
+  - Sämtliche Emojis (📋, 🎓, 👥, ✏️, 📝, 🕒) wurden entfernt.
+  - Farbige Pill-Hintergründe implementiert:
+    - Moodle: Weiß auf Orange (#fe640b).
+    - Teams: Weiß auf Blau (#1e66f5).
+    - Manual: Weiß auf Grün (#40a02b).
+    - To Do: Dynamisch (Weiß auf Rot bei Überfälligkeit, Schwarz auf Gelb bei offenen Aufgaben, Weiß auf Grün bei 0).
+    - Next: Weiß auf Violett (#8839ef).
+    - Sync: Heller Text auf Schiefergrau (#45475a).
+  - SyncSpinner: Bleibt bei Hintergrundaktivität wie gewohnt am rechten Rand der Statusleiste angedockt.
 
 ### Fixed
 - **Terminal-Fenstertitel Großschreibung ("Tasks")**:

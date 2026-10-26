@@ -9,9 +9,9 @@
 
 | Element / View | Typ | Kurzbeschreibung |
 | :--- | :--- | :--- |
-| `Main Task Dashboard` | Screen | Farbcodierte Haupttabelle aller offenen und fälligen Moodle- und Teams-Aufgaben (`TasksApp`) mit priorisierten Spalten (Due Date & Teacher voll erhalten, Assignment flexibel) und jitter-freier Einzeilen-Statusleiste. |
+| `Main Task Dashboard` | Screen | Farbcodierte Haupttabelle aller offenen und fälligen Moodle- und Teams-Aufgaben (`TasksApp`) mit priorisierten Spalten, interaktiver Spaltensortierung (Mausklick auf Spaltenheader mit 2-Wege-Toggle `↑`/`↓`, sequenzieller 1..N Zeilennummerierung und Hover-Highlighting) und zentrierter Status-Pill-Leiste. |
 | `Tests & Exams Screen` (`[E]`) | Screen | WebUntis Prüfungskalender mit dynamischer Vollbreiten-Verteilung aller 9 Spalten ohne rechten Leerraum und horizontalem Scrollbar-Puffer. |
-| `CommandPalette` (`Backspace` / `/`) | Overlay | Schnellsuchleiste mit `Tab`-Umschaltung zwischen *Courses*, *Schoolbooks* und *Directories*; `Backspace` bei leerer Leiste schließt das Menü; behält Suchtext beim Umschalten. |
+| `CommandPalette` (`Backspace` / `/`) | Overlay | Schnellsuchleiste bündig an der Fensteroberkante (`margin-top: 0`) mit 3 festen Tab-Boxen nebeneinander (*Courses* links, *Schoolbooks* Mitte, *Directories* rechts); Tab-Umschaltung über `Tab` (vorwärts), `Shift+Tab` (rückwärts) sowie direkten Mausklick auf jede der Boxen; aktiver Tab in Akzentfarbe (Courses = Cyan, Books = Rot, Directories = Grün) mit weißem Text, inaktive Tabs dezent ausgegraut; `Backspace` bei leerer Leiste schließt das Menü; behält Suchtext beim Umschalten. |
 | `Trash / Hidden Screen` (`[G]`) | Modal | Übersicht aller ausgeblendeten oder gelöschten Aufgaben mit Wiederherstellungsoption (`TrashModal`). |
 
 ---
@@ -27,9 +27,9 @@
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.0.0`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.1.0`), Themes, Logins und Schülereinstellungen. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
-| `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen und direkter Gemini / OpenAI REST-Anbindung. |
+| `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) exakt wie im Tests-Menü (Breite 9, unten bündig), Clear-Chat-Button (`Clear`) bündig in der oberen rechten Ecke unter dem Aufgaben-Banner und direkter Gemini / OpenAI REST-Anbindung. |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
 | `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases mit 1-Klick-In-App-Download, Fortschrittsbalken und automatischer Installation im selben Verzeichnis (ohne PATH-Änderung oder Datenverlust). |
 | `LoginChoiceModal` (`[L]`) | Modal | Zentrales Auswahlmenü für Anmeldungen bei Moodle, Microsoft Teams und WebUntis. |
@@ -54,6 +54,7 @@
 | `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
 | `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung (dedupliziert: bereits erklärte Aufgaben öffnen direkt den bestehenden Chat, Reset bei Clear Chat). |
 | `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
+| `Sort Column Header` | Klick auf Spalten-Header | Interaktives 2-Wege-Sortieren der Haupttabelle nach `Platform`, `Subject`, `Due Date`, `Status` oder `Teacher` (Aufsteigend `↑` / Absteigend `↓`). Automatische Start-Sortierung mit `Due Date ↓`, sichtbare Pfeile auf allen Spalten, sequenzielle 1..N Nummerierung. Spalten `#` und `Assignment` bleiben unberührt. |
 | `Toggle status` | `[E]` / `btn_toggle_status` | Schaltet den Erledigt-Status einer Aufgabe zwischen offen und abgeschlossen um. |
 | `Hide / Delete` | `[L]` / `btn_delete_task` | Verschiebt eine Aufgabe in den lokalen Papierkorb (`deleted_tasks.json`). |
 | `Restore` | `[W]` / `btn_restore_task` | Stellt eine gelöschte Aufgabe aus dem Papierkorb wieder her. |
@@ -111,9 +112,25 @@
 
 ---
 
-## 6. Text-Eingabefelder & Windows-Shortcuts
+## 6. Text-Eingabefelder, 3-Zeilen-Verhalten & Windows-Shortcuts
 
-Projektweit für alle einzeiligen `Input`-Widgets (CommandPalette, Suchleisten, Aufgaben- und Prüfungsformulare, Logins, Schulkonfiguration) sowie mehrzeilige `TextArea`-Notizen:
+Projektweit für alle Dialog- und Formular-Eingabefelder (`ChatInputArea`), einzeiligen `Input`-Widgets (CommandPalette, Suchleisten, Passwortmasken) sowie Notizen:
+
+### 3-Zeilen-Verhalten mit dynamischem Zeilensprung & Randlinie (`ChatInputArea`)
+- **Einsatzbereiche**: Exklusiv für Freitext- und Notizfelder:
+  - **AI Chat Menü**: `#ai_chat_input` (AI-Prompteingabe mit Back-Button auf gleicher Höhe)
+  - **Aufgabe hinzufügen (`AddTaskModal`)**: `#inp_add_desc` (Beschreibung)
+  - **Prüfung hinzufügen (`AddExamModal`)**: `#inp_add_exam_topics` (Stoff / Themen)
+  - **Prüfungsdetails (`ExamDetailModal`)**: `#inp_exam_topics` (Stoff / Notizen)
+- **Dünne Randlinie rundherum**: Feine, geschlossene Randlinie (`border: solid #45475a`, bei Fokus hervorgehoben in `#89b4fa`; im OLED-Theme `#343331` bzw. `#58a6ff`), die das Schreibfeld sauber einrahmt, ohne den Text zu berühren oder zu überlappen.
+- **Feste 3-Zeilen-Tipphöhe**: Gesamthöhe `height: 5` (1 Zeile oberer Rand, 3 Zeilen Textinhalt, 1 Zeile unterer Rand).
+- **Zeilensprung & Zentrierung**:
+  - **1 Zeile (auch leer/Platzhalter)**: Text und Cursor starten vertikal zentriert in der mittleren Zeile (`padding: 1 1 1 1`).
+  - **2 Zeilen**: Zeile 1 springt in die obere Zeile, Zeile 2 wird in der mittleren Zeile getippt (`padding: 0 1 1 1`).
+  - **3 Zeilen**: Zeilen 1–3 füllen das Feld von oben nach unten (`padding: 0 1 0 1`).
+  - **> 3 Zeilen**: Das Schreiben verbleibt fix in der untersten Zeile, frühere Zeilen scrollen nach oben weg und die Scrollbar wird automatisch aktiv.
+- **Tastenbelegung**: `Enter` bestätigt/sendet das Formular (`Submitted`); `Shift+Enter` (sowie `Ctrl+Enter` / `Ctrl+J`) fügt einen Zeilenumbruch ein.
+- **Alle anderen Formularfelder**: Standardmäßige, 1-zeilige `Input`-Widgets (wie Titel, Fach, Datum, Uhrzeit, Lehrer, URLs, Credentials).
 
 | Shortcut | Aktion | Beschreibung |
 | :--- | :--- | :--- |

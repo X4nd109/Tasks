@@ -337,6 +337,70 @@ class TestUnifiedCommandPaletteDirectories(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(OLED_THEME.error, "#AF3029")
         self.assertEqual(OLED_THEME.success, "#66800B")
 
+    async def test_palette_tabs_layout_and_switch(self):
+        """UnifiedCommandPalette should have margin-top: 0 and fixed 3 tabs (Courses, Schoolbooks, Directories) with click support."""
+        from textual.app import App, ComposeResult
+        from tui_app import UnifiedCommandPalette
+
+        class PaletteTestApp(App):
+            def compose(self) -> ComposeResult:
+                yield from ()
+
+            def on_mount(self):
+                self.push_screen(UnifiedCommandPalette(initial_mode="courses"))
+
+        app = PaletteTestApp()
+        async with app.run_test() as pilot:
+            p = app.screen
+            container = p.query_one("#--container")
+            self.assertEqual(container.styles.margin.top, 0)
+
+            tab_courses = p.query_one("#palette-tab-courses")
+            tab_books = p.query_one("#palette-tab-books")
+            tab_dirs = p.query_one("#palette-tab-directories")
+
+            # Fixed positions: Courses (left), Schoolbooks (center), Directories (right)
+            self.assertEqual(str(tab_courses.content), "Courses")
+            self.assertEqual(str(tab_books.content), "Schoolbooks")
+            self.assertEqual(str(tab_dirs.content), "Directories")
+
+            # Initial: courses active
+            self.assertTrue(tab_courses.has_class("-active-courses"))
+            self.assertFalse(tab_books.has_class("-active-books"))
+            self.assertFalse(tab_dirs.has_class("-active-directories"))
+
+            # Switch mode (next -> books)
+            p.action_switch_mode()
+            self.assertEqual(p.active_mode, "books")
+            self.assertFalse(tab_courses.has_class("-active-courses"))
+            self.assertTrue(tab_books.has_class("-active-books"))
+            self.assertFalse(tab_dirs.has_class("-active-directories"))
+
+            # Switch mode (next -> directories)
+            p.action_switch_mode()
+            self.assertEqual(p.active_mode, "directories")
+            self.assertFalse(tab_courses.has_class("-active-courses"))
+            self.assertFalse(tab_books.has_class("-active-books"))
+            self.assertTrue(tab_dirs.has_class("-active-directories"))
+
+            # Click Courses tab directly
+            await pilot.click("#palette-tab-courses")
+            self.assertEqual(p.active_mode, "courses")
+            self.assertTrue(tab_courses.has_class("-active-courses"))
+            self.assertFalse(tab_books.has_class("-active-books"))
+            self.assertFalse(tab_dirs.has_class("-active-directories"))
+
+            # Click Schoolbooks tab directly
+            await pilot.click("#palette-tab-books")
+            self.assertEqual(p.active_mode, "books")
+            self.assertTrue(tab_books.has_class("-active-books"))
+
+            # Click Directories tab directly
+            await pilot.click("#palette-tab-directories")
+            self.assertEqual(p.active_mode, "directories")
+            self.assertTrue(tab_dirs.has_class("-active-directories"))
+
+
 
 if __name__ == "__main__":
     unittest.main()

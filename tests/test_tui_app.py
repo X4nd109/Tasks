@@ -2441,6 +2441,158 @@ class TestAufgabenDetectorTUI(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(app2.screen, SettingsModal)
 
 
+    async def test_ctrl_c_quits_app(self):
+        """Verifies that pressing Ctrl+C triggers action_quit_app when not inside an input field."""
+        app = AufgabenDetectorApp(self.mgr)
+        async with app.run_test(size=(120, 35)) as pilot:
+            # 1. On main table, pressing ctrl+c triggers exit
+            with patch.object(app, "exit") as mock_exit:
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                mock_exit.assert_called_once()
+
+            # 2. When an Input field is focused, pressing ctrl+c does NOT exit
+            from textual.widgets import Input
+            from tui_app import AddTaskModal
+            await app.push_screen(AddTaskModal())
+            await pilot.pause()
+            title_input = app.screen.query_one("#inp_add_title", Input)
+            title_input.focus()
+            await pilot.pause()
+
+            with patch.object(app, "exit") as mock_exit2:
+                # With text selected -> copy action, no app exit
+                title_input.value = "Test task title"
+                title_input.action_select_all()
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                mock_exit2.assert_not_called()
+
+                # Without selection in input -> still no app exit
+                title_input.cursor_position = 0
+                await pilot.press("ctrl+c")
+                await pilot.pause()
+                mock_exit2.assert_not_called()
+
+    async def test_table_column_sorting_and_persistent_ids(self):
+        """Verifies interactive column sorting, arrow visibility on all columns, and 1..N row numbering."""
+        import time
+        from core.models import Task
+        now = time.time()
+        t1 = Task(id="task_due_1d", platform="moodle", course="AMEC", course_full="AMEC",
+                  title="Task Alpha", due_date_str="Morgen", due_timestamp=now + 86400,
+                  status="open", status_display="Offen", url="https://moodle.spengergasse.at")
+        t2 = Task(id="task_due_5d", platform="teams", course="SWP", course_full="SWP",
+                  title="Task Beta", due_date_str="In 5 Tagen", due_timestamp=now + 432000,
+                  status="open", status_display="Offen", url="https://teams.microsoft.com")
+        t3 = Task(id="task_due_2d", platform="manual", course="BET", course_full="BET",
+                  title="Task Gamma", due_date_str="In 2 Tagen", due_timestamp=now + 172800,
+                  status="open", status_display="Offen", url="")
+
+        self.mgr.tasks = [t2, t1, t3]  # Unsorted input
+
+        app = AufgabenDetectorApp(self.mgr)
+        async with app.run_test(size=(120, 35)) as pilot:
+            dt = app.query_one("#tasks_table")
+
+            # 1. Startup: sorted by Due Date descending (Due Date ↓) with nearest due date first
+            col_key_due = list(dt.columns.keys())[4]
+            self.assertEqual(app.sort_column, "due_date")
+            self.assertEqual(app.sort_direction, "desc")
+            self.assertIn("Due Date ↓", dt.columns[col_key_due].label.plain)
+            self.assertEqual([t.id for t in app.current_tasks], ["task_due_1d", "task_due_2d", "task_due_5d"])
+
+            # Row numbers are always 1..N from top to bottom
+            self.assertEqual(str(dt.get_row_at(0)[0]).strip(), "1")
+            self.assertEqual(str(dt.get_row_at(1)[0]).strip(), "2")
+            self.assertEqual(str(dt.get_row_at(2)[0]).strip(), "3")
+
+            # 2. Click Due Date header -> Toggles to Ascending (Due Date ↑), furthest first
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_due, 4, dt.columns[col_key_due].label))
+            await pilot.pause()
+
+            self.assertEqual(app.sort_column, "due_date")
+            self.assertEqual(app.sort_direction, "asc")
+            self.assertIn("Due Date ↑", dt.columns[col_key_due].label.plain)
+            self.assertEqual([t.id for t in app.current_tasks], ["task_due_5d", "task_due_2d", "task_due_1d"])
+
+            # Row numbers STILL 1..N from top to bottom
+            self.assertEqual(str(dt.get_row_at(0)[0]).strip(), "1")
+            self.assertEqual(str(dt.get_row_at(1)[0]).strip(), "2")
+            self.assertEqual(str(dt.get_row_at(2)[0]).strip(), "3")
+
+            # Direct selection 1 opens top row (t2)
+            with patch.object(app, "_open_task_details") as mock_open:
+                app.action_select_task(1)
+                mock_open.assert_called_once_with(t2)
+
+            # 3. Click Platform header (col index 1) -> Platform ↑ (visible arrow!)
+            col_key_plat = list(dt.columns.keys())[1]
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_plat, 1, dt.columns[col_key_plat].label))
+            await pilot.pause()
+
+            self.assertEqual(app.sort_column, "platform")
+            self.assertEqual(app.sort_direction, "asc")
+            self.assertIn("Platform ↑", dt.columns[col_key_plat].label.plain)
+            self.assertGreaterEqual(dt.columns[col_key_plat].width, len("Platform ↑"))
+
+            # 4. Click Subject header (col index 2) -> Subject ↑ (visible arrow!)
+            col_key_subj = list(dt.columns.keys())[2]
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_subj, 2, dt.columns[col_key_subj].label))
+            await pilot.pause()
+
+            self.assertEqual(app.sort_column, "subject")
+            self.assertEqual(app.sort_direction, "asc")
+            self.assertIn("Subject ↑", dt.columns[col_key_subj].label.plain)
+            self.assertGreaterEqual(dt.columns[col_key_subj].width, len("Subject ↑"))
+            self.assertEqual([t.course for t in app.current_tasks], ["AMEC", "BET", "SWP"])
+
+            # 5. Click Teacher header (col index 6) -> Teacher ↑ (visible arrow!)
+            col_key_teach = list(dt.columns.keys())[6]
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_teach, 6, dt.columns[col_key_teach].label))
+            await pilot.pause()
+
+            self.assertEqual(app.sort_column, "teacher")
+            self.assertEqual(app.sort_direction, "asc")
+            self.assertIn("Teacher ↑", dt.columns[col_key_teach].label.plain)
+            self.assertGreaterEqual(dt.columns[col_key_teach].width, len("Teacher ↑"))
+
+            # 6. Click Assignment header (col index 3, non-sortable) -> ignored
+            col_key_assign = list(dt.columns.keys())[3]
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_assign, 3, dt.columns[col_key_assign].label))
+            await pilot.pause()
+            self.assertEqual(app.sort_column, "teacher")  # remains unchanged
+
+            # 7. Click # header (col index 0, non-sortable) -> ignored
+            col_key_idx = list(dt.columns.keys())[0]
+            dt.post_message(DataTable.HeaderSelected(dt, col_key_idx, 0, dt.columns[col_key_idx].label))
+            await pilot.pause()
+            self.assertEqual(app.sort_column, "teacher")  # remains unchanged
+
+    def test_tasks_data_table_hover_highlight(self):
+        """Verifies that TasksDataTable only highlights sortable column headers on hover."""
+        from tui_app import TasksDataTable
+        from textual.coordinate import Coordinate
+
+        dt = TasksDataTable(cursor_type="row")
+
+        # 1. Hover on sortable column: Subject (col 2)
+        hover_subj = Coordinate(-1, 2)
+        self.assertTrue(dt._should_highlight(hover_subj, Coordinate(-1, 2), "row"))
+        self.assertFalse(dt._should_highlight(hover_subj, Coordinate(-1, 1), "row"))
+        self.assertFalse(dt._should_highlight(hover_subj, Coordinate(-1, 3), "row"))
+
+        # 2. Hover on non-sortable column: Assignment (col 3) or # (col 0) -> never highlighted
+        hover_assign = Coordinate(-1, 3)
+        self.assertFalse(dt._should_highlight(hover_assign, Coordinate(-1, 3), "row"))
+        hover_idx = Coordinate(-1, 0)
+        self.assertFalse(dt._should_highlight(hover_idx, Coordinate(-1, 0), "row"))
+
+        # 3. Normal data rows highlight across row when cursor_type="row"
+        cursor_row1 = Coordinate(1, 0)
+        self.assertTrue(dt._should_highlight(cursor_row1, Coordinate(1, 4), "row"))
+        self.assertFalse(dt._should_highlight(cursor_row1, Coordinate(2, 4), "row"))
+
 if __name__ == "__main__":
     unittest.main()
 

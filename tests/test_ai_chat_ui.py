@@ -132,17 +132,21 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(inp)
             self.assertEqual(len(list(screen.query("#btn_ai_send"))), 0)
 
-            # Verify back button and its bottom-aligned container exist
+            # Verify back button and its container exist
             btn_box = screen.query_one("#ai_input_btn_box")
             self.assertIsNotNone(btn_box)
             back_btn = screen.query_one("#btn_ai_back", Button)
-            self.assertIn("Back", str(back_btn.label))
-
-            # Verify clear button exists directly to the left of back button in btn_box
-            clear_btn = screen.query_one("#btn_ai_clear_chat", Button)
-            self.assertEqual(str(clear_btn.label).strip(), "🗑️")
-            self.assertIn(clear_btn, btn_box.children)
+            self.assertEqual(str(back_btn.label).strip(), "↩️ Back")
+            self.assertEqual(back_btn.styles.height.value, 3)
+            self.assertEqual(back_btn.styles.min_width.value, 4)
             self.assertIn(back_btn, btn_box.children)
+
+            # Verify clear button labeled 'Clear' exists in top toolbar under task banner
+            toolbar = screen.query_one("#ai_chat_toolbar")
+            self.assertIsNotNone(toolbar)
+            clear_btn = screen.query_one("#btn_ai_clear_chat", Button)
+            self.assertEqual(str(clear_btn.label).strip(), "Clear")
+            self.assertIn(clear_btn, toolbar.children)
 
             # Verify input bar borders
             input_bar = screen.query_one("#ai_input_bar")
@@ -183,7 +187,7 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
                 mock_send.return_value = "Hier ist ein Schritt-für-Schritt Leitfaden..."
                 screen.action_send_message()
                 self.assertEqual(inp.value, "")  # Cleared after send
-                self.assertEqual(inp.styles.height.value, 1)  # Shrunk back to 1 line
+                self.assertEqual(inp.styles.height.value, 5)  # Fixed height: 5 (1 border top, 3 lines text, 1 border bottom)
 
             # Test clear action
             screen.action_clear_chat()
@@ -230,33 +234,42 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
         from tui_app import ChatInputArea
 
         class DummyApp(App):
+            CSS = "ChatInputArea { border: solid #45475a; height: 5; padding: 1 1 1 1; }"
             def compose(self):
                 yield ChatInputArea(id="test_inp")
 
         app = DummyApp()
         async with app.run_test() as pilot:
             inp = app.query_one(ChatInputArea)
-            self.assertEqual(inp.styles.height.value, 1)
+            # Starts fixed at 5 lines height with border, 3 lines typing space, 1 line text centered (padding 1 1 1 1)
+            self.assertEqual(inp.styles.height.value, 5)
+            self.assertEqual(inp.styles.padding, (1, 1, 1, 1))
+            self.assertFalse(inp.show_vertical_scrollbar)
 
-            # Shift+Enter inserts newline and height becomes 2
+            # Shift+Enter inserts newline (2 lines -> padding 0 1 1 1):
             await pilot.press("h", "i")
             await pilot.press("shift+enter")
             await pilot.press("t", "h", "e", "r", "e")
             await pilot.pause()
-            self.assertEqual(inp.styles.height.value, 2)
+            self.assertEqual(inp.styles.height.value, 5)
+            self.assertEqual(inp.styles.padding, (0, 1, 1, 1))
+            self.assertFalse(inp.show_vertical_scrollbar)
             self.assertIn("\n", inp.text)
 
-            # Another Shift+Enter increases height to 3
+            # Another Shift+Enter adds 3rd line (3 lines -> padding 0 1 0 1):
             await pilot.press("shift+enter")
             await pilot.press("l", "3")
             await pilot.pause()
-            self.assertEqual(inp.styles.height.value, 3)
+            self.assertEqual(inp.styles.height.value, 5)
+            self.assertEqual(inp.styles.padding, (0, 1, 0, 1))
+            self.assertFalse(inp.show_vertical_scrollbar)
 
-            # More lines keeps max height at 3 and enables scrollbar
+            # More lines keeps fixed height at 5 and enables scrollbar (4 lines -> padding 0 1 0 1, scrollbar True):
             await pilot.press("shift+enter")
             await pilot.press("l", "4")
             await pilot.pause()
-            self.assertEqual(inp.styles.height.value, 3)
+            self.assertEqual(inp.styles.height.value, 5)
+            self.assertEqual(inp.styles.padding, (0, 1, 0, 1))
             self.assertTrue(inp.show_vertical_scrollbar)
 
             # Test Windows hardware Shift fallback: enter key when physical shift is pressed

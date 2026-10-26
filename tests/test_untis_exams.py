@@ -595,8 +595,7 @@ class TestUntisExamsTUI(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIsInstance(app.screen, ExamsModal)
                 info_text = str(app.query_one("#info_stats", Label).render())
                 self.assertNotIn("Trash:", info_text)
-                self.assertIn("05.11", info_text)
-                self.assertIn("in 32d", info_text)
+                self.assertIn("Next: AMEC in 32d", info_text)
 
     async def test_untis_setup_modal_no_prefill_and_use_moodle_button(self):
         """Verifiziert, dass UntisSetupModal Schule und Benutzer nicht vorbefüllt und den Moodle-Button korrekt benennt."""

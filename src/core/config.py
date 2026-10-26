@@ -18,7 +18,7 @@ WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 GITHUB_REPO = "X4nd109/Tasks"
 
 

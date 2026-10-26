@@ -26,11 +26,19 @@ from textual.containers import Container, Horizontal, Vertical, VerticalScroll, 
 from textual import events
 from textual.events import Resize, MouseDown, Click
 from textual.geometry import Size
+from textual.coordinate import Coordinate
 from textual.reactive import reactive
 from textual.screen import Screen, ModalScreen
 from textual.widget import Widget
 from textual.message import Message
 from textual.widgets import Button, Checkbox, DataTable, Header, Input, Label, Markdown, Static, TextArea, LoadingIndicator, ProgressBar, Select
+try:
+    from core.task_manager import parse_deadline_for_sorting
+except ImportError:
+    try:
+        from src.core.task_manager import parse_deadline_for_sorting
+    except ImportError:
+        from task_manager import parse_deadline_for_sorting
 from textual.command import CommandPalette, Provider, DiscoveryHit, Hit, Hits, CommandInput, SearchIcon, CommandList
 try:
     from src.ui.range_slider import TwoThumbRangeSlider
@@ -419,6 +427,179 @@ def configure_enhanced_text_inputs() -> None:
 
 
 configure_enhanced_text_inputs()
+
+
+class ChatInputArea(TextArea):
+    """
+    3-line prompt and form input for the AI assistant and dialogs with vertical line centering & bottom scrolling:
+    - Sends message / submits on Enter
+    - Inserts newline on Shift+Enter (and Ctrl+J / Ctrl+Enter)
+    - Stays fixed at 3 lines typing height (height: 5 with thin solid border)
+    - Line 1: centered vertically in the middle row (padding: 1 1 1 1)
+    - Line 2: line 1 shifts to top row, line 2 is in the middle row (padding: 0 1 1 1)
+    - Line 3: lines 1, 2, 3 fill top, middle, bottom rows (padding: 0 1 0 1)
+    - Line > 3: user writes on the bottom row, earlier lines scroll up, vertical scrollbar appears
+    - Has .value property (get/set) for 100% compatibility with Textual Input
+    - Posts Input.Submitted(self, self.value) on Enter for 100% compatibility with modal handlers
+    """
+    _is_chat_input_area: bool = True
+
+    DEFAULT_CSS = """
+    ChatInputArea {
+        height: 5;
+        min-height: 5;
+        max-height: 5;
+        border: solid #45475a;
+        background: #1e1e2e;
+        color: #cdd6f4;
+        padding: 1 1 1 1;
+        scrollbar-size: 1 1;
+        scrollbar-color: #89b4fa #181825;
+    }
+    ChatInputArea:focus {
+        border: solid #89b4fa;
+    }
+    """
+
+    class Submitted(Message):
+        def __init__(self, value: str, input: Optional[Any] = None) -> None:
+            super().__init__()
+            self.value = value
+            self.input = input
+
+    def __init__(
+        self,
+        value: str = "",
+        placeholder: str = "",
+        text: str = "",
+        id: Optional[str] = None,
+        classes: Optional[str] = None,
+        disabled: bool = False,
+        tooltip: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        init_text = text if text else (value or "")
+        super().__init__(
+            text=init_text,
+            show_line_numbers=False,
+            soft_wrap=True,
+            placeholder=placeholder,
+            id=id,
+            classes=classes,
+            disabled=disabled,
+            tooltip=tooltip,
+            **kwargs,
+        )
+        self.styles.height = 5
+        self.styles.padding = (1, 1, 1, 1)
+
+    @property
+    def value(self) -> str:
+        return self.text
+
+    @value.setter
+    def value(self, v: str) -> None:
+        self.text = v or ""
+        self._update_line_layout()
+
+    def on_mount(self) -> None:
+        self._update_line_layout()
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        self._update_line_layout()
+        try:
+            self.post_message(Input.Changed(self, self.value))
+        except Exception:
+            pass
+
+    def _update_line_layout(self) -> None:
+        lines = 1
+        try:
+            if hasattr(self, "wrapped_document") and self.wrapped_document:
+                lines = max(1, self.wrapped_document.height)
+            elif hasattr(self, "document") and self.document:
+                lines = max(1, self.document.line_count)
+        except Exception:
+            lines = 1
+
+        self.styles.height = 5
+        if lines <= 1:
+            self.styles.padding = (1, 1, 1, 1)
+            self.show_vertical_scrollbar = False
+        elif lines == 2:
+            self.styles.padding = (0, 1, 1, 1)
+            self.show_vertical_scrollbar = False
+        elif lines == 3:
+            self.styles.padding = (0, 1, 0, 1)
+            self.show_vertical_scrollbar = False
+        else:
+            self.styles.padding = (0, 1, 0, 1)
+            self.show_vertical_scrollbar = True
+            try:
+                self.scroll_cursor_visible()
+            except Exception:
+                pass
+
+    def _update_height(self) -> None:
+        self._update_line_layout()
+
+    def on_key(self, event: events.Key) -> None:
+        key_name = (event.key or "").lower()
+        evt_name = (getattr(event, "name", "") or "").lower()
+        evt_aliases = [str(a).lower() for a in getattr(event, "aliases", [])]
+
+        is_shift = (
+            key_name in ("shift+enter", "shift+return", "ctrl+j", "ctrl+enter", "alt+enter", "shift+linefeed")
+            or "shift" in evt_name
+            or any("shift" in a for a in evt_aliases)
+            or ((key_name in ("enter", "return") or event.character in ("\n", "\r")) and is_shift_pressed_win32())
+        )
+        if is_shift:
+            event.prevent_default()
+            event.stop()
+            try:
+                if self.selected_text:
+                    self.replace("\n", self.selection.start, self.selection.end)
+                else:
+                    self.insert("\n")
+            except Exception:
+                self.insert("\n")
+            self._update_line_layout()
+        elif key_name in ("enter", "return"):
+            event.prevent_default()
+            event.stop()
+            val = self.text
+            self.post_message(self.Submitted(val, input=self))
+            self.post_message(Input.Submitted(self, val))
+
+
+AutoExpandingInput = ChatInputArea
+
+if not getattr(Input, "_chat_input_area_instancecheck_patched", False):
+    _orig_input_instancecheck = type(Input).__instancecheck__
+    _orig_input_subclasscheck = type(Input).__subclasscheck__
+
+    def _custom_input_instancecheck(cls, instance):
+        if (cls is Input or getattr(cls, "__name__", "") == "Input") and (
+            getattr(instance, "_is_chat_input_area", False)
+            or getattr(type(instance), "_is_chat_input_area", False)
+            or type(instance).__name__ == "ChatInputArea"
+        ):
+            return True
+        return _orig_input_instancecheck(cls, instance)
+
+    def _custom_input_subclasscheck(cls, subclass):
+        if (cls is Input or getattr(cls, "__name__", "") == "Input") and (
+            getattr(subclass, "_is_chat_input_area", False)
+            or getattr(subclass, "__name__", "") == "ChatInputArea"
+        ):
+            return True
+        return _orig_input_subclasscheck(cls, subclass)
+
+    type(Input).__instancecheck__ = _custom_input_instancecheck
+    type(Input).__subclasscheck__ = _custom_input_subclasscheck
+    Input._chat_input_area_instancecheck_patched = True
+
 
 try:
     from schoolbook_service import SchoolbookService
@@ -1169,7 +1350,7 @@ class AddTaskModal(ModalScreen[Optional[Task]]):
                 yield Label("Teacher (optional):", classes="add_label")
                 yield Input(placeholder="Auto-filled from Untis or e.g. BIM, WAW", id="inp_add_teacher", classes="add_input")
                 yield Label("Description (optional):", classes="add_label")
-                yield Input(placeholder="Optional details / instructions", id="inp_add_desc", classes="add_input")
+                yield ChatInputArea(placeholder="Optional details / instructions", id="inp_add_desc", classes="add_input")
                 yield Label("", id="add_status")
             with Horizontal(id="add_buttons"):
                 yield Button("💾 Save [Enter]", id="btn_add_save", variant="success")
@@ -2218,32 +2399,84 @@ UnifiedCommandInput._merged_bindings = UnifiedCommandInput._merge_bindings()
 class UnifiedCommandPalette(CommandPalette):
     """
     Erweiterte Befehlspalette für schnelles Öffnen von Kursen, Schulbüchern und Verzeichnissen.
-    Umschalten zwischen Kurse, Schulbücher und Verzeichnisse über die Tabulator-Taste.
-    Zeigt als Header nur das gerade aktive Menü an ('Courses' in Cyan, 'Schoolbooks' in Rot, 'Directories' in Grün).
+    Umschalten zwischen Kurse, Schulbücher und Verzeichnisse über die Tabulator-Taste (vorwärts),
+    Shift+Tab (rückwärts) oder per Mausklick auf die Tab-Boxen.
+    Zeigt die 3 Modi als Karussell an: [Vorheriger Tab] [AKTIVER TAB (Mitte)] [Nächster Tab].
     """
 
     current_mode: str = "courses"
+
+    MODE_ORDER = ["courses", "books", "directories"]
+    MODE_TITLES = {
+        "courses": "Courses",
+        "books": "Schoolbooks",
+        "directories": "Directories",
+    }
 
     DEFAULT_CSS = (
         CommandPalette.DEFAULT_CSS
         + "\n"
         + CommandPalette.DEFAULT_CSS.replace("CommandPalette", "UnifiedCommandPalette")
         + """
-        UnifiedCommandPalette #palette-mode-header {
+        UnifiedCommandPalette > Vertical {
+            margin-top: 0;
+        }
+        UnifiedCommandPalette #--container {
+            margin-top: 0;
+        }
+        UnifiedCommandPalette #palette-tabs-bar {
             visibility: visible;
             width: 100%;
             height: auto;
-            text-align: center;
+            align-horizontal: center;
             padding-top: 1;
             padding-bottom: 0;
+        }
+        UnifiedCommandPalette .palette-tab {
+            visibility: visible;
+            width: 18;
+            height: 1;
+            text-align: center;
             text-style: bold;
+            margin: 0 1;
+            background: #313244;
+            color: #6c7086;
+        }
+        UnifiedCommandPalette .palette-tab:hover {
+            color: #ffffff;
+            background: #45475a;
+        }
+        UnifiedCommandPalette .palette-tab.-active-courses {
+            background: #04a5e5;
+            color: #ffffff;
+        }
+        UnifiedCommandPalette .palette-tab.-active-courses:hover {
+            background: #04a5e5;
+            color: #ffffff;
+        }
+        UnifiedCommandPalette .palette-tab.-active-books {
+            background: #e64553;
+            color: #ffffff;
+        }
+        UnifiedCommandPalette .palette-tab.-active-books:hover {
+            background: #e64553;
+            color: #ffffff;
+        }
+        UnifiedCommandPalette .palette-tab.-active-directories {
+            background: #40a02b;
+            color: #ffffff;
+        }
+        UnifiedCommandPalette .palette-tab.-active-directories:hover {
+            background: #40a02b;
+            color: #ffffff;
         }
         """
     )
 
     BINDINGS = [
         *CommandPalette.BINDINGS,
-        Binding("tab", "switch_mode", "Modus wechseln", priority=True, show=False),
+        Binding("tab", "switch_mode", "Nächster Tab", priority=True, show=False),
+        Binding("shift+tab", "switch_mode_prev", "Vorheriger Tab", priority=True, show=False),
     ]
 
     def __init__(
@@ -2269,6 +2502,28 @@ class UnifiedCommandPalette(CommandPalette):
             except Exception:
                 pass
 
+    def on_click(self, event: events.Click) -> None:
+        if event.widget:
+            w_id = getattr(event.widget, "id", None)
+            if w_id == "palette-tab-courses":
+                self._set_mode("courses")
+                try:
+                    self.query_one(CommandInput).focus()
+                except Exception:
+                    pass
+            elif w_id == "palette-tab-books":
+                self._set_mode("books")
+                try:
+                    self.query_one(CommandInput).focus()
+                except Exception:
+                    pass
+            elif w_id == "palette-tab-directories":
+                self._set_mode("directories")
+                try:
+                    self.query_one(CommandInput).focus()
+                except Exception:
+                    pass
+
     def _get_header_text(self) -> str:
         if self.active_mode == "courses":
             return "[bold cyan]Courses[/bold cyan]"
@@ -2287,7 +2542,22 @@ class UnifiedCommandPalette(CommandPalette):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="--container"):
-            yield Static(self._get_header_text(), id="palette-mode-header")
+            with Horizontal(id="palette-tabs-bar"):
+                yield Static(
+                    "Courses",
+                    id="palette-tab-courses",
+                    classes="palette-tab" + (" -active-courses" if self.active_mode == "courses" else ""),
+                )
+                yield Static(
+                    "Schoolbooks",
+                    id="palette-tab-books",
+                    classes="palette-tab" + (" -active-books" if self.active_mode == "books" else ""),
+                )
+                yield Static(
+                    "Directories",
+                    id="palette-tab-directories",
+                    classes="palette-tab" + (" -active-directories" if self.active_mode == "directories" else ""),
+                )
             with Horizontal(id="--input"):
                 yield SearchIcon()
                 yield UnifiedCommandInput(placeholder=self._get_placeholder(), select_on_focus=False)
@@ -2297,23 +2567,31 @@ class UnifiedCommandPalette(CommandPalette):
                 yield CommandList()
                 yield LoadingIndicator()
 
-    def _update_header(self) -> None:
+    def _update_tabs(self) -> None:
         try:
-            hdr = self.query_one("#palette-mode-header", Static)
-            hdr.update(self._get_header_text())
+            tab_courses = self.query_one("#palette-tab-courses", Static)
+            tab_books = self.query_one("#palette-tab-books", Static)
+            tab_dirs = self.query_one("#palette-tab-directories", Static)
+
+            for tab in (tab_courses, tab_books, tab_dirs):
+                tab.remove_class("-active-courses", "-active-books", "-active-directories")
+
+            if self.active_mode == "courses":
+                tab_courses.add_class("-active-courses")
+            elif self.active_mode == "books":
+                tab_books.add_class("-active-books")
+            elif self.active_mode == "directories":
+                tab_dirs.add_class("-active-directories")
         except Exception:
             pass
 
-    def action_switch_mode(self) -> None:
-        """Wechselt zwischen Kurse, Schulbücher und Verzeichnisse, behält den eingegebenen Text und aktualisiert die Treffer."""
-        if self.active_mode == "courses":
-            self.active_mode = "books"
-        elif self.active_mode == "books":
-            self.active_mode = "directories"
-        else:
-            self.active_mode = "courses"
+    def _update_header(self) -> None:
+        self._update_tabs()
+
+    def _set_mode(self, mode: str) -> None:
+        self.active_mode = mode
         UnifiedCommandPalette.current_mode = self.active_mode
-        self._update_header()
+        self._update_tabs()
 
         try:
             inp = self.query_one(CommandInput)
@@ -2323,6 +2601,18 @@ class UnifiedCommandPalette(CommandPalette):
             self._gather_commands(inp.value)
         except Exception:
             pass
+
+    def action_switch_mode(self) -> None:
+        """Wechselt zum nächsten Modus (Courses -> Books -> Directories -> Courses), behält den eingegebenen Text und aktualisiert die Treffer."""
+        idx = self.MODE_ORDER.index(self.active_mode) if self.active_mode in self.MODE_ORDER else 0
+        next_mode = self.MODE_ORDER[(idx + 1) % len(self.MODE_ORDER)]
+        self._set_mode(next_mode)
+
+    def action_switch_mode_prev(self) -> None:
+        """Wechselt zum vorherigen Modus (rückwärts), behält den eingegebenen Text und aktualisiert die Treffer."""
+        idx = self.MODE_ORDER.index(self.active_mode) if self.active_mode in self.MODE_ORDER else 0
+        prev_mode = self.MODE_ORDER[(idx - 1) % len(self.MODE_ORDER)]
+        self._set_mode(prev_mode)
 
 
 class SchoolbookUrlModal(ModalScreen[Optional[dict]]):
@@ -5018,7 +5308,8 @@ class TeamsSetupModal(ModalScreen[bool]):
         align: center middle;
         margin-top: 1;
     }
-    #teams_2fa_input_row Input {
+    #teams_2fa_input_row Input,
+    #teams_2fa_input_row ChatInputArea {
         width: 28;
         margin-right: 1;
     }
@@ -6728,7 +7019,7 @@ class AddExamModal(ModalScreen[Optional[UntisExam]]):
                 yield Label("Room (optional):", classes="add_exam_label")
                 yield Input(placeholder="Auto-filled from Untis or e.g. C3.08", id="inp_add_exam_room", classes="add_exam_input")
                 yield Label("Exam Topics / Stoff (optional):", classes="add_exam_label")
-                yield Input(placeholder="e.g. Kapitel 1-3, SQL Queries", id="inp_add_exam_topics", classes="add_exam_input")
+                yield ChatInputArea(placeholder="e.g. Kapitel 1-3, SQL Queries", id="inp_add_exam_topics", classes="add_exam_input")
                 yield Label("", id="add_exam_status")
             with Horizontal(id="add_exam_buttons"):
                 yield Button("💾 Save [Enter]", id="btn_add_exam_save", variant="success")
@@ -7034,10 +7325,9 @@ class ExamDetailModal(ModalScreen[bool]):
         margin-bottom: 0;
     }
     #inp_exam_topics {
-        height: 7;
+        height: 3;
         margin-bottom: 1;
-        border: solid #45475a;
-        background: #11111b;
+        border: none;
     }
     #exam_detail_buttons {
         height: 3;
@@ -7098,7 +7388,7 @@ class ExamDetailModal(ModalScreen[bool]):
                     yield Label(f"ℹ️ Untis Note:   [white]{escape(self.exam.text)}[/]", classes="exam_meta_row")
 
             yield Label("✏️ Exam Topics / Notes:", classes="exam_section_label")
-            ta = TextArea(self.exam.custom_topics or "", id="inp_exam_topics", soft_wrap=True)
+            ta = ChatInputArea(value=self.exam.custom_topics or "", id="inp_exam_topics")
             yield ta
 
             is_custom = getattr(self.exam, "is_custom", False) or str(self.exam.id).startswith("custom_")
@@ -7518,88 +7808,6 @@ class ExamsScreen(Screen):
 ExamsModal = ExamsScreen
 
 
-class ChatInputArea(TextArea):
-    """
-    Auto-expanding single-to-multiline prompt input for the AI assistant.
-    - Sends message on Enter
-    - Inserts newline on Shift+Enter (and Ctrl+J / Ctrl+Enter)
-    - Dynamically expands from 1 to max 3 lines as text grows or soft-wraps
-    - Displays vertical scrollbar when content exceeds 3 lines
-    """
-    class Submitted(Message):
-        def __init__(self, value: str) -> None:
-            super().__init__()
-            self.value = value
-
-    def __init__(
-        self,
-        placeholder: str = "Ask a question about this assignment...",
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            text="",
-            show_line_numbers=False,
-            soft_wrap=True,
-            placeholder=placeholder,
-            **kwargs,
-        )
-
-    @property
-    def value(self) -> str:
-        return self.text
-
-    @value.setter
-    def value(self, v: str) -> None:
-        self.text = v or ""
-        self._update_height()
-
-    def on_mount(self) -> None:
-        self._update_height()
-
-    def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        self._update_height()
-
-    def _update_height(self) -> None:
-        lines = 1
-        try:
-            if hasattr(self, "wrapped_document") and self.wrapped_document:
-                lines = max(1, self.wrapped_document.height)
-            elif hasattr(self, "document") and self.document:
-                lines = max(1, self.document.line_count)
-        except Exception:
-            lines = 1
-        self.styles.height = min(3, max(1, lines))
-        self.show_vertical_scrollbar = (lines > 3)
-
-    def on_key(self, event: events.Key) -> None:
-        key_name = (event.key or "").lower()
-        evt_name = (getattr(event, "name", "") or "").lower()
-        evt_aliases = [str(a).lower() for a in getattr(event, "aliases", [])]
-
-        is_shift = (
-            key_name in ("shift+enter", "shift+return", "ctrl+j", "ctrl+enter", "alt+enter", "shift+linefeed")
-            or "shift" in evt_name
-            or any("shift" in a for a in evt_aliases)
-            or ((key_name in ("enter", "return") or event.character in ("\n", "\r")) and is_shift_pressed_win32())
-        )
-        if is_shift:
-            event.prevent_default()
-            event.stop()
-            try:
-                if self.selected_text:
-                    self.replace("\n", self.selection.start, self.selection.end)
-                else:
-                    self.insert("\n")
-            except Exception:
-                self.insert("\n")
-            self._update_height()
-        elif key_name in ("enter", "return"):
-            event.prevent_default()
-            event.stop()
-            val = self.text
-            self.post_message(self.Submitted(val))
-
-
 class AiChatScreen(Screen):
     """
     Interactive full-screen AI chat assistant with browser-style task tabs,
@@ -7737,59 +7945,69 @@ class AiChatScreen(Screen):
     }
     #ai_input_bar {
         dock: bottom;
-        height: auto;
-        min-height: 3;
-        max-height: 5;
+        height: 7;
+        min-height: 7;
+        max-height: 7;
         width: 100%;
         background: $panel;
         border-top: solid $border;
         border-bottom: solid $border;
         padding: 0 1;
+        align: left middle;
     }
     #ai_chat_input,
     ChatInputArea {
         width: 1fr;
-        height: 1;
-        min-height: 1;
-        max-height: 3;
-        border: none;
+        height: 5;
+        min-height: 5;
+        max-height: 5;
+        border: solid #45475a;
         background: $surface;
         color: $text;
-        padding: 0 1;
+        padding: 1 1 1 1;
         margin-right: 1;
         scrollbar-size: 1 1;
         scrollbar-color: $primary $panel;
     }
     #ai_chat_input:focus,
     ChatInputArea:focus {
-        border: none;
+        border: solid #89b4fa;
     }
     #ai_input_btn_box {
         width: auto;
-        height: 100%;
+        height: 5;
         align: right bottom;
     }
-    #btn_ai_clear_chat {
-        width: 4;
-        min-width: 4;
+    #ai_chat_toolbar {
         height: 1;
-        margin-right: 1;
+        min-height: 1;
+        max-height: 1;
+        width: 100%;
+        background: transparent;
+        align: right middle;
+        padding: 0;
+        margin: 0;
+    }
+    #btn_ai_clear_chat {
+        width: auto;
+        min-width: 9;
+        height: 1;
+        margin: 0;
         border: none;
         background: #e03131;
         color: #ffffff;
         content-align: center middle;
         text-align: center;
-        padding: 0;
+        padding: 0 1;
     }
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
     #btn_ai_back {
-        min-width: 14;
-        height: 1;
-        border: none;
-        background: $surface;
-        color: $text;
+        min-width: 4;
+        height: 3;
+        min-height: 3;
+        max-height: 3;
         content-align: center middle;
         text-align: center;
     }
@@ -7820,11 +8038,13 @@ class AiChatScreen(Screen):
         background: #000000;
         border-top: solid #343331;
         border-bottom: solid #343331;
-        height: auto;
+        height: 7;
+        min-height: 7;
+        max-height: 7;
     }
     .-theme-oled #ai_input_btn_box {
         width: auto;
-        height: 100%;
+        height: 5;
         align: right bottom;
     }
     .-theme-oled .ai_msg_user {
@@ -7870,42 +8090,54 @@ class AiChatScreen(Screen):
         background: #2868b2;
         color: #ffffff;
     }
+    .-theme-oled #ai_chat_toolbar {
+        background: #000000;
+        padding: 0;
+        margin: 0;
+    }
     .-theme-oled #btn_ai_clear_chat {
-        width: 4;
-        min-width: 4;
+        width: auto;
+        min-width: 9;
         height: 1;
-        margin-right: 1;
+        margin: 0;
         content-align: center middle;
         text-align: center;
         background: #e03131;
         color: #ffffff;
         border: none;
-        padding: 0;
+        padding: 0 1;
     }
     .-theme-oled #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
-    .-theme-oled #ai_chat_input,
     .-theme-oled ChatInputArea {
         background: #181816;
         color: #ffffff;
-        border: none;
-        height: 1;
-        min-height: 1;
-        max-height: 3;
+        border: solid #343331;
+        height: 5;
+        min-height: 5;
+        max-height: 5;
+        padding: 1 1 1 1;
         scrollbar-size: 1 1;
         scrollbar-color: #58a6ff #000000;
     }
-    .-theme-oled #ai_chat_input:focus,
     .-theme-oled ChatInputArea:focus {
-        border: none;
+        border: solid #58a6ff;
+    }
+    .-theme-oled #ai_chat_input {
+        width: 1fr;
+        margin-right: 1;
     }
     .-theme-oled #btn_ai_back {
         background: #282726;
         color: #ffffff;
         border: none;
-        height: 1;
+        height: 3;
+        min-height: 3;
+        max-height: 3;
+        min-width: 4;
         content-align: center middle;
+        text-align: center;
     }
     .-theme-oled #btn_ai_back:hover {
         background: #343331;
@@ -7952,14 +8184,16 @@ class AiChatScreen(Screen):
             yield Label("", id="ai_task_banner_title")
             yield Label("", id="ai_task_banner_meta")
 
+        with Horizontal(id="ai_chat_toolbar"):
+            yield Button("Clear", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
+
         with VerticalScroll(id="ai_chat_scroll"):
             yield Label("Select an assignment tab above to start.", classes="ai_empty_placeholder", id="ai_chat_empty_lbl")
 
         with Horizontal(id="ai_input_bar"):
             yield ChatInputArea(id="ai_chat_input", placeholder="Ask a question about this assignment...")
             with Horizontal(id="ai_input_btn_box"):
-                yield Button("🗑️", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
-                yield Button("↩️ Back [ESC]", id="btn_ai_back", variant="default")
+                yield Button("↩️ Back", id="btn_ai_back", variant="default", tooltip="Back to tasks [ESC]")
 
     def on_mount(self) -> None:
         try:
@@ -8427,6 +8661,25 @@ class SyncSpinner(Widget):
             self._timer = None
 
 
+class TasksDataTable(DataTable):
+    """DataTable for Tasks with column-specific header hover highlighting for sortable columns."""
+
+    def _should_highlight(self, cursor: Coordinate, target_cell: Coordinate, type_of_cursor: str) -> bool:
+        cursor_row, cursor_col = cursor
+        cell_row, cell_col = target_cell
+        if cell_row == -1:
+            if cursor_row == -1:
+                sortable_cols = {1, 2, 4, 5, 6}
+                return (cursor_col == cell_col) and (cell_col in sortable_cols)
+            return False
+        return super()._should_highlight(cursor, target_cell, type_of_cursor)
+
+    def watch_hover_coordinate(self, old: Coordinate, value: Coordinate) -> None:
+        super().watch_hover_coordinate(old, value)
+        if old.row == -1 or value.row == -1:
+            self.refresh_line(0)
+
+
 class TasksApp(App):
     """
     Hauptanwendung von Tasks mit moderner Terminal-TUI und Maus-Buttons.
@@ -8455,6 +8708,16 @@ class TasksApp(App):
 
     #tasks_table {
         height: 1fr;
+    }
+    #tasks_table > .datatable--header-hover {
+        background: $accent 30%;
+        color: $foreground;
+        text-style: bold;
+    }
+    .-theme-oled #tasks_table > .datatable--header-hover {
+        background: #1e1e2e;
+        color: #89b4fa;
+        text-style: bold;
     }
 
     #button_bar {
@@ -8696,58 +8959,69 @@ class TasksApp(App):
     }
     #ai_input_bar {
         dock: bottom;
-        height: auto;
-        min-height: 3;
-        max-height: 5;
+        height: 7;
+        min-height: 7;
+        max-height: 7;
         border-top: solid #313244;
         border-bottom: solid #313244;
         padding: 0 1;
+        align: left middle;
     }
-    #ai_chat_input,
     ChatInputArea {
-        width: 1fr;
-        height: 1;
-        min-height: 1;
-        max-height: 3;
-        border: none;
+        height: 5;
+        min-height: 5;
+        max-height: 5;
+        border: solid #45475a;
         background: #1e1e2e;
         color: #cdd6f4;
-        padding: 0 1;
-        margin-right: 1;
+        padding: 1 1 1 1;
         scrollbar-size: 1 1;
         scrollbar-color: #89b4fa #181825;
     }
-    #ai_chat_input:focus,
     ChatInputArea:focus {
-        border: none;
+        border: solid #89b4fa;
+    }
+    #ai_chat_input {
+        width: 1fr;
+        margin-right: 1;
     }
     #ai_input_btn_box {
         width: auto;
-        height: 100%;
+        height: 5;
         align: right bottom;
     }
-    #btn_ai_clear_chat {
-        width: 4;
-        min-width: 4;
+    #ai_chat_toolbar {
         height: 1;
-        margin-right: 1;
+        min-height: 1;
+        max-height: 1;
+        width: 100%;
+        background: transparent;
+        align: right middle;
+        padding: 0;
+        margin: 0;
+    }
+    #btn_ai_clear_chat {
+        width: auto;
+        min-width: 9;
+        height: 1;
+        margin: 0;
         border: none;
         background: #e03131;
         color: #ffffff;
         content-align: center middle;
         text-align: center;
-        padding: 0;
+        padding: 0 1;
     }
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
     #btn_ai_back {
-        min-width: 14;
-        height: 1;
-        border: none;
-        background: #313244;
-        color: #cdd6f4;
+        min-width: 4;
+        height: 3;
+        min-height: 3;
+        max-height: 3;
         content-align: center middle;
+        text-align: center;
     }
     #btn_ai_back:hover {
         background: #45475a;
@@ -8757,34 +9031,63 @@ class TasksApp(App):
         background: #000000;
         border-top: solid #343331;
         border-bottom: solid #343331;
-        height: auto;
+        height: 7;
+        min-height: 7;
+        max-height: 7;
     }
     .-theme-oled #ai_input_btn_box {
         width: auto;
-        height: 100%;
+        height: 5;
         align: right bottom;
     }
-    .-theme-oled #ai_chat_input,
+    .-theme-oled #ai_chat_toolbar {
+        background: #000000;
+        padding: 0;
+        margin: 0;
+    }
+    .-theme-oled #btn_ai_clear_chat {
+        width: auto;
+        min-width: 9;
+        height: 1;
+        margin: 0;
+        content-align: center middle;
+        text-align: center;
+        background: #e03131;
+        color: #ffffff;
+        border: none;
+        padding: 0 1;
+    }
+    .-theme-oled #btn_ai_clear_chat:hover {
+        background: #c92a2a;
+    }
     .-theme-oled ChatInputArea {
         background: #181816;
         color: #ffffff;
-        border: none;
-        height: 1;
-        min-height: 1;
-        max-height: 3;
+        border: solid #343331;
+        height: 5;
+        min-height: 5;
+        max-height: 5;
+        padding: 1 1 1 1;
         scrollbar-size: 1 1;
         scrollbar-color: #58a6ff #000000;
     }
-    .-theme-oled #ai_chat_input:focus,
     .-theme-oled ChatInputArea:focus {
-        border: none;
+        border: solid #58a6ff;
+    }
+    .-theme-oled #ai_chat_input {
+        width: 1fr;
+        margin-right: 1;
     }
     .-theme-oled #btn_ai_back {
         background: #282726;
         color: #ffffff;
         border: none;
-        height: 1;
+        height: 3;
+        min-height: 3;
+        max-height: 3;
+        min-width: 4;
         content-align: center middle;
+        text-align: center;
     }
     .-theme-oled #btn_ai_back:hover {
         background: #343331;
@@ -8824,6 +9127,22 @@ class TasksApp(App):
         background: #000000;
         border: thick #24837b;
     }
+    .-theme-oled UnifiedCommandPalette .palette-tab {
+        background: #141414;
+        color: #777777;
+    }
+    .-theme-oled UnifiedCommandPalette .palette-tab.-active-courses {
+        background: #04a5e5;
+        color: #ffffff;
+    }
+    .-theme-oled UnifiedCommandPalette .palette-tab.-active-books {
+        background: #e64553;
+        color: #ffffff;
+    }
+    .-theme-oled UnifiedCommandPalette .palette-tab.-active-directories {
+        background: #40a02b;
+        color: #ffffff;
+    }
     .-theme-oled CommandPalette #--container {
         background: #000000;
         border: thick #205ea6;
@@ -8854,6 +9173,7 @@ class TasksApp(App):
         Binding("ctrl+p", "change_theme", "Theme / Palette", show=False),
         Binding("m", "setup_moodle", "Moodle Setup", show=False),
         Binding("q", "quit_app", "Quit"),
+        Binding("ctrl+c", "quit_app", "Quit", show=False),
         # Direct selection 1-9
         Binding("1", "select_task(1)", "Task 1", show=False),
         Binding("2", "select_task(2)", "Task 2", show=False),
@@ -8900,6 +9220,9 @@ class TasksApp(App):
         self._mouse_listener_thread: Optional[threading.Thread] = None
         self._terminal_hwnd: Optional[int] = None
         self._last_sync_table_refresh: float = 0.0
+        self.sort_column: Optional[str] = "due_date"
+        self.sort_direction: str = "desc"
+        self._task_fixed_ids_map: Dict[int, Task] = {}
 
         # Theme initialisieren & nur die erlaubten Themes behalten
         self.register_theme(OLED_THEME)
@@ -8918,7 +9241,7 @@ class TasksApp(App):
         with Horizontal(id="info_bar"):
             yield Label("Loading statistics...", id="info_stats")
             yield SyncSpinner(id="sync_spinner")
-        dt = DataTable(id="tasks_table", cursor_type="row")
+        dt = TasksDataTable(id="tasks_table", cursor_type="row")
         yield dt
         with Horizontal(id="button_bar"):
             yield Button("📋 Absences", id="btn_main_absences", variant="primary", tooltip="Untis absences [U]")
@@ -8929,7 +9252,7 @@ class TasksApp(App):
                 yield Button("🔄 Sync", id="btn_main_sync", variant="success", tooltip="Synchronize assignments [R]")
                 yield Button("🔍 Filter", id="btn_main_filter", variant="primary", tooltip="Filter assignments [F]")
                 yield Button("⚙️ Settings", id="btn_main_settings", variant="default", tooltip="Settings & theme [O]")
-            yield Button("❌ Exit", id="btn_main_quit", variant="error", tooltip="Exit [Q]")
+            yield Button("❌ Exit", id="btn_main_quit", variant="error", tooltip="Exit [Q / Ctrl+C]")
 
 
     def on_mount(self) -> None:
@@ -9043,6 +9366,52 @@ class TasksApp(App):
             timeframe_filter=self.timeframe_filter,
         )
 
+        # Sortierung anwenden
+        if self.sort_column:
+            if self.sort_column == "due_date":
+                def due_key(t: Task) -> tuple:
+                    is_done = 1 if getattr(t, "is_completed", False) else 0
+                    is_welcome = 0 if getattr(t, "id", "") == "manual_welcome_setup_guide" else 1
+                    is_over = 0 if getattr(t, "is_overdue", False) else 1
+                    ts = getattr(t, "due_timestamp", None)
+                    if ts is None or ts <= 0:
+                        ts = parse_deadline_for_sorting(getattr(t, "due_date_str", ""))
+                    if self.sort_direction == "desc":
+                        # Due Date ↓: Nächste Fälligkeit zuerst oben
+                        val = ts if (ts and ts > 0) else time.time() + 9999999
+                        return (is_done, is_welcome, is_over, val)
+                    else:
+                        # Due Date ↑: Späteste Fälligkeit zuerst oben
+                        val = -ts if (ts and ts > 0) else float('inf')
+                        return (is_done, is_welcome, is_over, val)
+                self.current_tasks.sort(key=due_key)
+            elif self.sort_column == "platform":
+                reverse = (self.sort_direction == "desc")
+                self.current_tasks.sort(
+                    key=lambda t: (1 if t.is_completed else 0, (t.platform or "").lower()),
+                    reverse=reverse,
+                )
+            elif self.sort_column == "subject":
+                reverse = (self.sort_direction == "desc")
+                self.current_tasks.sort(
+                    key=lambda t: (1 if t.is_completed else 0, (t.course or "").lower()),
+                    reverse=reverse,
+                )
+            elif self.sort_column == "status":
+                reverse = (self.sort_direction == "desc")
+                self.current_tasks.sort(
+                    key=lambda t: format_status_english(t).lower(),
+                    reverse=reverse,
+                )
+            elif self.sort_column == "teacher":
+                reverse = (self.sort_direction == "desc")
+                def teacher_key(t):
+                    is_done = 1 if t.is_completed else 0
+                    tch = (getattr(t, "teacher", None) or "").strip()
+                    val = tch.lower() if tch and tch != "-" else ("zzzz" if not reverse else "")
+                    return (is_done, val)
+                self.current_tasks.sort(key=teacher_key, reverse=reverse)
+
         try:
             from services.ai_chat_service import cleanup_ai_chats_cache
             all_m_tasks = getattr(self.mgr, "tasks", [])
@@ -9071,34 +9440,25 @@ class TasksApp(App):
 
         if avail_content < 76:
             w_idx = 2
-            w_plat = 8
-            w_subj = 4
+            w_plat = 10 if self.sort_column == "platform" else 8
+            w_subj = 9 if self.sort_column == "subject" else 4
             w_stat = 8
-            w_teach = 7  # Garantiert min. 7 Zeichen, damit "Teacher" niemals zu "Teache" gekürzt wird
-            # In schmalen Fenstern Assignment mindestens 21 geben, damit Aufgabentitel lesbar bleiben
+            w_teach = 9 if self.sort_column == "teacher" else 7
             w_assign = min(22, max(21, int(avail_content * 0.35)))
             w_due = max(9, avail_content - (w_idx + w_plat + w_subj + w_stat + w_teach + w_assign))
             w_assign = avail_content - (w_idx + w_plat + w_subj + w_due + w_stat + w_teach)
             col_widths = [w_idx, w_plat, w_subj, w_assign, w_due, w_stat, w_teach]
         else:
-            # Priorisierte Spaltenverteilung:
-            # - Teacher: min. 8 (oder 7 bei extrem kleinen Fenstern), Header "Teacher" und Kürzel voll sichtbar
-            # - Due Date: min. 28 (bis zu 32 bei breiten Bildschirmen), vollständiges Datum ohne "..."
-            # - Status: 11 ("✓ Completed")
-            # - Subject: 8 (bis zu 10)
-            # - Platform: 9 ("🟧 Moodle")
-            # - #: 3
-            # - Assignment: nimmt den gesamten restlichen Raum ein (wird zuerst gekürzt)
             w_idx = 3
-            w_plat = 9
-            w_subj = 8
-            w_due = 28
-            w_stat = 11
-            w_teach = 8
-            fixed_sum = w_idx + w_plat + w_subj + w_due + w_stat + w_teach  # 67
+            w_plat = 10  # "Platform ↑" = 10 Zeichen
+            w_subj = 9   # "Subject ↑" = 9 Zeichen
+            w_due = 28   # "Due Date ↑" = 10 Zeichen, Daten min. 28
+            w_stat = 11  # "Status ↑" = 8 Zeichen, "✓ Completed" = 11
+            w_teach = 9  # "Teacher ↑" = 9 Zeichen, min. 8 für Teacher-Kürzel
+            fixed_sum = w_idx + w_plat + w_subj + w_due + w_stat + w_teach  # 70
 
-            if avail_content >= fixed_sum + 20:
-                extra = avail_content - (fixed_sum + 20)
+            if avail_content >= fixed_sum + 17:
+                extra = avail_content - (fixed_sum + 17)
                 add_due = min(4, int(extra * 0.15))
                 add_teach = min(2, int(extra * 0.05))
                 add_subj = min(2, int(extra * 0.05))
@@ -9107,20 +9467,30 @@ class TasksApp(App):
                 w_subj += add_subj
                 w_assign = avail_content - (w_idx + w_plat + w_subj + w_due + w_stat + w_teach)
             else:
-                # Leicht verkleinertes Fenster (76 bis 86 Spalten):
-                # Halte Assignment auf min. 21, w_teach auf 8, Rest für w_due
                 w_subj = 7
+                w_teach = 8
                 w_assign = max(21, avail_content - (w_idx + w_plat + w_subj + 20 + w_stat + w_teach))
                 w_due = max(16, avail_content - (w_idx + w_plat + w_subj + w_stat + w_teach + w_assign))
                 w_assign = avail_content - (w_idx + w_plat + w_subj + w_due + w_stat + w_teach)
 
             col_widths = [w_idx, w_plat, w_subj, w_assign, w_due, w_stat, w_teach]
 
-        # Spaltenbreiten der DataTable fest zuweisen, um den Leerraum rechts vollständig zu schließen
+        # Spaltenbreiten der DataTable fest zuweisen und Sortierpfeile im Header aktualisieren
+        base_labels = ["#", "Platform", "Subject", "Assignment", "Due Date", "Status", "Teacher"]
+        col_names = [None, "platform", "subject", None, "due_date", "status", "teacher"]
         if dt.columns:
-            for col_obj, w in zip(dt.columns.values(), col_widths):
+            arrow = " ↑" if self.sort_direction == "asc" else " ↓"
+            for idx, (col_obj, w) in enumerate(zip(dt.columns.values(), col_widths)):
+                if idx < len(base_labels):
+                    base_lbl = base_labels[idx]
+                    cname = col_names[idx]
+                    if cname and self.sort_column == cname:
+                        col_obj.label = Text(f"{base_lbl}{arrow}")
+                    else:
+                        col_obj.label = Text(base_lbl)
                 col_obj.width = w
                 col_obj.auto_width = False
+            dt._clear_caches()
 
         max_title_len = col_widths[3]
         max_course_len = col_widths[2]
@@ -9244,34 +9614,25 @@ class TasksApp(App):
             open_cnt = len(open_tasks)
             total_visible = len(visible_tasks)
 
+            badges = []
+
+            # 1. To Do / Status Badge
             if self.status_filter in ["completed", "abgegeben", "erledigt", "done"]:
                 comp_cnt = len([t for t in visible_tasks if t.is_completed])
-                todo_badge = f"📋 Done: [bold green]{comp_cnt} completed[/bold green]"
+                txt = f" Done: {comp_cnt} completed "
+                badges.append((txt, f"[bold white on #40a02b]{txt}[/]"))
             elif self.status_filter in ["overdue", "ueberfaellig", "überfällig"]:
-                todo_badge = f"📋 Overdue: [bold red]{total_visible} overdue![/bold red]"
+                txt = f" Overdue: {total_visible} overdue! "
+                badges.append((txt, f"[bold white on #d20f39]{txt}[/]"))
             elif overdue_cnt > 0:
-                todo_badge = f"📋 To Do: [bold red]{open_cnt} open[/bold red] ([bold red]{overdue_cnt} overdue![/bold red])"
+                txt = f" To Do: {open_cnt} open ({overdue_cnt} overdue!) "
+                badges.append((txt, f"[bold white on #d20f39]{txt}[/]"))
             elif open_cnt > 0:
-                todo_badge = f"📋 To Do: [bold yellow]{open_cnt} open[/bold yellow]"
+                txt = f" To Do: {open_cnt} open "
+                badges.append((txt, f"[bold #11111b on #fab387]{txt}[/]"))
             else:
-                todo_badge = "📋 To Do: [bold green]0 open[/bold green]"
-
-            sync_time_str = "Never"
-            if self.mgr.last_sync:
-                try:
-                    sync_time_str = time.strftime("%H:%M:%S", time.localtime(float(self.mgr.last_sync)))
-                except Exception:
-                    sync_time_str = str(self.mgr.last_sync)
-
-            next_exam = get_next_upcoming_exam()
-            exam_badge = ""
-            if next_exam:
-                try:
-                    _ndt = datetime.datetime.strptime(next_exam.date, "%Y-%m-%d").date()
-                    next_date_short = f"{_ndt.day:02d}.{_ndt.month:02d}."
-                except Exception:
-                    next_date_short = next_exam.date_display
-                exam_badge = f"📝 Next: [bold dodger_blue1]{next_date_short} {next_exam.subject}[/bold dodger_blue1] [bold green]{next_exam.countdown_display}[/bold green]"
+                txt = " To Do: 0 open "
+                badges.append((txt, f"[bold white on #40a02b]{txt}[/]"))
 
             if term_w_override is not None and term_w_override > 0:
                 term_w = term_w_override
@@ -9281,24 +9642,74 @@ class TasksApp(App):
                 except Exception:
                     term_w = 121
 
-            parts = [todo_badge]
-            if term_w >= 118 or moodle_cnt > 0:
-                parts.append(f"🎓 Moodle: {moodle_cnt}")
-            if term_w >= 118 or teams_cnt > 0:
-                parts.append(f"👥 Teams: {teams_cnt}")
-            if term_w >= 118 or manual_cnt > 0:
-                parts.append(f"✏️ Manual: {manual_cnt}")
+            # 2. Platform Badges
+            if term_w >= 80 or moodle_cnt > 0:
+                txt = f" Moodle: {moodle_cnt} "
+                badges.append((txt, f"[bold white on #fe640b]{txt}[/]"))
+            if term_w >= 80 or teams_cnt > 0:
+                txt = f" Teams: {teams_cnt} "
+                badges.append((txt, f"[bold white on #1e66f5]{txt}[/]"))
+            if term_w >= 80 or manual_cnt > 0:
+                txt = f" Manual: {manual_cnt} "
+                badges.append((txt, f"[bold white on #40a02b]{txt}[/]"))
 
-            if exam_badge:
-                parts.append(exam_badge)
+            # 3. Next Exam Badge (Next: [Fach] in [Tage]d)
+            next_exam = get_next_upcoming_exam()
+            if next_exam and term_w >= 85:
+                cd = next_exam.countdown_display
+                txt = f" Next: {next_exam.subject} {cd} "
+                badges.append((txt, f"[bold white on #8839ef]{txt}[/]"))
 
-            parts.append(f"🕒 Sync: {sync_time_str}")
+            # 4. Sync Badge (Shows time of last sync)
+            sync_time_str = "Never"
+            if self.mgr.last_sync:
+                try:
+                    ts = float(self.mgr.last_sync)
+                    sync_date = datetime.datetime.fromtimestamp(ts).date()
+                    today = datetime.date.today()
+                    if sync_date == today:
+                        sync_time_str = time.strftime("%H:%M", time.localtime(ts))
+                    else:
+                        sync_time_str = time.strftime("%d.%m. %H:%M", time.localtime(ts))
+                except Exception:
+                    sync_time_str = str(self.mgr.last_sync)
+            txt = f" Sync: {sync_time_str} "
+            badges.append((txt, f"[bold #cdd6f4 on #45475a]{txt}[/]"))
 
-            sep = "  |  " if term_w >= 122 and not (next_exam and term_w < 135) else " | "
-            stats_text = sep.join(parts)
+            # Directly adjacent badges, centered as a single group across available width
+            sep = " "
+            total_len = sum(len(plain) for plain, _ in badges) + len(sep) * (len(badges) - 1)
+            avail_w = max(30, term_w - 4)
+            left_pad = max(0, (avail_w - total_len) // 2)
+
+            stats_text = (" " * left_pad) + sep.join(markup for _, markup in badges)
             self.query_one("#info_stats", Label).update(stats_text)
         except Exception:
             pass
+
+    def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
+        """Handles clicking on a sortable column header to sort ascending/descending."""
+        if event.data_table.id != "tasks_table":
+            return
+        col_idx = event.column_index
+        col_map = {
+            1: "platform",
+            2: "subject",
+            4: "due_date",
+            5: "status",
+            6: "teacher",
+        }
+        col_name = col_map.get(col_idx)
+        if not col_name:
+            return  # Column # (0) and Assignment (3) are non-sortable
+
+        if self.sort_column == col_name:
+            self.sort_direction = "asc" if self.sort_direction == "desc" else "desc"
+        else:
+            self.sort_column = col_name
+            self.sort_direction = "desc" if col_name == "due_date" else "asc"
+
+        self.refresh_table()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         """Click with mouse or ENTER on a row opens details view."""
@@ -9353,7 +9764,7 @@ class TasksApp(App):
         elif bid in ("btn_main_theme", "btn_main_palette"):
             self.action_change_theme()
         elif bid == "btn_main_quit":
-            self.action_quit_app()
+            self.action_quit_app(force=True)
 
     # --- Actions (callable via mouse & keyboard) ---
 
@@ -10009,7 +10420,11 @@ class TasksApp(App):
         if hasattr(self, "theme") and self.theme in ALLOWED_THEMES:
             save_saved_theme(self.theme)
 
-    def action_quit_app(self) -> None:
+    def action_quit_app(self, force: bool = False) -> None:
+        if not force:
+            focused = self.focused
+            if focused is not None and (isinstance(focused, (Input, TextArea)) or getattr(focused, "selected_text", None)):
+                return
         self._stop_mouse_listener.set()
         if hasattr(self, "mgr"):
             self.mgr.shutdown()
