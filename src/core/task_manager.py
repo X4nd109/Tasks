@@ -13,10 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, List, Optional, Tuple
 
 
-from config import CACHE_FILE, DELETED_TASKS_FILE, APP_DELETED_TASKS_FILE, DELETED_MANUAL_TASKS_FILE, APP_DELETED_MANUAL_TASKS_FILE, HIDDEN_TASKS_FILE, APP_HIDDEN_TASKS_FILE, CUSTOM_TASKS_FILE, APP_CUSTOM_TASKS_FILE, extract_teacher, is_platform_enabled
+from config import CACHE_FILE, DELETED_TASKS_FILE, APP_DELETED_TASKS_FILE, DELETED_MANUAL_TASKS_FILE, APP_DELETED_MANUAL_TASKS_FILE, HIDDEN_TASKS_FILE, APP_HIDDEN_TASKS_FILE, CUSTOM_TASKS_FILE, APP_CUSTOM_TASKS_FILE, extract_teacher, is_platform_enabled, set_shutting_down, is_shutting_down
 from models import Task
-import moodle_service
-import teams_service
 
 
 def parse_deadline_for_sorting(due_str: str) -> float:
@@ -627,10 +625,13 @@ class TaskManager:
     def shutdown(self):
         """Beendet Hintergrund-Aktivitäten sauber beim Beenden der Anwendung."""
         self._is_shutting_down = True
+        set_shutting_down()
         self.stop_background_prefetch()
 
     def _prefetch_worker(self):
         """Prefetch-Worker für schnellen, ressourcenschonenden HTTP-Hintergrundabruf von Moodle-Details."""
+        import moodle_service
+
         # Kurze Pause für UI-Start (unterbrechbar)
         for _ in range(10):
             if self._stop_prefetch or getattr(self, "_is_shutting_down", False):
@@ -741,6 +742,9 @@ class TaskManager:
         Gibt (Anzahl Moodle, Anzahl Teams) zurück.
         on_batch_complete wird sofort aufgerufen, sobald eine Plattform fertig ist (z.B. Moodle nach 3s).
         """
+        import moodle_service
+        import teams_service
+
         self.stop_background_prefetch()
 
         # Parallele Ausführung von Moodle- und Teams-Sync
@@ -796,7 +800,9 @@ class TaskManager:
                     on_progress(f"Teams completed ({len(res)} assignments).")
                 return res
             except Exception as e:
-                print(f"Teams sync error: {e}", file=sys.stderr)
+                err_msg = str(e).lower()
+                if not is_shutting_down() and "target page, context or browser has been closed" not in err_msg and "targetclosederror" not in type(e).__name__.lower():
+                    print(f"Teams sync error: {e}", file=sys.stderr)
                 teams_ok = False
                 return []
 
@@ -891,6 +897,9 @@ class TaskManager:
 
     def load_task_details(self, task: Task, on_progress=None) -> Task:
         """Loads details for a specific task if not loaded yet."""
+        import moodle_service
+        import teams_service
+
         if task.details_loaded:
             return task
 
@@ -918,6 +927,9 @@ class TaskManager:
 
     def download_task_files(self, task: Task, dest_dir: Optional[str] = None, on_progress=None) -> List[str]:
         """Downloads all attachments and assignment details to folder."""
+        import moodle_service
+        import teams_service
+
         self.load_task_details(task, on_progress=on_progress)
 
         if on_progress:

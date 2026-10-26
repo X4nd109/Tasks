@@ -9,6 +9,25 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-26
+
+### Changed
+- **Startup-Performance & Lazy Loading (ca. 700–900ms schnellere Startzeit) & Launch-Hinweis**:
+  - `main.py` / `src/main.py`: Gibt beim Start der interaktiven TUI (z.B. via `tasks` oder `python main.py`) unmittelbar `"Launching TUI..."` ins Terminal aus, bevor Textual den Vollbildmodus initialisiert. Startet bei Aufruf ohne Argumente (`len(sys.argv) == 1`) direkt `run_tui()` ohne Umweg über den CLI-Argparser und redundante Vorabprüfungen.
+  - `src/main.py`: Synchronen Aufruf von `clean_browser_profile_caches()` im Hauptthread entfernt (wird bereits asynchron im Hintergrund von `tui_app.py` ausgeführt). Top-Level-Imports von `ui`, `Prompt`, `TaskManager` und `Task` in die jeweiligen CLI-Pfade verlagert.
+  - `src/core/task_manager.py`: Statische Imports von `moodle_service` und `teams_service` entfernt und lokal in `sync()`, `_prefetch_worker()`, `load_task_details()` und `download_task_files()` verschoben. Importzeit von `task_manager` sank von 421 ms auf 22 ms (-95%).
+  - `src/core/auth.py`: Statischen Playwright-Import (`sync_playwright`) entfernt und on-demand in den interaktiven Teams-Logins platziert.
+  - `src/ui/tui_app.py`: `import ui` entfernt und durch direktes `webbrowser.open()` ersetzt; Modal-Imports für `auth`, `SchoolbookService`, `DirectoryService` und `check_for_updates` auf bedarfsgerechtes Lazy-Loading umgestellt.
+
+### Fixed
+- **Sauberes Beenden bei aktivem Aufgaben-Sync (Unterdrückung von TargetClosedError & Asyncio-Meldungen)**:
+  - `src/core/config.py`: Globales Flag `_IS_SHUTTING_DOWN` mit `set_shutting_down()` und `is_shutting_down()` eingeführt; `close_all_active_browser_contexts()` setzt dieses Flag automatisch.
+  - `src/services/teams_service.py`: Warteschleifen brechen bei gesetztem Shutdown-Flag sofort ab; `TargetClosedError` ("Target page, context or browser has been closed") und Fehler während des App-Beendens werden nicht mehr auf `sys.stderr` ausgegeben.
+  - `src/core/task_manager.py`: `shutdown()` ruft `set_shutting_down()` auf; `sync()` unterdrückt Fehlermeldungen bei Shutdown/abgebrochenen Browserkontexten.
+  - `src/ui/tui_app.py`: Hintergrund-Sync-Thread wird referenziert (`self._sync_thread`) und beim Beenden mit bis zu 0.5s Timeout gejoint (`join(timeout=0.5)`). Asyncio-Logger-Filter `_PlaywrightShutdownFilter` und `sys.unraisablehook` unterdrücken verwaiste `TargetClosedError`-Futures und zerstörte `BrowserContext.close()`-Pending-Tasks.
+  - `src/ui/tui_app.py`: `RuntimeError: App is not running` in `SyncWorker` (wenn der Nutzer während des Syncs `Strg + C` drückt) wird sauber abgefangen; gibt stattdessen genau einmal `"Sync not Complete"` im Terminal aus.
+  - Unittest-Suite `tests/test_teams_shutdown.py` auf 7 Tests erweitert.
+
 ## [2.1.0] - 2026-10-26
 
 ### Added

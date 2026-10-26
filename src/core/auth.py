@@ -13,7 +13,6 @@ import urllib.parse
 import re
 import requests
 from typing import Optional, Tuple, Dict
-from playwright.sync_api import sync_playwright
 
 try:
     import msvcrt
@@ -570,6 +569,8 @@ def check_teams_session() -> bool:
 
 def test_teams_session_live() -> bool:
     """Prüft im Headless-Modus (ohne sichtbares Fenster), ob die Teams-Sitzung gültig ist."""
+    from playwright.sync_api import sync_playwright
+
     if not os.path.exists(TEAMS_PROFILE_DIR):
         return False
     try:
@@ -670,6 +671,8 @@ def setup_teams_interactive(console=None, fresh: bool = False, email: Optional[s
     - Supports Passkeys (Windows Hello, FIDO2, Security Keys) directly in the opened browser.
     - Automatically detects login, confirms dialogs across all frames, and saves the session.
     """
+    from playwright.sync_api import sync_playwright
+
     session_exists = check_teams_session() or (
         os.path.exists(TEAMS_PROFILE_DIR) and len(os.listdir(TEAMS_PROFILE_DIR)) > 5
     )
@@ -981,6 +984,8 @@ def login_teams_direct(
     Unterstützt 2FA (Authenticator Number Matching oder SMS-Code) über Callbacks.
     Speichert bei Erfolg die Sitzung dauerhaft im Profil ab.
     """
+    from playwright.sync_api import sync_playwright
+
     email = email.strip()
     password = password.strip()
     if not email or not password:

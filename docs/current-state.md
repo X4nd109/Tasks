@@ -1,11 +1,24 @@
 # Current Project State & Session Handoff — Tasks
 
 > **Last Updated**: 2026-10-26  
-> **Active Milestone**: Release v2.1.0 (Released) — AI Chat & Form Input 3-Line Overhaul, Tests-Matching Back Button, Interactive Table Sorting & Statusbar Pills
+> **Active Milestone**: Release v2.1.1 (Released) — Startup-Performance & Lazy Loading, Sauberes Beenden bei aktivem Sync & Launch-Hinweis
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Startup-Performance & Lazy Loading (2026-10-26)**:
+  - **Problem**: Der Programmstart benötigte vorher ca. 2,0 Sekunden, bedingt durch statische Vorab-Imports schwerer Bibliotheken (`moodle_service`, `teams_service`, `playwright`, `ui.py`), doppelte Initialisierungen und synchrones Cache-Cleanup auf dem Main-Thread.
+  - **Direkter TUI-Einstieg (`main.py`)**: Bei Start ohne CLI-Parameter wird die TUI unmittelbar über `from tui_app import run_tui` geöffnet. Dadurch entfällt der Overhead des CLI-Parsers und doppelter Dependency-Checks.
+  - **Lazy Imports (`task_manager.py` & `auth.py`)**: `moodle_service` und `teams_service` werden erst geladen, wenn eine echte Synchronisation oder Detailansicht stattfindet. `task_manager`-Importzeit sank von 421 ms auf 22 ms (-95%). `playwright` wird in `auth.py` nur noch bei interaktiven Teams-Logins importiert.
+  - **Asynchrones Cleanup & schlankes TUI-Modul (`tui_app.py`, `src/main.py`)**: Synchrones `clean_browser_profile_caches()` aus dem Main-Thread entfernt (wird im Hintergrund-Thread ausgeführt). `import ui` aus `tui_app.py` entfernt und durch `webbrowser.open()` ersetzt. Services (`SchoolbookService`, `DirectoryService`, `check_for_updates`) werden erst beim Aufruf der jeweiligen Dialoge geladen.
+  - **Ergebnis & Tests**: Startzeit um ca. 700–900 ms gesenkt (`python main.py --help` von ~1.2s auf 308 ms). Alle 426 Tests der Gesamtsuite mit 100% Erfolg bestanden.
+
+- [x] **Sauberes Beenden bei aktivem Aufgaben-Sync & "Sync not Complete" (2026-10-26)**:
+  - **Problem**: Wenn der Nutzer die TUI verlässt während im Hintergrund Aufgaben über Microsoft Teams / Playwright synchronisiert werden, führte das Schließen der Browser-Kontexte zu `TargetClosedError` auf `sys.stderr` sowie verwaisten Asyncio-Warnungen. Bei `Strg + C` warf Textuals `call_from_thread` zudem `RuntimeError: App is not running` in `SyncWorker`.
+  - **Globales Shutdown-Signal & Fehlerunterdrückung**: `src/core/config.py` führt `set_shutting_down()` und `is_shutting_down()` ein. In `teams_service.py` und `task_manager.py` brechen Schleifen bei Shutdown sofort ab; TargetClosedErrors werden unterdrückt.
+  - **Graceful Thread-Exit & "Sync not Complete"**: `src/ui/tui_app.py` merkt sich den Sync-Thread (`self._sync_thread`), joint ihn beim Exit mit 0.5s Timeout und fängt `RuntimeError: App is not running` in `call_from_thread` sauber ab. Wurde der Sync vorzeitig abgebrochen, wird im Terminal genau einmal der Hinweis `"Sync not Complete"` ausgegeben.
+  - **Testsuite**: Vollständig verifiziert über 7 Tests in `tests/test_teams_shutdown.py` und alle 427 Tests der Gesamtsuite.
 
 - [x] **AI-Menü: Back-Button exakt wie im Tests-Menü (Breite & Styling) & 1 Zeile nach unten versetzt (2026-10-26)**:
   - **Exakt gleiche Breite & Beschriftung wie im Tests-Menü (`ExamsScreen`)**:

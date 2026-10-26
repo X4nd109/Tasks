@@ -22,6 +22,7 @@ from config import (
     CHROMIUM_CACHE_ARGS,
     launch_teams_browser_context,
     open_teams_context,
+    is_shutting_down,
 )
 from auth import check_teams_session
 from models import Task, TaskAttachment
@@ -170,6 +171,8 @@ def fetch_teams_tasks() -> List[Task]:
                 is_real_login = False
                 wait_sso = time.time()
                 while time.time() - wait_sso < 8.0:
+                    if is_shutting_down():
+                        break
                     curr_url = page.url.lower()
                     if "login.microsoftonline.com" not in curr_url and "bridge/fido" not in curr_url and ("teams.cloud.microsoft" in curr_url or "teams.microsoft.com" in curr_url or "teams.live.com" in curr_url):
                         is_real_login = False
@@ -250,6 +253,8 @@ def fetch_teams_tasks() -> List[Task]:
 
             # Dynamische Überprüfung von Berechtigungs-Dialogen ("Fortfahren", "Continue") und Laden der Tabs
             for _ in range(15):  # Bis zu 3.0 Sekunden dynamisch warten
+                if is_shutting_down():
+                    break
                 page.wait_for_timeout(200)
                 check_and_confirm_dialogs()
                 # Prüfen, ob die Tabs bereits bereitstehen
@@ -287,6 +292,8 @@ def fetch_teams_tasks() -> List[Task]:
             start_wait = time.time()
             retry_clicked = False
             while time.time() - start_wait < 3.5:
+                if is_shutting_down():
+                    break
                 if intercepted_items and (time.time() - last_intercept_time[0] >= 0.8):
                     break
 
@@ -486,7 +493,9 @@ def fetch_teams_tasks() -> List[Task]:
                     except Exception:
                         pass
     except Exception as e:
-        print(f"Error fetching Teams assignments: {e}", file=sys.stderr)
+        err_msg = str(e).lower()
+        if not is_shutting_down() and "target page, context or browser has been closed" not in err_msg and "targetclosederror" not in type(e).__name__.lower():
+            print(f"Error fetching Teams assignments: {e}", file=sys.stderr)
 
     return tasks
 
@@ -707,7 +716,9 @@ def fetch_teams_task_details(task: Task) -> Task:
             task.attachments = attachments
             task.details_loaded = True
     except Exception as e:
-        print(f"Error loading Teams task details: {e}", file=sys.stderr)
+        err_msg = str(e).lower()
+        if not is_shutting_down() and "target page, context or browser has been closed" not in err_msg and "targetclosederror" not in type(e).__name__.lower():
+            print(f"Error loading Teams task details: {e}", file=sys.stderr)
 
     return task
 

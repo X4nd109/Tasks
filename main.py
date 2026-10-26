@@ -28,5 +28,11 @@ from dependency_checker import ensure_dependencies
 
 if __name__ == "__main__":
     ensure_dependencies()
-    from src.main import main
-    main()
+    if len(sys.argv) == 1:
+        sys._launching_tui_printed = True
+        print("Launching TUI...", flush=True)
+        from tui_app import run_tui
+        sys.exit(run_tui() or 0)
+    else:
+        from src.main import main
+        main()

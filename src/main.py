@@ -28,18 +28,15 @@ if sys.platform == "win32":
         pass
 
 from rich.console import Console
-from rich.prompt import Prompt
-
-from config import clean_browser_profile_caches, AUTO_CLEAN_BROWSER_CACHE
-from models import Task
-from task_manager import TaskManager
-import ui
 
 console = Console()
 
 
-def handle_detail_view(task: Task, mgr: TaskManager, is_deleted: bool = False):
+def handle_detail_view(task: "Task", mgr: "TaskManager", is_deleted: bool = False):
     """Interaktive Schleife für die Aufgaben-Detailansicht."""
+    import ui
+    from rich.prompt import Prompt
+
     # Lade Details, falls nötig
     if not task.details_loaded:
         with console.status(f"[bold cyan]Loading details & attachments for '{task.title}'...[/bold cyan]", spinner="dots"):
@@ -82,8 +79,11 @@ def handle_detail_view(task: Task, mgr: TaskManager, is_deleted: bool = False):
             break
 
 
-def handle_deleted_tasks_menu(mgr: TaskManager):
+def handle_deleted_tasks_menu(mgr: "TaskManager"):
     """Menü zur Anzeige und Wiederherstellung gelöschter Aufgaben."""
+    import ui
+    from rich.prompt import Prompt
+
     while True:
         deleted_tasks = mgr.get_deleted_tasks()
         ui.render_deleted_tasks_table(deleted_tasks)
@@ -125,6 +125,11 @@ def handle_deleted_tasks_menu(mgr: TaskManager):
 
 def interactive_loop():
     """Haupt-CLI-Schleife."""
+    import ui
+    from models import Task
+    from rich.prompt import Prompt
+    from task_manager import TaskManager
+
     mgr = TaskManager()
 
     # Falls noch gar keine Aufgaben im Cache sind, einmalig synchronisieren
@@ -351,12 +356,6 @@ def main():
         sys.exit(run_agent_cli(sys.argv[1:]))
     # ────────────────────────────────────────────────────────────────────────
 
-    if AUTO_CLEAN_BROWSER_CACHE:
-        try:
-            clean_browser_profile_caches()
-        except Exception:
-            pass
-
     parser = argparse.ArgumentParser(description="School Assignment Hub for Moodle & Microsoft Teams")
     parser.add_argument("--sync", action="store_true", help="Sync all assignments from Moodle and Teams")
     parser.add_argument("--teams-login", action="store_true", help="Perform interactive Microsoft Teams login")
@@ -397,6 +396,9 @@ def main():
         return
 
     if args.sync or args.json:
+        import ui
+        from task_manager import TaskManager
+
         mgr = TaskManager(autostart_prefetch=False)
         mgr.sync(deep_scan=args.deep, start_prefetch=False)
         if args.json:
@@ -410,10 +412,15 @@ def main():
 
     # Standard: Modern TUI with mouse buttons (or explicit CLI via --cli)
     if args.cli:
+        import ui
+
         ui.adjust_console_window(120, 32)
         interactive_loop()
     else:
         try:
+            if not getattr(sys, "_launching_tui_printed", False):
+                sys._launching_tui_printed = True
+                print("Launching TUI...", flush=True)
             from tui_app import run_tui
             code = run_tui()
             sys.exit(code or 0)

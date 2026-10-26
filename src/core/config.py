@@ -18,7 +18,7 @@ WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.1.0"
+APP_VERSION = "2.1.1"
 GITHUB_REPO = "X4nd109/Tasks"
 
 
@@ -330,6 +330,19 @@ HEADLESS_CHROMIUM_ARGS = [
 
 _ACTIVE_BROWSER_CONTEXTS = set()
 _CONTEXTS_LOCK = threading.Lock()
+_IS_SHUTTING_DOWN = False
+
+
+def set_shutting_down() -> None:
+    """Signalisiert das globale Beenden der Anwendung für Hintergrundprozesse."""
+    global _IS_SHUTTING_DOWN
+    _IS_SHUTTING_DOWN = True
+
+
+def is_shutting_down() -> bool:
+    """Gibt zurück, ob die Anwendung aktuell beendet wird."""
+    return _IS_SHUTTING_DOWN
+
 
 
 def register_active_browser_context(ctx) -> None:
@@ -348,6 +361,7 @@ def unregister_active_browser_context(ctx) -> None:
 
 def close_all_active_browser_contexts() -> None:
     """Schließt alle noch geöffneten Browser-Kontexte sauber und verhindert EPIPE beim Exit."""
+    set_shutting_down()
     with _CONTEXTS_LOCK:
         contexts = list(_ACTIVE_BROWSER_CONTEXTS)
         _ACTIVE_BROWSER_CONTEXTS.clear()

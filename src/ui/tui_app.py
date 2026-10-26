@@ -12,7 +12,27 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+import logging
 from typing import List, Optional, Set, Dict, Tuple, Callable, Any
+
+class _PlaywrightShutdownFilter(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        if "TargetClosedError" in msg or "Target page, context or browser has been closed" in msg or "coro=<BrowserContext.close()" in msg:
+            return False
+        return True
+
+logging.getLogger("asyncio").addFilter(_PlaywrightShutdownFilter())
+
+if hasattr(sys, "unraisablehook"):
+    _orig_unraisablehook = sys.unraisablehook
+    def _clean_unraisablehook(unraisable):
+        err_str = str(unraisable.exc_value) if unraisable.exc_value else ""
+        err_type = unraisable.exc_type.__name__ if unraisable.exc_type else ""
+        if "TargetClosedError" in err_type or "Target page, context or browser has been closed" in err_str or "BrowserContext.close" in err_str:
+            return
+        _orig_unraisablehook(unraisable)
+    sys.unraisablehook = _clean_unraisablehook
 
 if sys.platform == "win32":
     import ctypes
@@ -602,39 +622,18 @@ if not getattr(Input, "_chat_input_area_instancecheck_patched", False):
 
 
 try:
-    from schoolbook_service import SchoolbookService
-except ImportError:
-    from src.services.schoolbook_service import SchoolbookService
-
-try:
-    from directory_service import DirectoryService
-except ImportError:
-    from src.services.directory_service import DirectoryService
-
-try:
     from update_service import (
-        check_for_updates,
         download_update_installer,
         launch_update_and_restart,
         get_update_temp_dir,
     )
 except ImportError:
     from src.services.update_service import (
-        check_for_updates,
         download_update_installer,
         launch_update_and_restart,
         get_update_temp_dir,
     )
 
-from auth import (
-    check_teams_session,
-    login_moodle_direct,
-    login_teams_direct,
-    setup_moodle_interactive,
-    setup_teams_interactive,
-    test_teams_session_live,
-    get_existing_untis_credentials,
-)
 from config import (
     APP_VERSION,
     WORKSPACE_DIR,
@@ -663,6 +662,8 @@ from config import (
     clean_browser_profile_caches,
     AUTO_CLEAN_BROWSER_CACHE,
     close_all_active_browser_contexts,
+    set_shutting_down,
+    is_shutting_down,
 )
 from models import (
     Task,
@@ -686,7 +687,6 @@ from untis_service import (
     delete_custom_exam,
     lookup_untis_lesson_details,
 )
-import ui
 
 
 def get_windows_console_window_size() -> Optional[tuple[int, int]]:
@@ -2041,6 +2041,11 @@ class UnifiedQuickOpenProvider(Provider):
                 )
         elif mode == "books":
             # Schoolbooks mode
+            try:
+                from schoolbook_service import SchoolbookService
+            except ImportError:
+                from src.services.schoolbook_service import SchoolbookService
+
             yield DiscoveryHit(
                 display="📂 [b]Link local PDF[/b] (/link)",
                 command=lambda: getattr(self.app, "action_link_schoolbook_file", lambda: None)(),
@@ -2082,6 +2087,11 @@ class UnifiedQuickOpenProvider(Provider):
                     )
         else:
             # Directories mode
+            try:
+                from directory_service import DirectoryService
+            except ImportError:
+                from src.services.directory_service import DirectoryService
+
             yield DiscoveryHit(
                 display="📂 [b]Link local folder[/b] (/link)",
                 command=lambda: getattr(self.app, "action_link_directory", lambda: None)(),
@@ -2161,6 +2171,11 @@ class UnifiedQuickOpenProvider(Provider):
                         )
         elif mode == "books":
             # Schoolbooks Mode
+            try:
+                from schoolbook_service import SchoolbookService
+            except ImportError:
+                from src.services.schoolbook_service import SchoolbookService
+
             is_link_cmd = q_lower.startswith("/link") or q_lower.startswith("/url") or q_lower == "link" or q_lower == "url"
             is_unlink_cmd = (
                 q_lower in ("/unlink", "unlink", "/del", "del", "/delete", "delete", "/remove", "remove")
@@ -2295,6 +2310,11 @@ class UnifiedQuickOpenProvider(Provider):
                         )
         else:
             # Directories Mode
+            try:
+                from directory_service import DirectoryService
+            except ImportError:
+                from src.services.directory_service import DirectoryService
+
             is_link_cmd = q_lower.startswith("/link") or q_lower == "link"
             is_unlink_cmd = (
                 q_lower in ("/unlink", "unlink", "/del", "del", "/delete", "delete", "/remove", "remove")
@@ -4946,8 +4966,8 @@ class TaskDetailModal(ModalScreen[None]):
     def action_open_browser(self) -> None:
         if self.target_task.platform in ["manual", "custom"]:
             return
-        if self.target_task.url:
-            ui.open_task_in_browser(self.target_task)
+        if self.target_task and self.target_task.url:
+            webbrowser.open(self.target_task.url)
             self.app.notify(f"Opening '{self.target_task.title}' in browser...", severity="information")
         else:
             self.app.notify("No URL available for this assignment.", severity="warning")
@@ -5228,6 +5248,8 @@ class MoodleLoginModal(ModalScreen[bool]):
         self.query_one("#btn_m_submit", Button).disabled = True
 
         def worker():
+            from auth import login_moodle_direct
+
             res = login_moodle_direct(u, p, moodle_url=url)
             def update_ui():
                 self.query_one("#btn_m_submit", Button).disabled = False
@@ -5401,6 +5423,8 @@ class TeamsSetupModal(ModalScreen[bool]):
         self._mfa_code_val = None
 
         def worker():
+            from auth import login_teams_direct
+
             def on_status_cb(msg: str):
                 self.app.call_from_thread(lambda: self.query_one("#teams_status", Label).update(f"[cyan]{msg}[/cyan]"))
 
@@ -5453,6 +5477,8 @@ class TeamsSetupModal(ModalScreen[bool]):
         self.query_one("#btn_t_check", Button).disabled = True
 
         def worker():
+            from auth import test_teams_session_live
+
             ok = test_teams_session_live()
             def update_ui():
                 self.query_one("#btn_t_check", Button).disabled = False
@@ -5488,6 +5514,8 @@ class TeamsSetupModal(ModalScreen[bool]):
             pass
 
         def worker():
+            from auth import setup_teams_interactive
+
             ok = setup_teams_interactive(console=None, fresh=True, email=email)
             def update_ui():
                 try:
@@ -9216,6 +9244,8 @@ class TasksApp(App):
         self.timeframe_filter = "2_weeks"
         self.current_tasks: List[Task] = []
         self._is_syncing = False
+        self._sync_not_complete_printed: bool = False
+        self._sync_thread: Optional[threading.Thread] = None
         self._stop_mouse_listener = threading.Event()
         self._mouse_listener_thread: Optional[threading.Thread] = None
         self._terminal_hwnd: Optional[int] = None
@@ -9310,6 +9340,11 @@ class TasksApp(App):
         """Startet die Prüfung auf neuere GitHub-Releases in einem Hintergrund-Thread."""
         def worker():
             try:
+                try:
+                    from update_service import check_for_updates
+                except ImportError:
+                    from src.services.update_service import check_for_updates
+
                 update_info = check_for_updates()
                 if update_info:
                     self.call_from_thread(self._show_update_modal, update_info)
@@ -9903,6 +9938,7 @@ class TasksApp(App):
         if self._is_syncing:
             return
         self._is_syncing = True
+        self._sync_not_complete_printed = False
 
         # Dreh-Ladesymbol in der oberen rechten Ecke aktivieren
         try:
@@ -9935,11 +9971,15 @@ class TasksApp(App):
                 now = time.time()
                 # Throttling: Bei rascher Folge nur alle 0.8s die Tabelle leeren/neu zeichnen,
                 # ansonsten nur die Statistik im Info-Bar aktualisieren, um ConPTY-Lags zu vermeiden.
-                if now - getattr(self, "_last_sync_table_refresh", 0.0) >= 0.8:
-                    self._last_sync_table_refresh = now
-                    self.call_from_thread(self.refresh_table)
-                else:
-                    self.call_from_thread(self.update_info_bar)
+                try:
+                    if now - getattr(self, "_last_sync_table_refresh", 0.0) >= 0.8:
+                        self._last_sync_table_refresh = now
+                        self.call_from_thread(self.refresh_table)
+                    else:
+                        self.call_from_thread(self.update_info_bar)
+                except (RuntimeError, Exception):
+                    # Die App wurde inzwischen beendet (z.B. Strg+C) -> UI-Update verwerfen
+                    pass
 
             try:
                 self.mgr.sync(deep_scan=False, on_batch_complete=on_batch_update)
@@ -9957,9 +9997,20 @@ class TasksApp(App):
                 if not getattr(self, "is_headless", False):
                     self._check_login_status_after_sync()
 
-            self.call_from_thread(update_ui)
+            try:
+                # Bei beendeter App (Strg+C während des Syncs) wirft call_from_thread
+                # RuntimeError("App is not running") -> sauber abfangen.
+                if not self.is_running:
+                    raise RuntimeError("App is not running")
+                self.call_from_thread(update_ui)
+            except (RuntimeError, Exception):
+                self._is_syncing = False
+                if not getattr(self, "_sync_not_complete_printed", False):
+                    self._sync_not_complete_printed = True
+                    print("Sync not Complete", flush=True)
 
-        threading.Thread(target=sync_worker, daemon=True, name="SyncWorker").start()
+        self._sync_thread = threading.Thread(target=sync_worker, daemon=True, name="SyncWorker")
+        self._sync_thread.start()
 
     def _check_login_status_after_sync(self) -> None:
         """Checks if school platforms are logged in after sync and shows LoginReminderModal if on main screen."""
@@ -10078,6 +10129,11 @@ class TasksApp(App):
 
     def open_schoolbook(self, book: dict) -> None:
         """Opens a schoolbook (PDF in viewer, web link in browser)."""
+        try:
+            from schoolbook_service import SchoolbookService
+        except ImportError:
+            from src.services.schoolbook_service import SchoolbookService
+
         ok, msg = SchoolbookService.open_book(book)
         if ok:
             self.notify(f"✓ {msg}", severity="information")
@@ -10089,6 +10145,11 @@ class TasksApp(App):
         self.notify("📂 Opening file explorer for PDF selection...", severity="information")
 
         def _worker():
+            try:
+                from schoolbook_service import SchoolbookService
+            except ImportError:
+                from src.services.schoolbook_service import SchoolbookService
+
             try:
                 pdf_path = SchoolbookService.pick_pdf_file()
                 if pdf_path:
@@ -10118,6 +10179,11 @@ class TasksApp(App):
 
     def prompt_add_schoolbook_url(self, url: str = "") -> None:
         """Opens a modal dialog to enter URL and book title."""
+        try:
+            from schoolbook_service import SchoolbookService
+        except ImportError:
+            from src.services.schoolbook_service import SchoolbookService
+
         def _on_result(res: Optional[dict]) -> None:
             if res and res.get("url"):
                 book = SchoolbookService.add_web_book(res["url"], res.get("title", ""))
@@ -10207,6 +10273,11 @@ class TasksApp(App):
 
     def action_delete_schoolbook(self, book_id: str, title: str) -> None:
         """Deletes a schoolbook and reopens the palette in schoolbook mode."""
+        try:
+            from schoolbook_service import SchoolbookService
+        except ImportError:
+            from src.services.schoolbook_service import SchoolbookService
+
         SchoolbookService.remove_book(book_id)
         self.notify(f"✓ Schoolbook '{title}' removed.", severity="information")
         self.action_open_courses_palette(initial_mode="books")
@@ -10222,6 +10293,11 @@ class TasksApp(App):
 
     def open_directory(self, directory: dict) -> None:
         """Opens a directory in the system file explorer."""
+        try:
+            from directory_service import DirectoryService
+        except ImportError:
+            from src.services.directory_service import DirectoryService
+
         ok, msg = DirectoryService.open_directory(directory)
         if ok:
             self.notify(f"✓ {msg}", severity="information")
@@ -10233,6 +10309,11 @@ class TasksApp(App):
         self.notify("📂 Opening folder picker...", severity="information")
 
         def _worker():
+            try:
+                from directory_service import DirectoryService
+            except ImportError:
+                from src.services.directory_service import DirectoryService
+
             try:
                 folder_path = DirectoryService.pick_directory()
                 if folder_path:
@@ -10262,6 +10343,11 @@ class TasksApp(App):
 
     def action_delete_directory(self, dir_id: str, title: str) -> None:
         """Deletes a linked directory and reopens the palette in directories mode."""
+        try:
+            from directory_service import DirectoryService
+        except ImportError:
+            from src.services.directory_service import DirectoryService
+
         DirectoryService.remove_directory(dir_id)
         self.notify(f"✓ Directory '{title}' removed.", severity="information")
         self.action_open_courses_palette(initial_mode="directories")
@@ -10411,12 +10497,18 @@ class TasksApp(App):
     def on_unmount(self) -> None:
         """Wird aufgerufen, wenn die Anwendung beendet wird (egal über welchen Weg)."""
         self._stop_mouse_listener.set()
+        set_shutting_down()
         if hasattr(self, "mgr"):
             self.mgr.shutdown()
         try:
             close_all_active_browser_contexts()
         except Exception:
             pass
+        if getattr(self, "_sync_thread", None) and self._sync_thread.is_alive():
+            try:
+                self._sync_thread.join(timeout=0.5)
+            except Exception:
+                pass
         if hasattr(self, "theme") and self.theme in ALLOWED_THEMES:
             save_saved_theme(self.theme)
 
@@ -10426,12 +10518,18 @@ class TasksApp(App):
             if focused is not None and (isinstance(focused, (Input, TextArea)) or getattr(focused, "selected_text", None)):
                 return
         self._stop_mouse_listener.set()
+        set_shutting_down()
         if hasattr(self, "mgr"):
             self.mgr.shutdown()
         try:
             close_all_active_browser_contexts()
         except Exception:
             pass
+        if getattr(self, "_sync_thread", None) and self._sync_thread.is_alive():
+            try:
+                self._sync_thread.join(timeout=0.5)
+            except Exception:
+                pass
         if hasattr(self, "theme") and self.theme in ALLOWED_THEMES:
             save_saved_theme(self.theme)
         self.exit()
@@ -10440,6 +10538,9 @@ class TasksApp(App):
 
 def run_tui():
     """Startet die moderne Textual-TUI-Anwendung."""
+    if not getattr(sys, "_launching_tui_printed", False):
+        sys._launching_tui_printed = True
+        print("Launching TUI...", flush=True)
     if AUTO_CLEAN_BROWSER_CACHE:
         try:
             threading.Thread(target=clean_browser_profile_caches, daemon=True, name="BrowserCacheCleanup").start()
@@ -10451,6 +10552,7 @@ def run_tui():
     try:
         app.run()
     finally:
+        set_shutting_down()
         try:
             if hasattr(app, "mgr"):
                 app.mgr.shutdown()
@@ -10458,6 +10560,18 @@ def run_tui():
             pass
         try:
             close_all_active_browser_contexts()
+        except Exception:
+            pass
+        if hasattr(app, "_sync_thread") and app._sync_thread and app._sync_thread.is_alive():
+            try:
+                app._sync_thread.join(timeout=0.5)
+            except Exception:
+                pass
+        # Wurde die App während eines laufenden Syncs beendet (Strg+C), darüber informieren
+        try:
+            if getattr(app, "_is_syncing", False) and not getattr(app, "_sync_not_complete_printed", False):
+                app._sync_not_complete_printed = True
+                print("Sync not Complete", flush=True)
         except Exception:
             pass
         if hasattr(app, "theme") and app.theme in ALLOWED_THEMES:
