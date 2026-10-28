@@ -14,7 +14,9 @@
   - `tasks show <id|index> [--json]` | `tasks download <id|index> [--auto-dir] [--dir <path>]`
   - `tasks explain <id|index> [--lang de|en] [--copy-only] [--json]`
   - `tasks books [list|open|add|remove|download] [--json]` | `tasks dirs [list|open|add|remove] [--json]`
-  - `tasks sync [--deep]` | `tasks open <fach>` | `tasks skill [sync|status] [--json]`
+  - `tasks sync [--deep]` | `tasks open <fach>` | `tasks skill [sync|status|set-dir]`
+  - `tasks tray [status|enable|disable|show|quit]` | `tasks autostart [status|enable|disable]`
+
 - **Tests**: `python -m unittest discover tests` or `pytest tests/`
 - **Setup & Dependencies**: `.\setup.bat`
 

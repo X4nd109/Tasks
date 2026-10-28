@@ -16,7 +16,7 @@ from services.ai_chat_service import (
     save_task_chat_cache,
     set_task_ai_explained,
 )
-from tui_app import TasksApp, AufgabenDetectorApp, AiChatScreen, AiConfigModal, TaskDetailModal
+from tui_app import TasksApp, AufgabenDetectorApp, AiChatScreen, AiConfigModal, TaskDetailModal, ClearChatConfirmModal
 
 
 class _ImmediateThread:
@@ -141,12 +141,16 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(back_btn.styles.min_width.value, 4)
             self.assertIn(back_btn, btn_box.children)
 
-            # Verify clear button labeled 'Clear' exists in top toolbar under task banner
-            toolbar = screen.query_one("#ai_chat_toolbar")
-            self.assertIsNotNone(toolbar)
+            # Verify top toolbar is removed (no wasted lines above chat scroll)
+            self.assertEqual(len(list(screen.query("#ai_chat_toolbar"))), 0)
+
+            # Verify clear button labeled '🗑️ Clear' exists in bottom button box directly above Back button
             clear_btn = screen.query_one("#btn_ai_clear_chat", Button)
-            self.assertEqual(str(clear_btn.label).strip(), "Clear")
-            self.assertIn(clear_btn, toolbar.children)
+            self.assertEqual(str(clear_btn.label).strip(), "🗑️ Clear")
+            self.assertEqual(clear_btn.styles.height.value, 1)
+            self.assertIn(clear_btn, btn_box.children)
+            self.assertEqual(btn_box.children.index(clear_btn), 0)
+            self.assertEqual(btn_box.children.index(back_btn), 1)
 
             # Verify input bar borders
             input_bar = screen.query_one("#ai_input_bar")
@@ -190,7 +194,7 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(inp.styles.height.value, 5)  # Fixed height: 5 (1 border top, 3 lines text, 1 border bottom)
 
             # Test clear action
-            screen.action_clear_chat()
+            screen.action_clear_chat(force=True)
             self.assertEqual(screen.chat_history.get("task_swp_1", []), [])
 
     async def test_assistant_message_renders_markdown_widget(self):
@@ -672,7 +676,7 @@ class TestAiExplainSingleExecution(unittest.IsolatedAsyncioTestCase):
             screen.active_task = self.sample_task1
             screen.chat_history["task_swp_1"] = load_task_chat_cache("task_swp_1")
 
-            screen.action_clear_chat()
+            screen.action_clear_chat(force=True)
 
             self.assertEqual(screen.chat_history["task_swp_1"], [])
             self.assertFalse(is_task_ai_explained("task_swp_1"))
@@ -681,6 +685,79 @@ class TestAiExplainSingleExecution(unittest.IsolatedAsyncioTestCase):
             raw = json.load(fh)
         self.assertNotIn("task_swp_1", raw)
         self.assertNotIn("task_swp_1", raw.get("_explained_task_ids", []))
+
+    async def test_clear_chat_modal_cancel_keeps_chat(self):
+        from textual.app import App
+        from textual.widgets import Button
+
+        self._seed_explained_history("task_swp_1")
+        set_task_ai_explained("task_swp_1", True)
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            screen = AiChatScreen(self.mock_mgr)
+            await app.push_screen(screen)
+            await pilot.pause()
+
+            screen.active_task = self.sample_task1
+            screen.chat_history["task_swp_1"] = load_task_chat_cache("task_swp_1")
+
+            # Trigger clear action without force -> modal opens
+            screen.action_clear_chat()
+            await pilot.pause()
+
+            # Verify ClearChatConfirmModal is open
+            modal = app.screen
+            self.assertIsInstance(modal, ClearChatConfirmModal)
+
+            # Click Cancel
+            cancel_btn = modal.query_one("#btn_cancel_clear", Button)
+            cancel_btn.press()
+            await pilot.pause()
+
+            # Modal dismissed, chat is not cleared
+            self.assertNotEqual(screen.chat_history["task_swp_1"], [])
+            self.assertTrue(is_task_ai_explained("task_swp_1"))
+
+    async def test_clear_chat_modal_confirm_clears_chat(self):
+        from textual.app import App
+        from textual.widgets import Button
+
+        self._seed_explained_history("task_swp_1")
+        set_task_ai_explained("task_swp_1", True)
+
+        class DummyApp(App):
+            pass
+
+        app = DummyApp()
+        async with app.run_test() as pilot:
+            screen = AiChatScreen(self.mock_mgr)
+            await app.push_screen(screen)
+            await pilot.pause()
+
+            screen.active_task = self.sample_task1
+            screen.chat_history["task_swp_1"] = load_task_chat_cache("task_swp_1")
+
+            # Click UI button #btn_ai_clear_chat
+            clear_btn = screen.query_one("#btn_ai_clear_chat", Button)
+            clear_btn.press()
+            await pilot.pause()
+
+            # Verify ClearChatConfirmModal is open
+            modal = app.screen
+            self.assertIsInstance(modal, ClearChatConfirmModal)
+
+            # Click Confirm Clear
+            confirm_btn = modal.query_one("#btn_confirm_clear", Button)
+            confirm_btn.press()
+            await pilot.pause()
+
+            # Chat is cleared and explained state reset
+            self.assertEqual(screen.chat_history["task_swp_1"], [])
+            self.assertFalse(is_task_ai_explained("task_swp_1"))
 
 
 if __name__ == "__main__":

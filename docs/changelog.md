@@ -9,6 +9,42 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-28
+
+### Added
+- **Windows System Tray Hintergrundprozess & Instant Launch via Window-Hide**:
+  - src/services/tray_service.py: Leichtgewichtiger Tray-Service (pystray / Pillow) mit dynamischem Icon und Tooltip (Tasks — X open), Kontextmenü (Open Tasks, Sync Now, Autostart with Windows, Quit Tasks) und nativer Doppelklick-Unterstützung.
+  - src/core/single_instance.py: Windows Named Pipe IPC (\\.\pipe\Tasks_App_Pipe_<user>) mit TCP-Fallback zur Steuerung der laufenden Hintergrundinstanz (SHOW, QUIT, STATUS).
+  - Zero-Overhead Kaltstart: Bei deaktiviertem System Tray (minimize_to_tray: false) prüft main.py in <0.2ms die JSON-Konfiguration und startet ohne jeden Millisekunden-Overhead direkt.
+- **Windows Autostart Service**:
+  - src/services/autostart_service.py: Verwaltet Autostart-Eintrag in HKCU\Software\Microsoft\Windows\CurrentVersion\Run mit pythonw.exe main.py --tray, sodass beim Windows-Boot kein Konsolenfenster erscheint.
+  - CLI-Befehl tasks autostart [status|enable|disable] und Tray-Menü-Toggle.
+- **Notification Service Foundation**:
+  - src/services/notification_service.py: Windows-Toast-Notifications (windows-toasts mit Fallback auf PowerShell New-BurntToastNotification und Windows Baloon-Tips).
+- **Terminal-Autoclose mit 10s-Countdown & [ENTER]-Abbruch**:
+  - main.py: Wenn Tasks bereits im Hintergrund aktiv ist und in einem zweiten Terminal tasks eingegeben wird, holt der Prozess das Hauptfenster per Win32 API in den Vordergrund und zeigt im zweiten Terminal einen 10s-Countdown an:
+    ``	ext`	ext
+    Restoring window...
+    Window succesfully restored.
+    This terminal will close in 10s. Press [ENTER] to cancel...
+    `
+  - Tastaturabfrage via msvcrt.kbhit() und msvcrt.getwch(): Ausschließlich [ENTER] (\r / \n) bricht das Schließen ab (Close cancelled. Terminal remains open.); nach Ablauf der 10s schließt sich das Terminalfenster bzw. der Windows Terminal Tab automatisch.
+  - Testsuite tests/test_terminal_autoclose.py mit 5 Unittests.
+
+### Changed
+- **Klares Beenden- und Schließen-Verhalten**:
+  - Ctrl+C: Bricht Tasks und das Tray-Icon sofort ab und kehrt sauber zum Terminal-Prompt zurück (schließt das Terminalfenster nicht).
+  - [Q] und [Exit]-Button (#btn_main_quit): Blenden Tasks bei aktivem System Tray unsichtbar in den Hintergrund aus (ShowWindow(hwnd, SW_HIDE)).
+  - Rotes Windows-[X] der Konsole (CTRL_CLOSE_EVENT): Beendet das Konsolenfenster und entfernt gleichzeitig das Tray-Icon rückstandslos.
+- **System Tray & Autostart Settings Modal**:
+  - TrayConfigModal: Aufgeräumte Umschalter für Minimize to System Tray on Close und Windows Autostart.
+  - Breite auf 76 Spalten optimiert und .tray_cfg_desc mit width: 100%; height: auto; ausgestattet.
+  - Vollständige OLED-Theme-Unterstützung (.-theme-oled #tray_config_dialog).
+
+### Removed
+- src/ui/win_close_dialog.py und tests/test_win_close_dialog.py.
+- src/services/tray_daemon.py und tests/test_tray_daemon.py.
+
 ## [2.1.1] - 2026-10-26
 
 ### Changed

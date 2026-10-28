@@ -6,3 +6,5 @@ fpdf2>=2.7.0
 PyMuPDF>=1.23.0
 Pillow>=10.0.0
 pytesseract>=0.3.10
+pystray>=0.19.5
+winotify>=1.1.0

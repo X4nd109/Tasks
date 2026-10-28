@@ -29,7 +29,8 @@
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
 | `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.1.0`), Themes, Logins und Schülereinstellungen. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
-| `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) exakt wie im Tests-Menü (Breite 9, unten bündig), Clear-Chat-Button (`Clear`) bündig in der oberen rechten Ecke unter dem Aufgaben-Banner und direkter Gemini / OpenAI REST-Anbindung. |
+| `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) unten rechts mit bündig darüber gestapeltem 1-Zeilen Clear-Button (`🗑️ Clear`, Tastenkürzel `[Ctrl+L]`), vorgeschaltetem Sicherheits-Bestätigungsdialog (`ClearChatConfirmModal`) und vollständiger Entfernung der oberen Toolbar zur Rückgewinnung von Chat-Zeilen sowie direkter Gemini / OpenAI REST-Anbindung. |
+| `ClearChatConfirmModal` | Modal | Englischer Sicherheits-Bestätigungsdialog vor dem Leeren des Chat-Verlaufs (`🗑️ Clear` / `Cancel [ESC]`). |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
 | `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases mit 1-Klick-In-App-Download, Fortschrittsbalken und automatischer Installation im selben Verzeichnis (ohne PATH-Änderung oder Datenverlust). |
 | `LoginChoiceModal` (`[L]`) | Modal | Zentrales Auswahlmenü für Anmeldungen bei Moodle, Microsoft Teams und WebUntis. |
@@ -108,6 +109,11 @@
 | `tasks dirs open <id\|name>` | — | Öffnet das verknüpfte Verzeichnis im System-Dateimanager (Windows Explorer). |
 | `tasks dirs add <pfad>` | `--title <name>` | Verknüpft einen lokalen Ordnerpfad headless mit automatischer oder manueller Benennung. |
 | `tasks dirs remove <id\|name>` | — | Entfernt eine Ordnerverknüpfung aus der lokalen Liste (`data/directories.json`). |
+| `tasks skill sync` | `[--target <pfad>] [--json]` | Synchronisiert den Tasks-Skill in das gespeicherte Zielverzeichnis (fragt einmalig via Windows Explorer nach, falls nicht gesetzt). |
+| `tasks skill set-dir` | `[<pfad>] [--set-dir [<pfad>]]` | Ändert das Zielverzeichnis für den Skill (öffnet bei leerem Argument den Explorer-Ordnerauswahldialog). |
+| `tasks skill status` | `[--json]` | Zeigt den aktuellen Installationsstatus und Speicherort des Skills an. |
+| `tasks tray` | `[status\|enable\|disable\|show\|quit] [--json]` | Steuert das System-Tray-Verhalten und sendet `SHOW`/`QUIT`/`STATUS` an die laufende Hintergrund-Instanz. |
+| `tasks autostart` | `[status\|enable\|disable] [--json]` | Verwaltet den Windows-Autostart-Eintrag unter `HKCU\...\Run`. |
 | `tasks sync` | `--deep` | Führt eine vollständige Plattform-Synchronisation im Hintergrund durch. |
 
 ---

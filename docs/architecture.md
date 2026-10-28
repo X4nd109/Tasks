@@ -106,18 +106,22 @@ Tasks/
 │   │   ├── dependency_checker.py # Pre-flight module checker & warning banner
 │   │   ├── license.py          # Legacy hardware fingerprinting / compatibility
 │   │   ├── models.py           # Dataclass definitions
+│   │   ├── single_instance.py  # Windows Named Pipe IPC & single instance coordinator
 │   │   ├── task_manager.py     # Central aggregation & caching coordinator
 │   │   └── win_dialogs.py      # Per-Monitor DPI-Awareness v2 & native Windows COM IFileOpenDialog
 │   ├── services/               # External portal integration adapters
 │   │   ├── ai_explain_service.py # AI prompt generation, clipboard copy & browser / app launcher
 │   │   ├── ai_chat_service.py    # In-app AI chat: attachment extraction, Gemini/OpenAI dispatch, chat cache
+│   │   ├── autostart_service.py  # Windows Run registry entry manager (pythonw.exe --tray)
 │   │   ├── directory_service.py # Directory linking, listing, course auto-matching & Explorer launcher
 │   │   ├── excuse_service.py   # PDF absence excuse generator
 │   │   ├── git_sync_service.py # Multi-device repository sync (including favorites)
 │   │   ├── moodle_service.py   # Moodle scraping & REST API
+│   │   ├── notification_service.py # Windows toast & balloon notification adapter
 │   │   ├── schoolbook_service.py # Schoolbook indexing, opening & file picker
 │   │   ├── digi4school_service.py # Digi4School book downloader, OCR & TOC generator
 │   │   ├── teams_service.py    # Playwright MS Teams scraper
+│   │   ├── tray_service.py     # Windows System Tray daemon (pystray, dynamic icon, context menu)
 │   │   ├── untis_service.py    # WebUntis JSON-RPC client, schoolquery2 resolver & timetable/absence matcher
 │   │   └── update_service.py   # GitHub release update checker, in-app downloader & runner
 │   └── ui/                     # Presentation implementations

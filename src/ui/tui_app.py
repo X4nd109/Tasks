@@ -1025,9 +1025,69 @@ def get_terminal_window_hwnd() -> Optional[int]:
                     _CACHED_TERMINAL_HWND = h_root
                     return h_root
 
+        # 3. Prozess-Hierarchie durchsuchen (findet Windows Terminal / Console zuverlässig)
+        try:
+            from ctypes import wintypes
+            TH32CS_SNAPPROCESS = 0x00000002
+            class PROCESSENTRY32(ctypes.Structure):
+                _fields_ = [
+                    ('dwSize', wintypes.DWORD),
+                    ('cntUsage', wintypes.DWORD),
+                    ('th32ProcessID', wintypes.DWORD),
+                    ('th32DefaultHeapID', ctypes.c_size_t),
+                    ('th32ModuleID', wintypes.DWORD),
+                    ('cntThreads', wintypes.DWORD),
+                    ('th32ParentProcessID', wintypes.DWORD),
+                    ('pcPriClassBase', ctypes.c_long),
+                    ('dwFlags', wintypes.DWORD),
+                    ('szExeFile', ctypes.c_char * 260)
+                ]
+            hSnap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+            pe = PROCESSENTRY32()
+            pe.dwSize = ctypes.sizeof(PROCESSENTRY32)
+            parents = {}
+            if kernel32.Process32First(hSnap, ctypes.byref(pe)):
+                while True:
+                    parents[pe.th32ProcessID] = pe.th32ParentProcessID
+                    if not kernel32.Process32Next(hSnap, ctypes.byref(pe)):
+                        break
+            kernel32.CloseHandle(hSnap)
+
+            chain = []
+            curr = os.getpid()
+            for _ in range(6):
+                chain.append(curr)
+                if curr in parents:
+                    curr = parents[curr]
+                else:
+                    break
+
+            found = []
+            def enum_cb(h, _):
+                p = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(h, ctypes.byref(p))
+                if p.value in chain:
+                    b = ctypes.create_unicode_buffer(256)
+                    user32.GetClassNameW(h, b, 256)
+                    if b.value in ('CASCADIA_HOSTING_WINDOW_CLASS', 'ConsoleWindowClass'):
+                        found.append(h)
+                return True
+
+            WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+            if found:
+                _CACHED_TERMINAL_HWND = found[0]
+                return found[0]
+        except Exception:
+            pass
+
+        if h_con_win:
+            _CACHED_TERMINAL_HWND = h_con_win
+            return h_con_win
         return None
     except Exception:
         return None
+
 
 
 def is_app_window_foreground(app: Optional[App] = None, terminal_hwnd: Optional[int] = None) -> bool:
@@ -3884,9 +3944,21 @@ class SettingsModal(ModalScreen[Optional[str]]):
         color: #ffffff;
         text-style: bold;
     }
-    .settings_btn {
+    .settings_row {
         width: 100%;
+        height: 3;
         margin-bottom: 1;
+    }
+    .settings_btn {
+        width: 1fr;
+        margin-right: 1;
+    }
+    .settings_btn:last-child {
+        margin-right: 0;
+    }
+    .settings_btn_full {
+        width: 100%;
+        margin-right: 0;
     }
     #settings_cancel_row {
         height: auto;
@@ -3905,22 +3977,30 @@ class SettingsModal(ModalScreen[Optional[str]]):
         Binding("h", "choose_hotkeys", "Hotkeys", show=False),
         Binding("7", "choose_ai_explain", "AI Explain", show=False),
         Binding("a", "choose_ai_explain", "AI Explain", show=False),
+        Binding("8", "choose_tray", "Tray & Autostart", show=False),
+        Binding("t", "choose_tray", "Tray & Autostart", show=False),
         Binding("escape", "cancel", "Cancel"),
     ]
 
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="settings_dialog"):
+        with Vertical(id="settings_dialog"):
             with Horizontal(id="settings_header_row"):
                 yield Label("⚙️ Settings", id="settings_title")
                 yield Label(f"v{APP_VERSION}", id="settings_version_tag")
-            yield Button("🎨 Change Theme / Palette", id="btn_set_theme", classes="settings_btn", variant="primary", tooltip="Theme [1]")
-            yield Button("🔑 Login", id="btn_set_login", classes="settings_btn", variant="warning", tooltip="Login [2]")
-            yield Button("👁️ Hidden", id="btn_set_hidden", classes="settings_btn", variant="error", tooltip="Hidden [3]")
-            yield Button("⚙️ School & Student Config", id="btn_set_school_config", classes="settings_btn", variant="primary", tooltip="School & Student Config [4]")
-            yield Button("⌨️ Hotkeys", id="btn_set_hotkeys", classes="settings_btn", variant="default", tooltip="Hotkeys [5/6]")
-            yield Button("🤖 AI Explain Config", id="btn_set_ai_explain", classes="settings_btn", variant="primary", tooltip="AI Explain [7/A]")
+            with Horizontal(classes="settings_row"):
+                yield Button("🎨 Change Theme", id="btn_set_theme", classes="settings_btn", variant="primary", tooltip="Theme [1]")
+                yield Button("🔑 Login", id="btn_set_login", classes="settings_btn", variant="warning", tooltip="Login [2]")
+            with Horizontal(classes="settings_row"):
+                yield Button("👁️ Hidden", id="btn_set_hidden", classes="settings_btn", variant="error", tooltip="Hidden [3]")
+                yield Button("⚙️ School Config", id="btn_set_school_config", classes="settings_btn", variant="primary", tooltip="School & Student Config [4]")
+            with Horizontal(classes="settings_row"):
+                yield Button("⌨️ Hotkeys", id="btn_set_hotkeys", classes="settings_btn", variant="default", tooltip="Hotkeys [5/6]")
+                yield Button("🤖 AI Explain", id="btn_set_ai_explain", classes="settings_btn", variant="primary", tooltip="AI Explain [7/A]")
+            with Horizontal(classes="settings_row"):
+                yield Button("🖥️ System Tray & Autostart", id="btn_set_tray", classes="settings_btn settings_btn_full", variant="default", tooltip="Tray & Autostart [8/T]")
             with Horizontal(id="settings_cancel_row"):
                 yield Button("↩️ Close [ESC]", id="btn_set_cancel", variant="default")
+
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         bid = event.button.id
@@ -3936,6 +4016,8 @@ class SettingsModal(ModalScreen[Optional[str]]):
             self.dismiss("show_hotkeys")
         elif bid in ("btn_set_ai_config", "btn_set_ai_explain"):
             self.dismiss("ai_config_menu")
+        elif bid == "btn_set_tray":
+            self.dismiss("tray_config")
         elif bid == "btn_set_cancel":
             self.dismiss(None)
 
@@ -3963,11 +4045,158 @@ class SettingsModal(ModalScreen[Optional[str]]):
     def action_choose_ai_explain(self) -> None:
         self.dismiss("ai_config_menu")
 
+    def action_choose_tray(self) -> None:
+        self.dismiss("tray_config")
+
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def key_escape(self) -> None:
         self.dismiss(None)
+
+
+class TrayConfigModal(ModalScreen[bool]):
+    """Dialog for configuring system tray and Windows autostart behavior."""
+
+    DEFAULT_CSS = """
+    TrayConfigModal {
+        align: center middle;
+    }
+    #tray_config_dialog {
+        width: 76;
+        height: auto;
+        border: thick #b4befe;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #tray_cfg_title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #b4befe;
+        margin-bottom: 1;
+    }
+    .tray_cfg_desc {
+        color: #a6adc8;
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
+    .tray_toggle_btn {
+        width: 100%;
+        margin-top: 1;
+        margin-bottom: 0;
+        text-style: bold;
+    }
+    #tray_cfg_btn_row {
+        width: 100%;
+        height: auto;
+        align: center middle;
+        margin-top: 2;
+    }
+    #btn_tray_cfg_save {
+        margin-right: 2;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.is_tray = True
+        try:
+            from config import is_minimize_to_tray_enabled
+            self.is_tray = is_minimize_to_tray_enabled()
+        except Exception:
+            try:
+                from src.core.config import is_minimize_to_tray_enabled
+                self.is_tray = is_minimize_to_tray_enabled()
+            except Exception:
+                pass
+
+        self.is_auto = False
+        try:
+            from autostart_service import is_autostart_enabled
+            self.is_auto = is_autostart_enabled()
+        except Exception:
+            try:
+                from src.services.autostart_service import is_autostart_enabled
+                self.is_auto = is_autostart_enabled()
+            except Exception:
+                pass
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="tray_config_dialog"):
+            yield Label("🖥️ System Tray & Autostart Settings", id="tray_cfg_title")
+            yield Label(
+                "Configure resident background behavior and startup on Windows boot.",
+                classes="tray_cfg_desc",
+            )
+
+            yield Button(
+                "🖥️ Minimize to System Tray on Close",
+                id="btn_tray_toggle",
+                variant="success" if self.is_tray else "default",
+                classes="tray_toggle_btn",
+            )
+            yield Label(
+                "  Keep app resident in memory for instant startup on close.",
+                classes="tray_cfg_desc",
+            )
+
+            yield Button(
+                "🚀 Windows Autostart",
+                id="btn_auto_toggle",
+                variant="success" if self.is_auto else "default",
+                classes="tray_toggle_btn",
+            )
+            yield Label(
+                "  Launches Tasks silently in the system tray when Windows boots.",
+                classes="tray_cfg_desc",
+            )
+
+            with Horizontal(id="tray_cfg_btn_row"):
+                yield Button("💾 Save Settings", id="btn_tray_cfg_save", variant="success")
+                yield Button("↩️ Back", id="btn_tray_cfg_back", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id
+        if bid == "btn_tray_toggle":
+            self.is_tray = not self.is_tray
+            btn = self.query_one("#btn_tray_toggle", Button)
+            btn.variant = "success" if self.is_tray else "default"
+        elif bid == "btn_auto_toggle":
+            self.is_auto = not self.is_auto
+            btn = self.query_one("#btn_auto_toggle", Button)
+            btn.variant = "success" if self.is_auto else "default"
+        elif bid == "btn_tray_cfg_save":
+            try:
+                from config import set_minimize_to_tray_enabled
+                set_minimize_to_tray_enabled(self.is_tray)
+            except Exception:
+                try:
+                    from src.core.config import set_minimize_to_tray_enabled
+                    set_minimize_to_tray_enabled(self.is_tray)
+                except Exception:
+                    pass
+            try:
+                from autostart_service import set_autostart
+                set_autostart(self.is_auto)
+            except Exception:
+                try:
+                    from src.services.autostart_service import set_autostart
+                    set_autostart(self.is_auto)
+                except Exception:
+                    pass
+            self.dismiss(True)
+        elif bid == "btn_tray_cfg_back":
+            self.dismiss(False)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
 
 
 class DownloadLocationModal(ModalScreen[Optional[str]]):
@@ -7836,6 +8065,93 @@ class ExamsScreen(Screen):
 ExamsModal = ExamsScreen
 
 
+class ClearChatConfirmModal(ModalScreen[bool]):
+    """Confirmation modal dialog before clearing the AI chat history."""
+
+    DEFAULT_CSS = """
+    ClearChatConfirmModal {
+        align: center middle;
+    }
+    #clear_confirm_dialog {
+        width: 56;
+        height: auto;
+        border: thick #e03131;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #clear_confirm_title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #f38ba8;
+        margin-bottom: 1;
+    }
+    #clear_confirm_desc {
+        width: 100%;
+        text-align: center;
+        color: #cdd6f4;
+        margin-bottom: 2;
+    }
+    #clear_confirm_buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+    #clear_confirm_buttons Button {
+        margin: 0 1;
+        min-width: 12;
+    }
+    #btn_confirm_clear {
+        background: #e03131;
+        color: #ffffff;
+    }
+    #btn_confirm_clear:hover {
+        background: #c92a2a;
+    }
+    .-theme-oled #clear_confirm_dialog {
+        background: #000000;
+        border: thick #af3029;
+    }
+    .-theme-oled #clear_confirm_title {
+        color: #af3029;
+    }
+    .-theme-oled #clear_confirm_desc {
+        color: #ffffff;
+    }
+    .-theme-oled #btn_confirm_clear {
+        background: #af3029;
+        color: #ffffff;
+    }
+    .-theme-oled #btn_confirm_clear:hover {
+        background: #c33a32;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="clear_confirm_dialog"):
+            yield Label("Clear Chat History?", id="clear_confirm_title")
+            yield Label(
+                "Are you sure you want to clear the chat history for this assignment?",
+                id="clear_confirm_desc",
+            )
+            with Horizontal(id="clear_confirm_buttons"):
+                yield Button("🗑️ Clear", id="btn_confirm_clear", variant="error")
+                yield Button("Cancel", id="btn_cancel_clear", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_confirm_clear":
+            self.dismiss(True)
+        elif event.button.id == "btn_cancel_clear":
+            self.dismiss(False)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
 class AiChatScreen(Screen):
     """
     Interactive full-screen AI chat assistant with browser-style task tabs,
@@ -8002,36 +8318,32 @@ class AiChatScreen(Screen):
         border: solid #89b4fa;
     }
     #ai_input_btn_box {
-        width: auto;
+        width: 11;
+        min-width: 11;
+        max-width: 11;
         height: 5;
+        layout: vertical;
         align: right bottom;
     }
-    #ai_chat_toolbar {
+    #btn_ai_clear_chat {
+        width: 100%;
+        min-width: 4;
         height: 1;
         min-height: 1;
         max-height: 1;
-        width: 100%;
-        background: transparent;
-        align: right middle;
-        padding: 0;
-        margin: 0;
-    }
-    #btn_ai_clear_chat {
-        width: auto;
-        min-width: 9;
-        height: 1;
-        margin: 0;
+        margin-bottom: 1;
         border: none;
         background: #e03131;
         color: #ffffff;
         content-align: center middle;
         text-align: center;
-        padding: 0 1;
+        padding: 0;
     }
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
     #btn_ai_back {
+        width: 100%;
         min-width: 4;
         height: 3;
         min-height: 3;
@@ -8071,8 +8383,11 @@ class AiChatScreen(Screen):
         max-height: 7;
     }
     .-theme-oled #ai_input_btn_box {
-        width: auto;
+        width: 11;
+        min-width: 11;
+        max-width: 11;
         height: 5;
+        layout: vertical;
         align: right bottom;
     }
     .-theme-oled .ai_msg_user {
@@ -8118,22 +8433,19 @@ class AiChatScreen(Screen):
         background: #2868b2;
         color: #ffffff;
     }
-    .-theme-oled #ai_chat_toolbar {
-        background: #000000;
-        padding: 0;
-        margin: 0;
-    }
     .-theme-oled #btn_ai_clear_chat {
-        width: auto;
-        min-width: 9;
+        width: 100%;
+        min-width: 4;
         height: 1;
-        margin: 0;
+        min-height: 1;
+        max-height: 1;
+        margin-bottom: 1;
         content-align: center middle;
         text-align: center;
         background: #e03131;
         color: #ffffff;
         border: none;
-        padding: 0 1;
+        padding: 0;
     }
     .-theme-oled #btn_ai_clear_chat:hover {
         background: #c92a2a;
@@ -8157,6 +8469,7 @@ class AiChatScreen(Screen):
         margin-right: 1;
     }
     .-theme-oled #btn_ai_back {
+        width: 100%;
         background: #282726;
         color: #ffffff;
         border: none;
@@ -8212,15 +8525,13 @@ class AiChatScreen(Screen):
             yield Label("", id="ai_task_banner_title")
             yield Label("", id="ai_task_banner_meta")
 
-        with Horizontal(id="ai_chat_toolbar"):
-            yield Button("Clear", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
-
         with VerticalScroll(id="ai_chat_scroll"):
             yield Label("Select an assignment tab above to start.", classes="ai_empty_placeholder", id="ai_chat_empty_lbl")
 
         with Horizontal(id="ai_input_bar"):
             yield ChatInputArea(id="ai_chat_input", placeholder="Ask a question about this assignment...")
-            with Horizontal(id="ai_input_btn_box"):
+            with Vertical(id="ai_input_btn_box"):
+                yield Button("🗑️ Clear", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
                 yield Button("↩️ Back", id="btn_ai_back", variant="default", tooltip="Back to tasks [ESC]")
 
     def on_mount(self) -> None:
@@ -8608,16 +8919,28 @@ class AiChatScreen(Screen):
 
         threading.Thread(target=worker, daemon=True, name="AiChatRequestWorker").start()
 
-    def action_clear_chat(self) -> None:
+    def action_clear_chat(self, force: bool = False) -> None:
         if not self.active_task:
             return
         task_id = self.active_task.id
-        from services.ai_chat_service import clear_task_chat_cache, set_task_ai_explained
-        clear_task_chat_cache(task_id)
-        set_task_ai_explained(task_id, False)
-        self.chat_history[task_id] = []
-        self._refresh_chat_display()
-        self.app.notify("Chat cleared for current assignment.", severity="information")
+
+        def _do_clear() -> None:
+            from services.ai_chat_service import clear_task_chat_cache, set_task_ai_explained
+            clear_task_chat_cache(task_id)
+            set_task_ai_explained(task_id, False)
+            self.chat_history[task_id] = []
+            self._refresh_chat_display()
+            self.app.notify("Chat cleared for current assignment.", severity="information")
+
+        if force:
+            _do_clear()
+            return
+
+        def _on_confirm(confirmed: Optional[bool]) -> None:
+            if confirmed:
+                _do_clear()
+
+        self.app.push_screen(ClearChatConfirmModal(), _on_confirm)
 
     def action_prev_tab(self) -> None:
         if self.open_tasks and self.active_task_idx > 0:
@@ -8970,21 +9293,6 @@ class TasksApp(App):
         background: #2868b2;
         color: #ffffff;
     }
-    .-theme-oled #btn_ai_clear_chat {
-        width: 4;
-        min-width: 4;
-        height: 1;
-        margin-right: 1;
-        content-align: center middle;
-        text-align: center;
-        background: #e03131;
-        color: #ffffff;
-        border: none;
-        padding: 0;
-    }
-    .-theme-oled #btn_ai_clear_chat:hover {
-        background: #c92a2a;
-    }
     #ai_input_bar {
         dock: bottom;
         height: 7;
@@ -9014,36 +9322,32 @@ class TasksApp(App):
         margin-right: 1;
     }
     #ai_input_btn_box {
-        width: auto;
+        width: 11;
+        min-width: 11;
+        max-width: 11;
         height: 5;
+        layout: vertical;
         align: right bottom;
     }
-    #ai_chat_toolbar {
+    #btn_ai_clear_chat {
+        width: 100%;
+        min-width: 4;
         height: 1;
         min-height: 1;
         max-height: 1;
-        width: 100%;
-        background: transparent;
-        align: right middle;
-        padding: 0;
-        margin: 0;
-    }
-    #btn_ai_clear_chat {
-        width: auto;
-        min-width: 9;
-        height: 1;
-        margin: 0;
+        margin-bottom: 1;
         border: none;
         background: #e03131;
         color: #ffffff;
         content-align: center middle;
         text-align: center;
-        padding: 0 1;
+        padding: 0;
     }
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
     #btn_ai_back {
+        width: 100%;
         min-width: 4;
         height: 3;
         min-height: 3;
@@ -9064,26 +9368,26 @@ class TasksApp(App):
         max-height: 7;
     }
     .-theme-oled #ai_input_btn_box {
-        width: auto;
+        width: 11;
+        min-width: 11;
+        max-width: 11;
         height: 5;
+        layout: vertical;
         align: right bottom;
     }
-    .-theme-oled #ai_chat_toolbar {
-        background: #000000;
-        padding: 0;
-        margin: 0;
-    }
     .-theme-oled #btn_ai_clear_chat {
-        width: auto;
-        min-width: 9;
+        width: 100%;
+        min-width: 4;
         height: 1;
-        margin: 0;
+        min-height: 1;
+        max-height: 1;
+        margin-bottom: 1;
         content-align: center middle;
         text-align: center;
         background: #e03131;
         color: #ffffff;
         border: none;
-        padding: 0 1;
+        padding: 0;
     }
     .-theme-oled #btn_ai_clear_chat:hover {
         background: #c92a2a;
@@ -9135,6 +9439,7 @@ class TasksApp(App):
     .-theme-oled #d4s_progress_dialog,
     .-theme-oled #update_dialog,
     .-theme-oled #settings_dialog,
+    .-theme-oled #tray_config_dialog,
     .-theme-oled #theme_dialog,
     .-theme-oled #subj_dialog,
     .-theme-oled #detail_dialog,
@@ -9201,7 +9506,7 @@ class TasksApp(App):
         Binding("ctrl+p", "change_theme", "Theme / Palette", show=False),
         Binding("m", "setup_moodle", "Moodle Setup", show=False),
         Binding("q", "quit_app", "Quit"),
-        Binding("ctrl+c", "quit_app", "Quit", show=False),
+        Binding("ctrl+c", "real_quit", "Force Quit to Terminal", show=False),
         # Direct selection 1-9
         Binding("1", "select_task(1)", "Task 1", show=False),
         Binding("2", "select_task(2)", "Task 2", show=False),
@@ -9234,10 +9539,14 @@ class TasksApp(App):
             markup=markup,
         )
 
-    def __init__(self, mgr: Optional[TaskManager] = None, sync_on_startup: Optional[bool] = None):
+    def __init__(self, mgr: Optional[TaskManager] = None, sync_on_startup: Optional[bool] = None, start_hidden: bool = False):
         super().__init__()
         self.mgr = mgr or TaskManager(autostart_prefetch=True)
         self.sync_on_startup = sync_on_startup
+        self.start_hidden = start_hidden
+        self.is_hidden_in_tray = False
+        self._tray_service = None
+        self._single_instance_server = None
         self.platform_filter = "all"
         self.status_filter = "open_only"
         self.subject_filter = "all"
@@ -9249,6 +9558,9 @@ class TasksApp(App):
         self._stop_mouse_listener = threading.Event()
         self._mouse_listener_thread: Optional[threading.Thread] = None
         self._terminal_hwnd: Optional[int] = None
+        self._console_ctrl_handler_installed: bool = False
+        self._console_ctrl_cb: Optional[Callable] = None
+        self._conhost_close_disabled: bool = False
         self._last_sync_table_refresh: float = 0.0
         self.sort_column: Optional[str] = "due_date"
         self.sort_direction: str = "desc"
@@ -9306,6 +9618,11 @@ class TasksApp(App):
         if sys.platform == "win32" and not self.is_headless:
             self._set_win32_console_icon()
 
+        # System Tray & Single-Instance IPC starten
+        if sys.platform == "win32" and not self.is_headless:
+            self._init_tray_and_ipc()
+
+
         # Starte Hintergrund-Thread für Maus-Zurück-Taste (Seitentaste XBUTTON1 / "Hinten")
         self._terminal_hwnd = get_terminal_window_hwnd() or _CACHED_TERMINAL_HWND
         if sys.platform == "win32" and not self.is_headless:
@@ -9335,6 +9652,122 @@ class TasksApp(App):
                         ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
         except Exception:
             pass
+
+    def _init_tray_and_ipc(self) -> None:
+        """Initialisiert den System-Tray-Dienst und den Single-Instance-Server."""
+        try:
+            from config import is_minimize_to_tray_enabled
+            if not is_minimize_to_tray_enabled():
+                return
+        except Exception:
+            pass
+
+        try:
+            from single_instance import SingleInstanceServer
+            self._single_instance_server = SingleInstanceServer(on_command_callback=self._handle_ipc_command)
+            self._single_instance_server.start()
+        except Exception:
+            pass
+
+        try:
+            from tray_service import TrayService
+            open_cnt = len([t for t in getattr(self.mgr, "tasks", []) if not getattr(t, "completed", False) and not getattr(t, "deleted", False)])
+            self._tray_service = TrayService(
+                on_open=self.restore_from_tray,
+                on_sync=lambda: self.call_from_thread(self.action_sync_tasks),
+                on_quit=lambda: self.call_from_thread(self.action_real_quit),
+                open_count=open_cnt,
+            )
+            self._tray_service.start()
+        except Exception:
+            pass
+
+        if getattr(self, "start_hidden", False):
+            self.call_after_refresh(self.hide_to_tray)
+
+    def _ipc_show(self) -> str:
+        """Stellt das versteckte Fenster wieder her (Single-Instance-Befehl ``SHOW``)."""
+        self.restore_from_tray()
+        return "RESTORED"
+
+    def _handle_ipc_command(self, cmd: str) -> str:
+        """Verarbeitet eingehende Single-Instance-Befehle von sekundären CLI-Aufrufen."""
+        cmd_upper = (cmd or "").strip().upper()
+        if cmd_upper == "SHOW":
+            return self._ipc_show()
+        elif cmd_upper == "QUIT":
+            self.call_from_thread(self.action_real_quit)
+            return "OK:QUITTING"
+        elif cmd_upper == "STATUS":
+            count = len([t for t in getattr(self.mgr, "tasks", []) if not getattr(t, "completed", False) and not getattr(t, "deleted", False)])
+            return f"OK:TASKS={count}"
+        return "ERROR:UNKNOWN"
+
+    def hide_to_tray(self) -> None:
+        """Minimiert das Konsolenfenster unsichtbar ins Windows System Tray (SW_HIDE)."""
+        if sys.platform != "win32":
+            return
+        hwnd = self._terminal_hwnd or get_terminal_window_hwnd() or _CACHED_TERMINAL_HWND
+        if hwnd:
+            self._terminal_hwnd = hwnd
+            try:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE = 0
+                self.is_hidden_in_tray = True
+            except Exception:
+                pass
+
+    def restore_from_tray(self) -> None:
+        """Stellt das versteckte Fenster wieder her und bringt es zuverlässig in den Vordergrund."""
+        if sys.platform != "win32":
+            return
+        hwnd = self._terminal_hwnd or get_terminal_window_hwnd() or _CACHED_TERMINAL_HWND
+        if hwnd:
+            self._terminal_hwnd = hwnd
+            try:
+                user32 = ctypes.windll.user32
+                kernel32 = ctypes.windll.kernel32
+
+                # 1. Unhide & Restore
+                SW_SHOW = 5
+                SW_RESTORE = 9
+                user32.ShowWindow(hwnd, SW_SHOW)
+                user32.ShowWindow(hwnd, SW_RESTORE)
+
+                # 2. Window Position & Visibility erzwingen
+                SWP_NOMOVE = 0x0002
+                SWP_NOSIZE = 0x0001
+                SWP_SHOWWINDOW = 0x0040
+                HWND_TOP = 0
+                user32.SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW)
+
+                # 3. Windows Foreground-Lock zuverlässig umgehen
+                user32.AllowSetForegroundWindow(-1)  # ASFW_ANY = -1
+                fg_hwnd = user32.GetForegroundWindow()
+                if fg_hwnd and fg_hwnd != hwnd:
+                    cur_tid = kernel32.GetCurrentThreadId()
+                    fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None)
+                    if cur_tid != fg_tid and fg_tid != 0:
+                        user32.AttachThreadInput(cur_tid, fg_tid, True)
+                        user32.SetForegroundWindow(hwnd)
+                        user32.BringWindowToTop(hwnd)
+                        user32.SetFocus(hwnd)
+                        user32.AttachThreadInput(cur_tid, fg_tid, False)
+                    else:
+                        user32.SetForegroundWindow(hwnd)
+                        user32.BringWindowToTop(hwnd)
+                else:
+                    user32.SetForegroundWindow(hwnd)
+                    user32.BringWindowToTop(hwnd)
+
+                self.is_hidden_in_tray = False
+            except Exception:
+                pass
+
+
+    def action_real_quit(self) -> None:
+        """Beendet die Anwendung vollständig, auch wenn 'minimize_to_tray' aktiv ist."""
+        self.action_quit_app(force=True)
+
 
     def _start_update_checker(self) -> None:
         """Startet die Prüfung auf neuere GitHub-Releases in einem Hintergrund-Thread."""
@@ -9799,7 +10232,8 @@ class TasksApp(App):
         elif bid in ("btn_main_theme", "btn_main_palette"):
             self.action_change_theme()
         elif bid == "btn_main_quit":
-            self.action_quit_app(force=True)
+            self.action_quit_app(force=False)
+
 
     # --- Actions (callable via mouse & keyboard) ---
 
@@ -9878,6 +10312,33 @@ class TasksApp(App):
                 def on_explain_done(saved: bool) -> None:
                     self.action_open_settings()
                 self.push_screen(AiExplainModal(), on_explain_done)
+            elif action == "tray_config":
+                def on_tray_done(saved: bool) -> None:
+                    if saved:
+                        self.notify("System tray and autostart settings saved.", severity="information")
+                        try:
+                            from config import is_minimize_to_tray_enabled
+                            if is_minimize_to_tray_enabled():
+                                if getattr(self, "_tray_service", None) is None:
+                                    self._init_tray_and_ipc()
+                            else:
+                                if getattr(self, "_tray_service", None) is not None:
+                                    try:
+                                        self._tray_service.stop()
+                                    except Exception:
+                                        pass
+                                    self._tray_service = None
+                                if getattr(self, "_single_instance_server", None) is not None:
+                                    try:
+                                        self._single_instance_server.stop()
+                                    except Exception:
+                                        pass
+                                    self._single_instance_server = None
+                        except Exception:
+                            pass
+                    self.action_open_settings()
+                self.push_screen(TrayConfigModal(), on_tray_done)
+
 
         self.push_screen(SettingsModal(), on_setting_chosen)
 
@@ -10431,10 +10892,14 @@ class TasksApp(App):
         self.action_change_theme()
 
     def _start_mouse_back_listener(self) -> None:
-        """Starts a lightweight daemon thread listening for Mouse Button 4 (Back / XBUTTON1)."""
+        """Starts the lightweight mouse back listener and the console close ([X]) handler."""
         if self._mouse_listener_thread and self._mouse_listener_thread.is_alive():
             return
         self._stop_mouse_listener.clear()
+
+        # Registriert SetConsoleCtrlHandler, damit Ctrl+C sauber beendet und [X] die Konsole schließt.
+        self._install_console_close_handler()
+
         self._mouse_listener_thread = threading.Thread(
             target=self._run_mouse_back_listener,
             daemon=True,
@@ -10442,18 +10907,103 @@ class TasksApp(App):
         )
         self._mouse_listener_thread.start()
 
+    def _install_console_close_handler(self) -> None:
+        """Installs a SetConsoleCtrlHandler that handles the console [X] (close) button and Ctrl+C."""
+        if sys.platform != "win32" or getattr(self, "_console_ctrl_handler_installed", False):
+            return
+        try:
+            kernel32 = ctypes.windll.kernel32
+            PHANDLER = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_ulong)
+
+            def _on_console_ctrl(ctrl_type: int) -> bool:
+                if ctrl_type == 0:  # CTRL_C_EVENT
+                    try:
+                        self.call_from_thread(self.action_real_quit)
+                    except Exception:
+                        pass
+                    return True
+
+                if ctrl_type == 2:  # CTRL_CLOSE_EVENT (red [X] on the console window)
+                    # 1. Lokale IPC-Pipe sofort freigeben
+                    if getattr(self, "_single_instance_server", None):
+                        try:
+                            self._single_instance_server.stop()
+                        except Exception:
+                            pass
+                        self._single_instance_server = None
+                    # 2. Lokales Tray-Icon sofort beenden
+                    if getattr(self, "_tray_service", None):
+                        try:
+                            self._tray_service.stop()
+                        except Exception:
+                            pass
+                        self._tray_service = None
+                    # Windows darf die Konsole schließen und den Prozess beenden
+                    return False
+
+                return False
+
+            self._console_ctrl_cb = PHANDLER(_on_console_ctrl)
+            kernel32.SetConsoleCtrlHandler(self._console_ctrl_cb, True)
+            self._console_ctrl_handler_installed = True
+        except Exception:
+            # Fallback, falls kein Ctrl-Handler registriert werden konnte.
+            self._disable_conhost_close_button()
+
+    def _uninstall_console_close_handler(self) -> None:
+        """Removes the console control handler again (called on a real quit)."""
+        if not getattr(self, "_console_ctrl_handler_installed", False):
+            return
+        try:
+            ctypes.windll.kernel32.SetConsoleCtrlHandler(self._console_ctrl_cb, False)
+        except Exception:
+            pass
+        finally:
+            self._console_ctrl_handler_installed = False
+            self._console_ctrl_cb = None
+        if getattr(self, "_conhost_close_disabled", False):
+            try:
+                hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                if hwnd:
+                    user32 = ctypes.windll.user32
+                    hmenu = user32.GetSystemMenu(hwnd, False)
+                    if hmenu:
+                        user32.EnableMenuItem(hmenu, 0xF060, 0x00000000)  # SC_CLOSE wieder aktivieren
+            except Exception:
+                pass
+            self._conhost_close_disabled = False
+
+    def _disable_conhost_close_button(self) -> None:
+        """Fallback: greys out the [X] item (SC_CLOSE) of a classic conhost window's system menu."""
+        try:
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if not hwnd:
+                return
+            user32 = ctypes.windll.user32
+            class_name = ctypes.create_unicode_buffer(256)
+            user32.GetClassNameW(hwnd, class_name, 256)
+            if class_name.value != "ConsoleWindowClass":
+                return  # Windows Terminal & Co. bieten kein eigenes Systemmenü an
+            hmenu = user32.GetSystemMenu(hwnd, False)
+            if hmenu:
+                MF_GRAYED = 0x00000001
+                MF_DISABLED = 0x00000002
+                user32.EnableMenuItem(hmenu, 0xF060, MF_GRAYED | MF_DISABLED)  # SC_CLOSE
+                user32.DrawMenuBar(hwnd)
+                self._conhost_close_disabled = True
+        except Exception:
+            pass
+
     def _run_mouse_back_listener(self) -> None:
         """Monitors Windows mouse back button state and navigates back when clicked in foreground."""
         VK_XBUTTON1 = 0x05  # Mouse Back Button (Seitentaste Hinten)
         user32 = ctypes.windll.user32
         prev_pressed = False
         while not self._stop_mouse_listener.is_set():
-            time.sleep(0.06)
+            time.sleep(0.05)
             try:
-                # Prüfe ob Taste 4 (XBUTTON1) gedrückt ist (MSB = 1)
                 is_pressed = bool(user32.GetAsyncKeyState(VK_XBUTTON1) & 0x8000)
                 if is_pressed and not prev_pressed:
-                    # Nur auslösen, wenn Tasks das aktive/fokussierte Fenster ist
                     if is_app_window_foreground(self, self._terminal_hwnd):
                         self.call_from_thread(self.action_navigate_back)
                 prev_pressed = is_pressed
@@ -10497,6 +11047,7 @@ class TasksApp(App):
     def on_unmount(self) -> None:
         """Wird aufgerufen, wenn die Anwendung beendet wird (egal über welchen Weg)."""
         self._stop_mouse_listener.set()
+        self._uninstall_console_close_handler()
         set_shutting_down()
         if hasattr(self, "mgr"):
             self.mgr.shutdown()
@@ -10517,6 +11068,26 @@ class TasksApp(App):
             focused = self.focused
             if focused is not None and (isinstance(focused, (Input, TextArea)) or getattr(focused, "selected_text", None)):
                 return
+            if sys.platform == "win32":
+                try:
+                    from config import is_minimize_to_tray_enabled
+                    if is_minimize_to_tray_enabled() and self._tray_service is not None:
+                        self.hide_to_tray()
+                        return
+                except Exception:
+                    pass
+
+
+        if getattr(self, "_single_instance_server", None):
+            try:
+                self._single_instance_server.stop()
+            except Exception:
+                pass
+        if getattr(self, "_tray_service", None):
+            try:
+                self._tray_service.stop()
+            except Exception:
+                pass
         self._stop_mouse_listener.set()
         set_shutting_down()
         if hasattr(self, "mgr"):
@@ -10536,9 +11107,10 @@ class TasksApp(App):
 
 
 
-def run_tui():
+
+def run_tui(start_hidden: bool = False):
     """Startet die moderne Textual-TUI-Anwendung."""
-    if not getattr(sys, "_launching_tui_printed", False):
+    if not start_hidden and not getattr(sys, "_launching_tui_printed", False):
         sys._launching_tui_printed = True
         print("Launching TUI...", flush=True)
     if AUTO_CLEAN_BROWSER_CACHE:
@@ -10548,7 +11120,8 @@ def run_tui():
             pass
 
     ensure_terminal_window_size(target_cols=123, min_height_px=680)
-    app = TasksApp()
+    app = TasksApp(start_hidden=start_hidden)
+
     try:
         app.run()
     finally:

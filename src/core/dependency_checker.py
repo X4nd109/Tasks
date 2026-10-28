@@ -21,6 +21,8 @@ REQUIRED_PACKAGES = {
     "PyMuPDF": ("pymupdf", "PDF processing & bookmarks for schoolbooks"),
     "Pillow": ("PIL", "Image processing for Digi4School grabber"),
     "pytesseract": ("pytesseract", "OCR engine for searchable schoolbook PDFs"),
+    "pystray": ("pystray", "System tray icon manager"),
+    "winotify": ("winotify", "Native Windows toast notifications"),
 }
 
 

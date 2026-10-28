@@ -18,7 +18,7 @@ WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.1.1"
+APP_VERSION = "2.2.0"
 GITHUB_REPO = "X4nd109/Tasks"
 
 
@@ -1464,3 +1464,148 @@ def save_ai_explain_config(cfg: dict, auto_push: bool = True) -> None:
                 json.dump(data, f, indent=2, ensure_ascii=False)
         except Exception as e:
             print(f"Warning: Could not save ai_explain_config to {path}: {e}", file=sys.stderr)
+
+
+# ─────────────────────────────────────────────────────────────────
+# AI Agent Skill Zielverzeichnis (flexibler Speicherort für SKILL.md)
+# ─────────────────────────────────────────────────────────────────
+
+SKILL_TARGET_DIR_KEY = "skill_target_dir"
+
+
+def load_skill_target_dir() -> Optional[str]:
+    """Lädt das persistent gespeicherte Zielverzeichnis für den AI-Agent-Skill.
+
+    Liest ``skill_target_dir`` bevorzugt aus ``APP_CONFIG_FILE`` und fällt
+    andernfalls auf die Workspace-``CONFIG_FILE`` zurück.
+    Gibt ``None`` zurück, wenn kein (nicht-leerer) Pfad hinterlegt ist.
+    """
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            value = data.get(SKILL_TARGET_DIR_KEY)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def save_skill_target_dir(target_dir: str) -> None:
+    """Speichert das gewählte Skill-Zielverzeichnis dauerhaft in der Konfiguration.
+
+    Schreibt ``skill_target_dir`` in ``APP_CONFIG_FILE`` und zusätzlich in die
+    Workspace-``CONFIG_FILE``, sofern diese bereits existiert.
+    """
+    if not target_dir or not isinstance(target_dir, str):
+        return
+    clean_dir = target_dir.strip()
+    if not clean_dir:
+        return
+
+    paths = [APP_CONFIG_FILE]
+    try:
+        if (
+            CONFIG_FILE
+            and os.path.exists(CONFIG_FILE)
+            and os.path.abspath(CONFIG_FILE) != os.path.abspath(APP_CONFIG_FILE)
+        ):
+            paths.append(CONFIG_FILE)
+    except Exception:
+        pass
+
+    for path in paths:
+        if not path:
+            continue
+        try:
+            data = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        data = loaded
+                except Exception:
+                    data = {}
+            data[SKILL_TARGET_DIR_KEY] = clean_dir
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        except Exception:
+            pass
+
+
+def is_skill_synced() -> bool:
+    """Prüft, ob der Skill in das konfigurierte Zielverzeichnis installiert ist.
+
+    Gibt ``True`` zurück, wenn ``skill_target_dir`` konfiguriert ist, als
+    Verzeichnis existiert und eine ``SKILL.md`` enthält.
+    """
+    target_dir = load_skill_target_dir()
+    if not target_dir:
+        return False
+    try:
+        return os.path.isdir(target_dir) and os.path.isfile(os.path.join(target_dir, "SKILL.md"))
+    except Exception:
+        return False
+
+
+MINIMIZE_TO_TRAY_KEY = "minimize_to_tray"
+
+
+def is_minimize_to_tray_enabled() -> bool:
+    """Gibt zurück, ob Tasks beim Schließen der TUI ins System-Tray minimiert werden soll (Standard: True)."""
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict) and MINIMIZE_TO_TRAY_KEY in data:
+                        return bool(data[MINIMIZE_TO_TRAY_KEY])
+            except Exception:
+                pass
+    return True
+
+
+def set_minimize_to_tray_enabled(enabled: bool) -> bool:
+    """Speichert die Einstellung, ob Tasks ins System-Tray minimiert werden soll."""
+    paths = [APP_CONFIG_FILE]
+    if CONFIG_FILE not in paths:
+        paths.append(CONFIG_FILE)
+
+    success = False
+    for path in paths:
+        if not path:
+            continue
+        try:
+            data = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        data = loaded
+                except Exception:
+                    data = {}
+            data[MINIMIZE_TO_TRAY_KEY] = bool(enabled)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+            success = True
+        except Exception:
+            pass
+    return success
+
+
+
+
+
+

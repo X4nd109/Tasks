@@ -9,6 +9,7 @@ Liest standardmäßig sofort den lokalen Cache (< 0.1s) und minimiert Token-Verb
 import argparse
 import datetime
 import json
+import logging
 import os
 import sys
 import time
@@ -19,6 +20,8 @@ from typing import List, Optional, Tuple
 from config import CONFIG_DIR, extract_teacher, normalize_subject_name, load_all_course_links
 from models import Task
 from task_manager import TaskManager, parse_deadline_for_sorting
+
+logger = logging.getLogger("agent_cli")
 
 LAST_CLI_TASKS_FILE = os.path.join(CONFIG_DIR, ".last_cli_tasks.json")
 
@@ -423,11 +426,15 @@ Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
       add <path> [--title]       Link a local folder path (auto-titled from folder)
       remove <id|index|name>     Remove linked directory
 
-  tasks skill [sync|status] [--target PATH] [--json]
-    Manage global Antigravity / Agent skill.
+  tasks skill [sync|status|set-dir] [--target PATH] [--set-dir [PATH]] [--json]
+    Manage the Tasks skill for AI agents (Antigravity, Claude Code, Codex, ...).
     Subcommands:
-      sync (default)             Install/sync skill to ~/.gemini/config/skills/tasks/
-      status                     Check installation status and sync state
+      sync                       Sync SKILL.md to the saved directory (asks once if not configured)
+      set-dir [PATH]             Choose/re-configure the skill directory (native folder picker if PATH omitted)
+      status                     Show configured directory and whether it is in sync
+    Flags:
+      --target PATH              Sync to an explicit directory without prompting/saving
+      --set-dir [PATH]           Same as 'set-dir' (opens the Windows folder picker without PATH)
 
   tasks sync [--deep] [--json]
     Perform live network sync with Moodle & Teams in background/terminal.
@@ -460,6 +467,8 @@ def normalize_argv(argv: List[str]) -> List[str]:
     `tasks -restore 1` -> `tasks restore 1`
     `tasks -guide` -> `tasks guide`
     `tasks -json` -> `tasks list --json`
+    `tasks -set-dir` -> `tasks skill --set-dir`
+    `tasks --set-dir <path>` -> `tasks skill --set-dir <path>`
     """
     if not argv:
         return []
@@ -474,6 +483,13 @@ def normalize_argv(argv: List[str]) -> List[str]:
         if lower in ["--json", "-json"] and i == 0:
             norm.append("list")
             norm.append("--json")
+            i += 1
+            continue
+
+        # Sonderfall: `--set-dir [PATH]` ohne Command -> `skill --set-dir [PATH]`
+        if i == 0 and lower in ["--set-dir", "-set-dir"]:
+            norm.append("skill")
+            norm.append("--set-dir")
             i += 1
             continue
 
@@ -529,7 +545,8 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "open", "course", "courses", "courselist",
         "books", "book", "schulbuch", "schulbücher",
         "dirs", "dir", "directories", "folder", "folders", "ordner",
-        "skill", "skills"
+        "skill", "skills",
+        "autostart", "tray"
     }
 
     if first in known_commands:
@@ -547,8 +564,11 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "-open", "--open", "-courses", "--courses", "-course", "--course",
         "-books", "--books", "-book", "--book",
         "-dirs", "--dirs", "-dir", "--dir", "-folder", "--folder",
-        "-skill", "--skill", "-skills", "--skills"
+        "-skill", "--skill", "-skills", "--skills",
+        "-set-dir", "--set-dir",
+        "-autostart", "--autostart", "-tray", "--tray"
     ]
+
     return any(first.startswith(p) for p in flag_prefixes)
 
 
@@ -1142,9 +1162,115 @@ def run_agent_cli(argv: List[str]) -> int:
     if command in ["skill", "skills"]:
         return handle_skill_command(sub_args)
 
+    # ─────────────────────────────────────────────────────────────────
+    # 13. AUTOSTART (Windows Registry)
+    # ─────────────────────────────────────────────────────────────────
+    if command == "autostart":
+        return handle_autostart_command(sub_args)
+
+    # ─────────────────────────────────────────────────────────────────
+    # 14. TRAY (System Tray & Resident State)
+    # ─────────────────────────────────────────────────────────────────
+    if command == "tray":
+        return handle_tray_command(sub_args)
+
     # Unbekannter Befehl
     print(f"Unknown command: '{command}'. Use 'tasks guide' or 'tasks --help' for available commands.")
     return 1
+
+
+def handle_autostart_command(sub_args: List[str]) -> int:
+    """Verwaltet den Windows-Autostart-Eintrag für Tasks."""
+    parser = argparse.ArgumentParser(prog="tasks autostart", add_help=False)
+    parser.add_argument("action", nargs="?", default="status", choices=["status", "enable", "on", "disable", "off"], help="Action to perform")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    args, _ = parser.parse_known_args(sub_args)
+
+    from autostart_service import is_autostart_enabled, set_autostart, get_autostart_command
+
+    action = (args.action or "status").lower()
+    if action in ("enable", "on"):
+        ok = set_autostart(True)
+        enabled = is_autostart_enabled()
+    elif action in ("disable", "off"):
+        ok = set_autostart(False)
+        enabled = is_autostart_enabled()
+    else:
+        ok = True
+        enabled = is_autostart_enabled()
+
+    cmd = get_autostart_command()
+    if args.json:
+        print(json.dumps({"success": ok, "enabled": enabled, "command": cmd}, ensure_ascii=False))
+    else:
+        status_str = "ENABLED" if enabled else "DISABLED"
+        print(f"Windows Autostart: {status_str}")
+        if enabled:
+            print(f"Registered Command: {cmd}")
+    return 0 if ok else 1
+
+
+def handle_tray_command(sub_args: List[str]) -> int:
+    """Steuert und überwacht das System-Tray- und Hintergrundverhalten."""
+    parser = argparse.ArgumentParser(prog="tasks tray", add_help=False)
+    parser.add_argument("action", nargs="?", default="status", choices=["status", "enable", "on", "disable", "off", "show", "quit"], help="Action to perform")
+    parser.add_argument("--json", action="store_true", help="Output as JSON")
+    args, _ = parser.parse_known_args(sub_args)
+
+    from config import is_minimize_to_tray_enabled, set_minimize_to_tray_enabled
+    from single_instance import send_instance_command
+
+    action = (args.action or "status").lower()
+    if action in ("enable", "on"):
+        ok = set_minimize_to_tray_enabled(True)
+        enabled = is_minimize_to_tray_enabled()
+        if args.json:
+            print(json.dumps({"success": ok, "enabled": enabled}, ensure_ascii=False))
+        else:
+            print("Minimize to System Tray on Close: ENABLED")
+        return 0 if ok else 1
+    elif action in ("disable", "off"):
+        ok = set_minimize_to_tray_enabled(False)
+        enabled = is_minimize_to_tray_enabled()
+        if args.json:
+            print(json.dumps({"success": ok, "enabled": enabled}, ensure_ascii=False))
+        else:
+            print("Minimize to System Tray on Close: DISABLED")
+        return 0 if ok else 1
+    elif action == "show":
+        res = send_instance_command("SHOW")
+        running = res is not None
+        if args.json:
+            print(json.dumps({"success": running, "running": running, "response": res}, ensure_ascii=False))
+        else:
+            if running:
+                print("Signal sent: Tasks window restored to foreground.")
+            else:
+                print("No running Tasks background process found.")
+        return 0 if running else 1
+    elif action == "quit":
+        res = send_instance_command("QUIT")
+        running = res is not None
+        if args.json:
+            print(json.dumps({"success": running, "terminated": running}, ensure_ascii=False))
+        else:
+            if running:
+                print("Tasks background process terminated.")
+            else:
+                print("No running Tasks background process found.")
+        return 0 if running else 1
+    else:
+        # status
+        enabled = is_minimize_to_tray_enabled()
+        res = send_instance_command("STATUS")
+        running = res is not None
+        if args.json:
+            print(json.dumps({"enabled": enabled, "running": running, "response": res}, ensure_ascii=False))
+        else:
+            print(f"Minimize to Tray Setting: {'ENABLED' if enabled else 'DISABLED'}")
+            print(f"Background Process State: {'RUNNING in tray' if running else 'NOT RUNNING'}")
+        return 0
+
 
 
 def handle_books_command(sub_args: List[str]) -> int:
@@ -1525,112 +1651,290 @@ def handle_dirs_command(sub_args: List[str]) -> int:
     return 1
 
 
-def handle_skill_command(sub_args: List[str]) -> int:
-    """Manages syncing and status of the global Antigravity/Agent skill."""
-    parser = argparse.ArgumentParser(prog="tasks skill", add_help=False)
-    parser.add_argument("action", nargs="?", default="sync", help="sync, install, update, status, check")
-    parser.add_argument("--target", default="", help="Custom target directory for the skill (defaults to ~/.gemini/config/skills/tasks)")
-    parser.add_argument("--json", action="store_true", help="JSON output")
-    args, _ = parser.parse_known_args(sub_args)
+SKILL_SELECT_DIR_MESSAGE = (
+    "Please select the directory where you want to install the Tasks skill for your AI agent "
+    "(e.g. Antigravity, Claude Code, Codex). Press [ENTER] to open the folder picker..."
+)
+SKILL_CANCELLED_MESSAGE = "Operation cancelled. No folder selected."
 
-    action = (args.action or "sync").lower()
-    if action not in ["sync", "install", "update", "status", "check", "info"]:
-        action = "sync"
+SKILL_SET_DIR_ACTIONS = {"set-dir", "setdir", "set_dir", "config-dir", "configdir", "target-dir", "targetdir"}
 
-    # Ermittle Quell-Skillverzeichnis
+# Override-Hook: standardmäßig None, wird zur Laufzeit aus `win_dialogs` aufgelöst.
+pick_directory = None
+
+
+def resolve_skill_source_file(source_file: Optional[str] = None) -> Optional[str]:
+    """Ermittelt die Quell-`SKILL.md` im Repository (`skills/tasks/SKILL.md`)."""
+    if source_file:
+        explicit = os.path.abspath(os.path.expanduser(source_file))
+        return explicit if os.path.isfile(explicit) else None
+
+    candidates: List[str] = []
     try:
-        from config import WORKSPACE_DIR
-    except ImportError:
-        WORKSPACE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from config import WORKSPACE_DIR as _workspace
+        candidates.append(os.path.join(_workspace, "skills", "tasks", "SKILL.md"))
+    except Exception:
+        pass
+    candidates.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "skills", "tasks", "SKILL.md")))
 
-    source_skill_file = os.path.join(WORKSPACE_DIR, "skills", "tasks", "SKILL.md")
-    if not os.path.exists(source_skill_file):
-        # Fallback relative zu dieser Datei
-        source_skill_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "skills", "tasks", "SKILL.md"))
+    for candidate in candidates:
+        try:
+            if candidate and os.path.isfile(candidate):
+                return candidate
+        except Exception:
+            continue
+    return None
 
-    # Zielverzeichnis: Standardmäßig ~/.gemini/config/skills/tasks
-    if args.target:
-        target_dir = os.path.abspath(args.target)
-    else:
-        user_home = os.environ.get("USERPROFILE") or os.path.expanduser("~")
-        target_dir = os.path.join(user_home, ".gemini", "config", "skills", "tasks")
 
-    target_skill_file = os.path.join(target_dir, "SKILL.md")
+def sync_skill_to_dir(target_dir: str, source_file: Optional[str] = None) -> bool:
+    """Kopiert `SKILL.md` und alle Begleitdateien aus `skills/tasks/` direkt nach `target_dir`.
 
-    if action in ["status", "check", "info"]:
-        exists = os.path.exists(target_skill_file)
-        in_sync = False
-        source_exists = os.path.exists(source_skill_file)
-        if exists and source_exists:
-            try:
-                with open(source_skill_file, "r", encoding="utf-8") as f_s, open(target_skill_file, "r", encoding="utf-8") as f_t:
-                    in_sync = (f_s.read() == f_t.read())
-            except Exception:
-                in_sync = False
+    Gibt `True` bei Erfolg zurück, andernfalls `False` (es werden keine Exceptions geworfen).
+    """
+    if not target_dir or not isinstance(target_dir, str):
+        return False
+    clean_target = os.path.abspath(os.path.expanduser(target_dir.strip()))
+    if not clean_target:
+        return False
 
-        if args.json:
-            print(json.dumps({
-                "installed": exists,
-                "in_sync": in_sync,
-                "source_file": source_skill_file if source_exists else None,
-                "target_file": target_skill_file,
-                "target_dir": target_dir
-            }, ensure_ascii=False, indent=2))
-        else:
-            if not source_exists:
-                print(f"Warning: Source skill not found at '{source_skill_file}'.")
-            if exists:
-                status_str = "in sync with repo" if in_sync else "outdated / differs from repo"
-                print(f"✓ tasks skill is installed at: {target_skill_file} ({status_str})")
-            else:
-                print(f"Notice: tasks skill is not installed yet. Run 'tasks skill sync' to install.")
-        return 0
+    src_skill_file = resolve_skill_source_file(source_file)
+    if not src_skill_file:
+        logger.debug("Skill source file not found (source_file=%s)", source_file)
+        return False
 
-    # action in ["sync", "install", "update"]
-    if not os.path.exists(source_skill_file):
-        msg = f"Error: Source skill file not found at: '{source_skill_file}'"
-        if args.json:
-            print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
-        else:
-            print(msg)
-        return 1
+    src_dir = os.path.dirname(src_skill_file)
+    if os.path.normcase(os.path.abspath(clean_target)) == os.path.normcase(os.path.abspath(src_dir)):
+        # Ziel ist identisch mit dem Quellordner -> nichts zu kopieren
+        return False
 
     try:
-        os.makedirs(target_dir, exist_ok=True)
         import shutil
-        shutil.copy2(source_skill_file, target_skill_file)
+        os.makedirs(clean_target, exist_ok=True)
+        shutil.copy2(src_skill_file, os.path.join(clean_target, "SKILL.md"))
 
-        # Zusätzliche Dateien/Ordner aus dem Quellverzeichnis synchronisieren
-        source_dir = os.path.dirname(source_skill_file)
-        for item in os.listdir(source_dir):
+        # Alle Begleitdateien/-ordner direkt in das Zielverzeichnis spiegeln
+        for item in os.listdir(src_dir):
             if item == "SKILL.md":
                 continue
-            s_item = os.path.join(source_dir, item)
-            t_item = os.path.join(target_dir, item)
+            s_item = os.path.join(src_dir, item)
+            t_item = os.path.join(clean_target, item)
             if os.path.isdir(s_item):
                 if os.path.exists(t_item):
                     shutil.rmtree(t_item, ignore_errors=True)
                 shutil.copytree(s_item, t_item)
             elif os.path.isfile(s_item):
                 shutil.copy2(s_item, t_item)
+        return True
+    except Exception as e:
+        logger.debug("Failed to sync skill to '%s': %s", clean_target, e)
+        return False
+
+
+def pick_skill_directory(dialog_title: str = "Select Tasks Skill Directory") -> Optional[str]:
+    """Öffnet den nativen Windows-Ordner-Dialog und gibt den gewählten Pfad zurück.
+
+    Der Picker wird zur Laufzeit aus `win_dialogs` aufgelöst. Ein auf Modulebene
+    gesetzter `pick_directory`-Override (z. B. in Tests) hat Vorrang.
+    """
+    picker = globals().get("pick_directory")
+    if picker is None:
+        try:
+            from win_dialogs import pick_directory as picker
+        except ImportError:
+            try:
+                from core.win_dialogs import pick_directory as picker
+            except ImportError:
+                logger.debug("win_dialogs.pick_directory not available")
+                return None
+    try:
+        chosen = picker(dialog_title=dialog_title)
+    except Exception as e:
+        logger.debug("Folder picker failed: %s", e)
+        return None
+    if chosen is None:
+        return None
+    chosen_str = str(chosen).strip()
+    return chosen_str or None
+
+
+def prompt_for_skill_directory() -> Optional[str]:
+    """Zeigt den Hinweistext, wartet auf ENTER und öffnet danach den Ordner-Picker."""
+    print(SKILL_SELECT_DIR_MESSAGE)
+    try:
+        input()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    return pick_skill_directory(dialog_title="Select Tasks Skill Directory")
+
+
+def _skill_files_in_sync(source_skill_file: str, target_dir: str) -> bool:
+    """Prüft, ob die installierte `SKILL.md` inhaltlich der Quelle entspricht."""
+    if not source_skill_file or not target_dir:
+        return False
+    target_skill_file = os.path.join(target_dir, "SKILL.md")
+    if not (os.path.isfile(source_skill_file) and os.path.isfile(target_skill_file)):
+        return False
+    try:
+        with open(source_skill_file, "r", encoding="utf-8") as f_s, open(target_skill_file, "r", encoding="utf-8") as f_t:
+            return f_s.read() == f_t.read()
+    except Exception:
+        return False
+
+
+def handle_skill_command(sub_args: List[str]) -> int:
+    """Manages syncing, configuration and status of the AI agent skill."""
+    from config import load_skill_target_dir, save_skill_target_dir, is_skill_synced
+
+    parser = argparse.ArgumentParser(prog="tasks skill", add_help=False)
+    parser.add_argument("action", nargs="?", default=None, help="sync, install, update, status, check, set-dir")
+    parser.add_argument("path", nargs="?", default="", help="Target directory (for set-dir)")
+    parser.add_argument("--target", default="", help="Explicit target directory for a one-off sync")
+    parser.add_argument("--set-dir", dest="set_dir", nargs="?", const="", default=None, help="Set/configure the skill directory")
+    parser.add_argument("--json", action="store_true", help="JSON output")
+    args, _ = parser.parse_known_args(sub_args)
+
+    action = (args.action or "sync").lower()
+    path_arg = (args.path or "").strip()
+
+    set_dir_requested = action in SKILL_SET_DIR_ACTIONS or args.set_dir is not None
+    if not set_dir_requested and action not in ["sync", "install", "update", "status", "check", "info"]:
+        action = "sync"
+
+    source_skill_file = resolve_skill_source_file()
+
+    # ─────────────────────────────────────────────────────────────
+    # STATUS
+    # ─────────────────────────────────────────────────────────────
+    if not set_dir_requested and action in ["status", "check", "info"]:
+        configured_dir = load_skill_target_dir()
+        explicit_target = os.path.abspath(os.path.expanduser(args.target.strip())) if args.target.strip() else None
+        target_dir = explicit_target or configured_dir
+        source_exists = bool(source_skill_file) and os.path.exists(source_skill_file)
+
+        installed = False
+        in_sync = False
+        target_skill_file = None
+        if target_dir:
+            target_skill_file = os.path.join(target_dir, "SKILL.md")
+            installed = os.path.isfile(target_skill_file)
+            in_sync = _skill_files_in_sync(source_skill_file, target_dir) if (installed and source_exists) else False
 
         if args.json:
             print(json.dumps({
-                "success": True,
-                "action": "synced",
-                "source_file": source_skill_file,
+                "installed": installed,
+                "in_sync": in_sync,
+                "source_file": source_skill_file if source_exists else None,
                 "target_file": target_skill_file,
-                "target_dir": target_dir
+                "target_dir": target_dir,
+                "configured_dir": configured_dir,
+                "synced": is_skill_synced(),
             }, ensure_ascii=False, indent=2))
         else:
-            print(f"✓ Successfully synced tasks skill to:")
-            print(f"  {target_skill_file}")
-            print(f"  Slash command: /tasks")
+            if configured_dir:
+                print(f"Configured skill directory: {configured_dir}")
+                print(f"Directory ready (SKILL.md present): {'yes' if is_skill_synced() else 'no'}")
+            else:
+                print("No skill directory configured yet. Run 'tasks skill set-dir' to choose one.")
+            if target_dir:
+                if installed:
+                    status_str = "in sync with repo" if in_sync else "outdated / differs from repo"
+                    print(f"OK: tasks skill is installed at: {target_skill_file} ({status_str})")
+                else:
+                    print(f"Notice: tasks skill is not installed at '{target_dir}' yet. Run 'tasks skill sync' to install.")
+            if not source_exists:
+                print(f"Warning: Source skill not found at '{source_skill_file}'.")
         return 0
-    except Exception as e:
-        msg = f"Error syncing skill: {e}"
+
+    # ─────────────────────────────────────────────────────────────
+    # SET-DIR (configure the destination directory)
+    # ─────────────────────────────────────────────────────────────
+    if set_dir_requested:
+        chosen_dir = path_arg or (args.set_dir or "").strip()
+        if not chosen_dir:
+            chosen_dir = prompt_for_skill_directory()
+
+        if not chosen_dir:
+            if args.json:
+                print(json.dumps({
+                    "success": False,
+                    "cancelled": True,
+                    "message": SKILL_CANCELLED_MESSAGE,
+                }, ensure_ascii=False, indent=2))
+            else:
+                print(SKILL_CANCELLED_MESSAGE)
+            return 0
+
+        chosen_dir = os.path.abspath(os.path.expanduser(chosen_dir))
+        save_skill_target_dir(chosen_dir)
+        synced = sync_skill_to_dir(chosen_dir, source_file=source_skill_file)
+
+        if args.json:
+            print(json.dumps({
+                "success": synced,
+                "action": "set-dir",
+                "target_dir": chosen_dir,
+                "target_file": os.path.join(chosen_dir, "SKILL.md"),
+                "source_file": source_skill_file,
+                "configured_dir": load_skill_target_dir(),
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"OK: Skill directory configured: {chosen_dir}")
+            if synced:
+                print(f"  Synced: {os.path.join(chosen_dir, 'SKILL.md')}")
+                print(f"  Slash command: /tasks")
+            else:
+                print(f"Warning: Could not copy the skill files to '{chosen_dir}'.")
+        return 0 if synced else 1
+
+    # ─────────────────────────────────────────────────────────────
+    # SYNC / INSTALL / UPDATE
+    # ─────────────────────────────────────────────────────────────
+    if not source_skill_file:
+        msg = "Error: Source skill file (skills/tasks/SKILL.md) not found."
         if args.json:
             print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
         else:
             print(msg)
         return 1
+
+    if args.target.strip():
+        # Explizites Ziel: direkt synchronisieren, ohne Prompt und ohne Speichern
+        target_dir = os.path.abspath(os.path.expanduser(args.target.strip()))
+    else:
+        # Bereits konfiguriertes Ziel: still synchronisieren (kein Prompt, kein Explorer)
+        target_dir = load_skill_target_dir()
+        if not target_dir:
+            target_dir = prompt_for_skill_directory()
+            if not target_dir:
+                if args.json:
+                    print(json.dumps({
+                        "success": False,
+                        "cancelled": True,
+                        "message": SKILL_CANCELLED_MESSAGE,
+                    }, ensure_ascii=False, indent=2))
+                else:
+                    print(SKILL_CANCELLED_MESSAGE)
+                return 0
+            target_dir = os.path.abspath(os.path.expanduser(target_dir))
+            save_skill_target_dir(target_dir)
+
+    synced = sync_skill_to_dir(target_dir, source_file=source_skill_file)
+    target_skill_file = os.path.join(target_dir, "SKILL.md")
+
+    if args.json:
+        print(json.dumps({
+            "success": synced,
+            "action": "synced" if synced else "failed",
+            "source_file": source_skill_file,
+            "target_file": target_skill_file,
+            "target_dir": target_dir,
+            "configured_dir": load_skill_target_dir(),
+        }, ensure_ascii=False, indent=2))
+    elif synced:
+        print("OK: Successfully synced tasks skill to:")
+        print(f"  {target_skill_file}")
+        print(f"  Slash command: /tasks")
+    else:
+        print(f"Error syncing skill to: {target_dir}")
+
+    return 0 if synced else 1

@@ -5,6 +5,7 @@ task_manager.py - Zentrale Verwaltung für Moodle- und Teams-Aufgaben.
 
 import datetime
 import json
+import logging
 import os
 import sys
 import threading
@@ -15,6 +16,8 @@ from typing import Dict, List, Optional, Tuple
 
 from config import CACHE_FILE, DELETED_TASKS_FILE, APP_DELETED_TASKS_FILE, DELETED_MANUAL_TASKS_FILE, APP_DELETED_MANUAL_TASKS_FILE, HIDDEN_TASKS_FILE, APP_HIDDEN_TASKS_FILE, CUSTOM_TASKS_FILE, APP_CUSTOM_TASKS_FILE, extract_teacher, is_platform_enabled, set_shutting_down, is_shutting_down
 from models import Task
+
+logger = logging.getLogger("task_manager")
 
 
 def parse_deadline_for_sorting(due_str: str) -> float:
@@ -235,6 +238,19 @@ class TaskManager:
                 pass
 
         if is_update:
+            # Nach einem App-Update den AI-Agent-Skill automatisch aktualisieren,
+            # sofern bereits ein Zielverzeichnis konfiguriert wurde.
+            try:
+                from config import is_skill_synced, load_skill_target_dir
+                if is_skill_synced():
+                    saved_dir = load_skill_target_dir()
+                    if saved_dir and os.path.isdir(saved_dir):
+                        from agent_cli import sync_skill_to_dir
+                        sync_skill_to_dir(saved_dir)
+                        logger.info("Tasks skill automatically updated at: %s", saved_dir)
+            except Exception as e:
+                logger.debug("Automatic skill update failed: %s", e)
+
             welcome_id = "manual_welcome_setup_guide"
             welcome_task = self.create_welcome_task()
             with self._cache_lock:

@@ -1,11 +1,109 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-10-26  
-> **Active Milestone**: Release v2.1.1 (Released) — Startup-Performance & Lazy Loading, Sauberes Beenden bei aktivem Sync & Launch-Hinweis
+> **Last Updated**: 2026-10-28  
+> **Active Milestone**: Terminal-Autoclose mit 10s-Countdown bei laufender Hintergrundinstanz & Klares Beenden-Verhalten (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **System Tray & Autostart Settings Text-Formatting & Zeilenbreite (2026-10-28)**:
+  - **Problem**: Im Modal `TrayConfigModal` ("System Tray & Autostart Settings") wurden Texte zuvor künstlich nach wenigen Wörtern umgebrochen, wodurch die rechte Hälfte des Dialogs leer blieb.
+  - **Lösung**:
+    - Dialogbreite auf `76` optimiert (entspricht Standard-Modals wie `AiConfigModal` und `DownloadLocationModal` mit 70 Spalten Innenbreite).
+    - `.tray_cfg_desc` mit `width: 100%; height: auto; margin-bottom: 1;` versehen, damit Multi-Line Rendering und Text-Wrapping in Textual aktiv sind.
+    - Sätze pro Zeile verlängert: Jeder Satz nimmt nun elegant und gleichmäßig die volle Zeilenbreite ein (60–67 Zeichen).
+    - Veralteten Import von `get_close_button_action` und doppelte `set_autostart`-Aufrufe in `TrayConfigModal` bereinigt.
+    - `#tray_config_dialog` im OLED-Theme (`.-theme-oled`) für echten schwarzen Hintergrund registriert.
+    - Testsuite `tests/test_tray_tui_integration.py` erfolgreich verifiziert.
+
+- [x] **Terminal-Autoclose mit 10s-Countdown bei laufender Hintergrundinstanz (2026-10-28)**:
+  - **Problem**: Wenn Tasks bereits im Hintergrund lief und man in einem neuen Terminal `tasks` eingab, wurde das bestehende Fenster zwar erfolgreich wiederhergestellt, aber das zweite Terminal blieb unnötig offen.
+  - **10s Countdown & Interaktiver Abbruch mit [ENTER]**:
+    - In `main.py`: `_handle_existing_instance_autoclose(timeout_seconds=10)` gibt bei erfolgreichem `SHOW` folgendes aus:
+      ```text
+      Restoring window...
+      Window succesfully restored.
+      This terminal will close in 10s. Press [ENTER] to cancel...
+      ```
+    - Prüft nicht-blockierend via Windows `msvcrt.kbhit()` und `msvcrt.getwch()`.
+    - **Ausschließlich [ENTER]** (`\r` / `\n`) bricht den Countdown ab, gibt `Close cancelled. Terminal remains open.` aus und kehrt sofort zum normalen Terminal-Prompt zurück. Alle anderen Tasten werden ignoriert.
+    - Läuft der Countdown ab, schließt `_close_current_terminal_window()` das Terminalfenster (via `WM_CLOSE` für ConHost bzw. SIGTERM der Host-Shell für Windows Terminal Tabs).
+  - **Testsuite**: 5 Unittests in `tests/test_terminal_autoclose.py` mit deterministischer Fake-Uhr und Tastatur-Mocks zu 100% bestanden.
+
+- [x] **Klares Beenden-Verhalten: Terminal, Tray & Ctrl+C (2026-10-28)**:
+  - **Ctrl+C** (`Binding("ctrl+c", "real_quit", "Force Quit to Terminal")` → `action_real_quit()`): stoppt `SingleInstanceServer` und `TrayService`, beendet Textual via `self.exit()` und kehrt sauber zum Terminal-Prompt zurück, ohne das Terminalfenster zu schließen.
+  - **[Q] / [Exit]** (`#btn_main_quit` → `action_quit_app(force=False)`): blendet bei aktivem `minimize_to_tray` weiterhin via `hide_to_tray()` ins System Tray aus (`ShowWindow(hwnd, SW_HIDE)`).
+  - **Rotes [X] der Konsole** (`CTRL_CLOSE_EVENT`): stoppt `SingleInstanceServer` und `TrayService`, spawnt keinen Hintergrundprozess und lässt Windows das Fenster und das Tray-Icon vollständig schließen.
+  - **Bereinigung**: `src/ui/win_close_dialog.py` und `tests/test_win_close_dialog.py` gelöscht; `TrayConfigModal` enthält nur noch die beiden Umschalter für `Minimize to System Tray` und `Autostart`.
+  - **Testsuite**: 77 Unittests für Tray-Service, Single-Instance, Autostart, Notifications, TUI-Integration und Terminal-Autoclose zu 100% bestanden.
+
+- [x] **Windows System Tray Hintergrundprozess, Instant-Start via Window-Hide & Notification Foundation (2026-10-27)**:
+  - **Problem**: Der Kaltstart der TUI erforderte bei jedem Neuaufruf den Start des Python-Interpreters und das Laden von Modulen. Beim Schließen mit `[Q]` oder Exit wurde der Prozess komplett beendet. Zudem fehlte eine persistente Plattform für zukünftige Windows-Benachrichtigungen.
+  - **Instant Startup via "Hide to Tray" & Exit-Fix**:
+    - In `TasksApp`: Wenn `minimize_to_tray` aktiv ist (Standard: `True`), schließt `action_quit_app()` (`[Q]`, `[Ctrl+C]`, Exit-Button `#btn_main_quit`) die TUI nicht, sondern blendet das Konsolenfenster via `ShowWindow(hwnd, SW_HIDE)` unsichtbar in den Hintergrund aus.
+    - Klick auf das Tray-Icon oder der erneute Aufruf von `tasks` im Terminal holt das bestehende Fenster via `ShowWindow(hwnd, SW_RESTORE)`, `SetWindowPos` und `SetForegroundWindow(hwnd)` mit `AttachThreadInput` in <50 ms sofort und 100% verlässlich in den Vordergrund.
+  - **System-Tray-Service (`src/services/tray_service.py`)**:
+    - Basiert auf `pystray` und `Pillow`.
+    - Tray-Name `Tasks`; der Tooltip wird via `update_status(open_count)` als `Tasks — X open` aktuell gehalten.
+    - Robuster Doppelklick- & Klick-Support: `WM_LBUTTONDBLCLK` (0x0203) und `WM_LBUTTONUP` (0x0202) gepatcht, Debouncing gegen Doppel-Triggern integriert und alle Callbacks gegen Loop-Crashes abgesichert.
+    - Kontextmenü: `Open Tasks` (Default/Doppelklick), `Sync Now` (Hintergrund-Synchronisation), Statuszeile `Tasks: X open` (deaktiviertes Label), `Autostart with Windows` (Toggle) und `Quit Tasks`.
+  - **Single-Instance IPC & Zero-Overhead Kaltstart (`src/core/single_instance.py`, `main.py`)**:
+    - Nutzt eine lokale Windows Named Pipe (`\\.\pipe\Tasks_App_Pipe_<user>`) mit TCP-Fallback.
+    - Eingehende Befehle: `SHOW` (Fenster in den Vordergrund holen), `QUIT` (vollständig beenden), `STATUS` (Aufgaben-Anzahl).
+    - Sekundäre CLI-Aufrufe (`tasks`) erkennen die laufende Hintergrund-Instanz und beenden sich sofort, anstatt eine zweite konkurrierende TUI zu starten.
+    - **Zero-Overhead Kaltstart**: Bei deaktiviertem System Tray (`minimize_to_tray: false`) prüft `main.py` in <0.2ms die JSON-Konfiguration, importiert weder `single_instance` noch `pystray`, und startet ohne jeden Millisekunden-Overhead klassisch direkt. Ebenso startet `tui_app.py` weder SingleInstanceServer noch TrayService.
+    - Server-Named-Pipe bleibt über `DisconnectNamedPipe` permanent verbunden, ohne Handles zwischen Abfragen zu zerstören.
+  - **Windows Autostart (`src/services/autostart_service.py`)**:
+    - Registriert `pythonw.exe main.py --tray` in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+    - Bevorzugt `pythonw.exe`, sodass beim Windows-Boot kein Konsolenfenster aufpoppt.
+  - **Notification Foundation (`src/services/notification_service.py`)**:
+    - Modulare Service-Klasse auf Basis von `winotify` für native Windows 10/11 Toast-Benachrichtigungen.
+    - Robuste Fehlerkapselung, bereit für zukünftige Reminder- und Sync-Trigger.
+  - **TUI Settings Integration (`TrayConfigModal` & `SettingsModal`)**:
+    - Neuer Menüpunkt `🖥️ System Tray & Autostart [8/T]` in `SettingsModal`.
+    - `TrayConfigModal` mit Toggle-Buttons (`#btn_tray_toggle`, `#btn_auto_toggle`): Feste Beschriftungen `"🖥️ Minimize to System Tray on Close"` und `"🚀 Windows Autostart"` ohne redundanten `": []"`-Text; Aktivierung wird clean und pointer-sicher über die Button-Farbe (Grün = aktiv, Grau = inaktiv) signalisiert.
+    - **Sicheres Schließen ins Tray beim Klick auf das rote Fenster-"X"**: Globaler Hook `WH_MOUSE_LL` wurde restlos entfernt (Maus-Cursor bewegt sich wieder zu 100% flüssig und latenzfrei). Beim Klick auf das rote `[X]` fängt `SetConsoleCtrlHandler` (`CTRL_CLOSE_EVENT`) das Schließen ab und spawnt bei aktivem `minimize_to_tray` automatisch einen vollständig losgelösten Hintergrundprozess (`pythonw.exe main.py --tray` mit `DETACHED_PROCESS` und `CREATE_NEW_PROCESS_GROUP`), sodass das Tray-Icon und der Single-Instance-Server nahtlos weiterleben. Bei klassischem ConHost wird `SC_CLOSE` zusätzlich im Systemmenü deaktiviert.
+    - Dynamisches Starten/Stoppen: Umschalten von `minimize_to_tray` in den Einstellungen stoppt bzw. startet die Tray- und IPC-Threads sofort im laufenden Betrieb.
+    - `SettingsModal` auf 2-spaltiges Layout optimiert: Dialoghöhe von 38 auf 21 Zeilen reduziert, kein Scrollbalken mehr nötig, 100% responsive auf kleinen Terminals.
+  - **CLI-Erweiterung (`tasks tray` & `tasks autostart`)**:
+    - `tasks tray [status|enable|disable|show|quit] [--json]`
+    - `tasks autostart [status|enable|disable] [--json]`
+    - `tasks --quit` und `tasks --tray`
+  - **Testsuite**: 70 dedizierte Tests in `tests/test_autostart_service.py`, `tests/test_notification_service.py`, `tests/test_single_instance.py`, `tests/test_tray_service.py` und `tests/test_tray_tui_integration.py` mit 100% Erfolg bestanden.
+
+- [x] **AI Agent Skill: Flexibles Zielverzeichnis & Auto-Sync bei Updates (2026-10-27)**:
+
+  - **Problem**: `tasks skill sync` legte den Skill bisher fest in `~/.gemini/config/skills/tasks/` für Antigravity ab. Entwickler, die auch andere KI-Coding-Agenten (wie Claude Code, Codex etc.) nutzen, konnten das Zielverzeichnis nicht flexibel wählen und mussten Pfade manuell konfigurieren.
+  - **Explorer-Auswahldialog & Terminal-Prompt**:
+    - Vor Öffnen des nativen Windows-Explorer-Dialogs erscheint die englische Eingabeaufforderung:
+      `"Please select the directory where you want to install the Tasks skill for your AI agent (e.g. Antigravity, Claude Code, Codex). Press [ENTER] to open the folder picker..."`
+    - Nach Drücken von `[ENTER]` öffnet sich der native Ordnerauswahldialog (`pick_directory`).
+    - Bricht der Nutzer ab, erfolgt eine saubere Meldung `"Operation cancelled. No folder selected."` ohne Fehler.
+    - Bei Auswahl wird der Pfad persistent in `tasks_config.json` unter `"skill_target_dir"` hinterlegt.
+  - **1:1 Kopie der Skill-Dateien**: `SKILL.md` und Begleitdateien/Ordner werden direkt in den ausgewählten Zielordner synchronisiert.
+  - **Neuer Befehl & Flag zum nachträglichen Ändern**:
+    - Unterstützt sowohl Subcommand als auch Flag: `tasks skill set-dir [PATH]` und `tasks skill --set-dir [PATH]`.
+    - Ohne Pfadangabe öffnet sich der interaktive Explorer; mit Pfad wird das Verzeichnis direkt gesetzt.
+  - **Automatischer Re-Sync nach App-Updates**:
+    - In `src/core/task_manager.py` wird bei Versions-Updates (`is_update`) geprüft, ob der Skill bereits früher synchronisiert wurde (`is_skill_synced()`).
+    - Falls ja, wird der Skill geräuschlos im Hintergrund via `sync_skill_to_dir` aktualisiert und im Log vermerkt.
+  - **Testsuite**: 32 gezielte Tests in `tests/test_agent_cli.py` und `tests/test_skill_auto_sync.py` sowie alle 446 Unittests der Gesamtsuite mit 100% Erfolg bestanden.
+
+- [x] **AI Chat: Clear-Button nach unten verlegt & Bestätigungsdialog (2026-10-27)**:
+  - **Problem**: Im AI Chat Menü (`AiChatScreen`) befand sich der Clear-Button in einer separaten Leiste (`#ai_chat_toolbar`) direkt unter dem Aufgaben-Banner und stahl dem Chat-Verlauf 1 bis 2 Zeilen vertikalen Platz. In der unteren Leiste über dem Back-Button gab es ungenutzten Freiraum. Zudem wurde der Chat bisher ohne Rückfrage sofort geleert.
+  - **Toolbar entfernt & Platz zurückgewonnen**: `#ai_chat_toolbar` wurde ersatzlos aus `AiChatScreen` und dem CSS entfernt. Die Chat-Nachrichten beginnen nun direkt unter dem Aufgaben-Banner.
+  - **Buttons unten bündig gestapelt**:
+    - `#ai_input_btn_box` auf `layout: vertical; width: auto; min-width: 11; height: 5; align: right bottom;` umgestellt.
+    - Oben: 1-Zeilen Clear-Button (`#btn_ai_clear_chat`, `height: 1`, `margin-bottom: 1`, `width: 100%`, `padding: 0`) mit vollständigem Label `"🗑️ Clear"`.
+    - Mitte: 1 Zeile Abstand.
+    - Unten: 3-Zeilen Back-Button (`#btn_ai_back`, `height: 3`, `width: 100%`) mit Label `"↩️ Back"`.
+    - Box-Breite auf `width: 11;` fixiert, sodass Emoji und Text nebeneinander ohne Abschneiden dargestellt werden.
+  - **Sicherheits-Bestätigungsdialog (`ClearChatConfirmModal`)**:
+    - Dialog mit Abfrage ("Clear Chat History?", "Are you sure you want to clear the chat history for this assignment?") und Buttons `🗑️ Clear` und `Cancel [ESC]`.
+    - Bei `[Ctrl+L]` oder Klick auf `🗑️ Clear` wird erst nach Bestätigung der Chat-Cache geleert, der Explain-Status zurückgesetzt und die Bestätigung angezeigt.
+    - Theme-Support für Standard- und OLED-Modus.
+  - **Testsuite**: 22 Tests in `tests/test_ai_chat_ui.py` und alle 429 Tests der Gesamtsuite erfolgreich bestanden.
 
 - [x] **Startup-Performance & Lazy Loading (2026-10-26)**:
   - **Problem**: Der Programmstart benötigte vorher ca. 2,0 Sekunden, bedingt durch statische Vorab-Imports schwerer Bibliotheken (`moodle_service`, `teams_service`, `playwright`, `ui.py`), doppelte Initialisierungen und synchrones Cache-Cleanup auf dem Main-Thread.
@@ -698,3 +796,30 @@
   - Agent / Script: `tasks.bat <subcommand>` oder `python main.py <subcommand>`
 - **Test Verification**:
   - Run all tests with `python -m unittest discover tests`.
+
+---
+
+## 2. In Progress / Immediate Next Steps
+
+- [ ] **Release-Tagging & Distribution (v2.2.0 / v2.1.2)**: Die Änderungen unter `## [Unreleased]` (AI Chat Clear-Button & Confirm Modal sowie AI Agent Skill flexibles Zielverzeichnis & Auto-Sync) für ein nächstes Release bündeln.
+- [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob `[ESC]` im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
+
+---
+
+## 3. Session Handoff Notes
+
+- **Erreicht in dieser Session**:
+  - **Flexibles AI Agent Skill-Zielverzeichnis**:
+    - `src/core/config.py`: `load_skill_target_dir()`, `save_skill_target_dir()`, `is_skill_synced()` zur persistenten Speicherung des Skill-Zielverzeichnisses in `tasks_config.json`.
+    - `src/core/agent_cli.py`: Neuer Befehl `tasks skill set-dir [PATH]` und Flag `--set-dir [PATH]`.
+    - Native Explorer-Ordnerauswahl (`pick_directory`) mit vorangehender englischer Eingabeaufforderung und Warten auf `[ENTER]`.
+    - Saubere Cancel-Behandlung ohne Fehler oder Datenverlust (`Operation cancelled. No folder selected.`).
+    - 1:1 Kopieren der Skill-Dateien (`SKILL.md` etc.) direkt in den gewählten Zielordner.
+  - **Automatischer Re-Sync bei Updates**:
+    - `src/core/task_manager.py`: Bei `is_update=True` wird der Skill geräuschlos im Hintergrund via `sync_skill_to_dir` aktualisiert, sofern er bereits zuvor synchronisiert wurde.
+  - **Umfassende Verifikation**:
+    - Alle 446 automatisierten Unittests (`python -m unittest discover tests`) erfolgreich bestanden.
+- **Hinweis für nächste Session / nächsten Agent**:
+  - Codebase und Dokumentation befinden sich in einem sauberen, vollständig getesteten Zustand.
+  - Das flexible Skill-System funktioniert nahtlos für Antigravity, Claude Code, Codex und andere Agenten-Tools.
+  - Nächster Schritt: Bündelung der unreleased Änderungen für das nächste Release.

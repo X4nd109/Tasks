@@ -91,11 +91,46 @@ tasks sync --json
 
 ## 5. Skill Management
 
-- **Update / Sync this skill globally**:
+- **Update / Sync this skill** (uses the saved target directory silently):
   ```powershell
   tasks skill sync --json
   ```
-- **Check installation status**:
+- **Choose / change the installation directory** (native Windows folder picker):
+  ```powershell
+  tasks skill set-dir
+  tasks skill set-dir "C:\path\to\agent\skills" --json
+  ```
+- **Check installation status** (shows configured directory + sync state):
   ```powershell
   tasks skill status --json
   ```
+
+---
+
+## 6. System Tray & Autostart Management
+
+- **Tray Status & Background State**:
+  ```powershell
+  tasks tray status --json
+  ```
+- **Show / Bring Hidden Window to Front**:
+  ```powershell
+  tasks tray show
+  ```
+- **Quit Background Process**:
+  ```powershell
+  tasks tray quit
+  tasks --quit
+  ```
+- **Configure Minimize to Tray**:
+  ```powershell
+  tasks tray enable --json
+  tasks tray disable --json
+  ```
+- **Windows Autostart**:
+  ```powershell
+  tasks autostart status --json
+  tasks autostart enable --json
+  tasks autostart disable --json
+  ```
+
