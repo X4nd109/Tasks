@@ -23,11 +23,11 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
   - src/services/notification_service.py: Windows-Toast-Notifications (windows-toasts mit Fallback auf PowerShell New-BurntToastNotification und Windows Baloon-Tips).
 - **Terminal-Autoclose mit 10s-Countdown & [ENTER]-Abbruch**:
   - main.py: Wenn Tasks bereits im Hintergrund aktiv ist und in einem zweiten Terminal tasks eingegeben wird, holt der Prozess das Hauptfenster per Win32 API in den Vordergrund und zeigt im zweiten Terminal einen 10s-Countdown an:
-    ``	ext`	ext
+    ```text
     Restoring window...
     Window succesfully restored.
     This terminal will close in 10s. Press [ENTER] to cancel...
-    `
+    ```
   - Tastaturabfrage via msvcrt.kbhit() und msvcrt.getwch(): Ausschließlich [ENTER] (\r / \n) bricht das Schließen ab (Close cancelled. Terminal remains open.); nach Ablauf der 10s schließt sich das Terminalfenster bzw. der Windows Terminal Tab automatisch.
   - Testsuite tests/test_terminal_autoclose.py mit 5 Unittests.
 
