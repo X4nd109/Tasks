@@ -162,8 +162,8 @@ Projektweit für alle Dialog- und Formular-Eingabefelder (`ChatInputArea`), einz
 | :--- | :--- | :--- |
 | `Quantum Prism App-Icon` | Asset | 3D-Vektor-App-Icon im Fluent-Squircle-Design; dual bereitgestellt als `app_icon.ico` (Desktop/Startmenü) und `app_icon.png` (Windows Terminal Profil). |
 | `Inno Setup Shortcut-Icons` | Installer | Weist dem Installer und allen Startmenü- und Desktop-Verknüpfungen das App-Icon zu. |
-| `Windows-Terminal Profil-Option` | Installer | Optionale Checkbox auf der Fertigstellen-Seite zur Registrierung des Tasks Profils mit Logo. |
-| `scripts/setup_terminal_profile.bat` | Script | Autarkes Batch/PowerShell-Skript zur Eintragung des Profils in `settings.json`. |
-| `scripts/remove_terminal_profile.bat` | Script | Autarkes Batch/PowerShell-Skript zur rückstandslosen Entfernung des Profils beim Deinstallieren. |
+| `Windows-Terminal Profil-Option` | Installer | Optionale Checkbox auf der Fertigstellen-Seite zur Registrierung des Tasks-Profils mit Logo via Inline-PowerShell. |
+| `Globaler Terminal-Befehl 'tasks'` | Installer | Optionale Checkbox zur Registrierung des Installationsverzeichnisses im Benutzer-PATH via `tasks.cmd`. |
+| `Rückstandslose Deinstallation` | Uninstaller | Bereinigt alle Runtime-Caches, Daten, config.json, Windows-Terminal-Profile und den Autostart-Registry-Key. |
 
 

@@ -13,7 +13,7 @@ Checking each portal manually is tedious, prone to missed deadlines, and lacks u
 ### Vision
 **Tasks** provides a unified, local-first command hub that aggregates all assignments, absences, and exams into a single pane of glass. It provides both:
 - An interactive **Textual Terminal User Interface (TUI)** with full mouse, keyboard, and color theme support.
-- A blazing-fast (`< 0.1s`), token-efficient **Headless Agent CLI** (`tasks.bat`) designed for autonomous agents and developer automation.
+- A blazing-fast (`< 0.1s`), token-efficient **Headless Agent CLI** (`tasks.cmd` / `Tasks.exe`) designed for autonomous agents and developer automation.
 
 ### Target Audience & Personas
 - **HTL Students**: Quick daily review of pending homework, 1-click downloads to Windows `Downloads`, and automatic generation of signed excuse letters.

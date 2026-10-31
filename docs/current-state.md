@@ -884,8 +884,11 @@
     - Windows 10/11 `ToastGeneric`-Binding mit Quantum-Prism-Logo (`assets/app_icon.png`).
   - **Auto-Sync Intervall**:
     - Einstellbares Intervall (`5min`, `10min`, `30min` [Default], `1h`, `never`) in TUI, Tray und CLI.
-  - **Installer (`Tasks_Setup.exe`)**:
-    - 77.2 MB Standalone-Installer mit Inno Setup 6, genau 1 Startmenü-Eintrag ("Tasks"), Playwright-Setup und Clean-Update-Logik.
+  - **Installer & Deinstallation (`Tasks_Setup.exe`)**:
+    - 77.2 MB Standalone-Installer mit Inno Setup 6, genau 1 Startmenü-Eintrag ("Tasks"), Playwright-Setup.
+    - Skill-Paketierung: `skills/tasks/SKILL.md` liegt nun direkt auf oberster Ebene der Installation vor.
+    - Clean-Update-Logik: Säubert bei Updates automatisch obsolete `.py`-, `.bat`- und `scripts/`-Dateien aus Vorversionen (unter striktem Schutz des `.git`-Entwicklungsordners).
+    - Vollständige Deinstallation: Entfernt alle Runtime-Caches, Daten, config.json, Logs, User-PATH, Windows-Terminal-Profile und den Autostart-Registry-Key rückstandslos.
 - **Hinweis für nächste Session / nächsten Agent**:
   - Codebase und Dokumentation sind auf Stand v2.3.0.
   - Alle 546 Tests laufen zu 100% fehlerfrei durch.

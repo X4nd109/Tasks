@@ -42,7 +42,7 @@
 - **Explicit Network Operations**: Network-intensive actions (scraping Moodle, spinning up Playwright for Teams) must be triggered explicitly via `--sync`, `[R]`, or login flags.
 
 ### Headless Agent Token-Efficiency
-- When invoked in CLI mode (via `tasks.bat` or `python main.py <subcommand>`), output must be strictly token-efficient:
+- When invoked in CLI mode (via `tasks.cmd`, `Tasks.exe <subcommand>` or `python main.py <subcommand>`), output must be strictly token-efficient:
   - Tabular rows formatted compactly with fixed column widths.
   - Zero decorative ASCII banners or conversational pleasantries.
   - Support for raw, machine-readable JSON via `--json` or `-json`.

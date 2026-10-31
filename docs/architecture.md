@@ -8,10 +8,10 @@ The system is structured as a layered, local-first Python application featuring 
 graph TD
     User([Student / End User]) -->|Terminal UI| TUI[Textual TUI<br/>src/ui/tui_app.py]
     Agent([AI Agent / Script]) -->|Headless Command| CLI[Agent CLI<br/>src/core/agent_cli.py]
-    Shell([Windows Shell]) -->|Global PATH| TasksBat[tasks.bat / main.py]
+    Shell([Windows Shell]) -->|Global PATH| TasksCmd[tasks.cmd / Tasks.exe]
 
-    TasksBat -->|CLI Args| CLI
-    TasksBat -->|Default Interactive| TUI
+    TasksCmd -->|CLI Args| CLI
+    TasksCmd -->|Default Interactive| TUI
 
     subgraph Core Layer [src/core]
         TM[TaskManager<br/>task_manager.py]
@@ -93,11 +93,11 @@ Tasks/
 │   ├── tasks.iss               # Inno Setup 6 compilation script
 │   ├── build_installer.py      # Automated installer builder
 │   └── generate_license.py     # HMAC-SHA256 license generator
-├── scripts/                    # Windows environment helper scripts
-│   ├── setup_command.bat       # Registers 'tasks' in user PATH
-│   ├── remove_command.bat      # Unregisters 'tasks' from user PATH
-│   ├── setup_terminal_profile.bat      # Autarkes Batch/PowerShell-Skript zur Registrierung des Windows-Terminal-Profils
-│   └── remove_terminal_profile.bat     # Autarkes Batch/PowerShell-Skript zur Entfernung des Windows-Terminal-Profils
+├── scripts/                    # Build & packaging helper scripts
+│   ├── build_exe.py            # Standalone binary compiler (PyInstaller)
+│   └── RootLauncher.cs         # C# launcher stub for development root Tasks.exe
+
+
 ├── src/
 │   ├── core/                   # System core & data management
 │   │   ├── agent_cli.py        # Token-efficient headless CLI engine
@@ -142,8 +142,9 @@ Tasks/
 ├── config.example.json         # Reference configuration template
 ├── main.py                     # Root entry point wrapper
 ├── requirements.txt            # Dependency specifications
-├── run.bat                     # Desktop launch batch file
-└── tasks.bat                   # Global PATH command runner
+├── build.bat                   # Standalone binary build batch script
+├── tasks.cmd                   # Global PATH command runner & CLI proxy
+└── Tasks.exe                   # Root executable launcher (development stub)
 ```
 
 ---
@@ -246,7 +247,7 @@ sequenceDiagram
    - Universal Windows installers (`Tasks_Setup.exe`) are generated using Inno Setup 6 without machine-specific locks or hardware restrictions.
    - The build script (`installer/build_installer.py`) downloads the official offline Python 3.12 installer on demand, keeping the Git repository lightweight.
    - Dual-icon packaging guarantees that both `assets/app_icon.ico` (Desktop/Start Menu) and `assets/app_icon.png` (Windows Terminal custom profile) are validated, restored on demand via vector fallbacks or PIL (`ensure_app_icons()`), and enforced at compile-time under `tasks.iss` `[Files]`.
-   - Windows Terminal profiles are registered idempotently with schema-hardening (`profiles.list` vs. legacy array) via `scripts/setup_terminal_profile.bat`.
+   - Windows Terminal profiles are registered idempotently with schema-hardening (`profiles.list` vs. legacy array) via Inno Setup inline PowerShell.
    - An automated GitHub Actions workflow (`.github/workflows/release.yml`) builds and publishes installers directly to GitHub Releases upon tag creation.
 
 3. **Git Cloud-Sync Security & Concurrency (`src/services/git_sync_service.py`)**:
