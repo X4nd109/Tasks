@@ -425,3 +425,29 @@ This document records high-impact architectural choices, library selections, and
 - **Consequences**:
   - Positive: Clean, concise brand across CLI, TUI, docs, and installer; automatic zero-friction data migration; remote backup repos are automatically cleaned up.
   - Negative: None. Backward compatibility aliases and auto-migration safeguard existing environments.
+
+
+---
+
+## ADR-024: Isolated PowerShell Update Runner & Background Toast Notification Architecture
+
+- **Date**: 2026-10-31
+- **Status**: Accepted
+- **Context**:
+  1. The legacy update pipeline executed Inno Setup via pply_update.cmd with /VERYSILENT. This caused command windows to flash or close abruptly without feedback, leaving users confused about whether Tasks crashed or was updating.
+  2. Updates were only checked once on TUI startup; background auto-sync cycles did not inform users of pending releases via Windows notifications.
+  3. Overwriting {app} files during update requires that any running updater process execute strictly outside the installation root to prevent file-locking errors.
+- **Decision**:
+  1. **Isolated Temp-Directory PowerShell Runner (update_runner.ps1)**:
+     - Generate update_runner.ps1 in %TEMP%\\Tasks_Update\\ and launch it in a new console (CREATE_NEW_CONSOLE).
+     - Catppuccin Mocha themed ANSI UI with clear 5-stage progress indicator, wait-loop for process termination, silent Inno Setup execution with live spinner, installation verification, and clean restart with -WorkingDirectory.
+     - Robust error handling: window remains open on failure, printing diagnostics in red and waiting with Read-Host.
+  2. **Auto-Sync Update Probing & Windows Toast Dispatch**:
+     - Asynchronous probing in NotificationEngine.check_update_notification() during _run_notification_checks.
+     - 6-hour throttling per release tag recorded in cache/notification_state.json.
+     - Native Windows toast with app logo and 	asks://update deep-link.
+  3. **Protocol & IPC Dispatching**:
+     - Support 	asks://update deep link and --open-update CLI argument, dispatching OPEN_UPDATE to the single-instance IPC server to display UpdateReminderModal.
+- **Consequences**:
+  - Positive: High-contrast, transparent, and aesthetically pleasing update experience matching the Tasks design; zero risk of file lock collisions during overwrite; notification spam protection.
+  - Negative: Requires PowerShell 5.1+ (standard on Windows 10/11); legacy pply_update.cmd preserved as fallback.

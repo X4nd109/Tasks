@@ -123,7 +123,7 @@ Tasks/
 │   │   ├── teams_service.py    # Playwright MS Teams scraper
 │   │   ├── tray_service.py     # Windows System Tray daemon (pystray, dynamic icon, context menu)
 │   │   ├── untis_service.py    # WebUntis JSON-RPC client, schoolquery2 resolver & timetable/absence matcher
-│   │   └── update_service.py   # GitHub release update checker, in-app downloader & runner
+│   │   └── update_service.py   # GitHub release update checker, in-app downloader & isolated PowerShell update runner
 │   └── ui/                     # Presentation implementations
 │       ├── tui_app.py          # Interactive Textual TUI
 │       └── ui.py               # Rich terminal rendering utilities
