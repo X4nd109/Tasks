@@ -136,6 +136,8 @@ begin
       DelTree(AppDir + '\tests', True, True, True);
       DelTree(AppDir + '\__pycache__', True, True, True);
       DelTree(AppDir + '\assets\git-sync-tutorial', True, True, True);
+      // Alten Startmenü-Unterordner aus Versionen <= 2.2.0 bereinigen
+      DelTree(ExpandConstant('{autoprograms}\Tasks'), True, True, True);
     end;
   end;
 end;
