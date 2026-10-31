@@ -10054,11 +10054,11 @@ class TasksApp(App):
         if sys.platform == "win32" and not self.is_headless:
             self._init_tray_and_ipc()
 
-        # Register the tasks:// URL protocol in the background (never blocks start-up).
+        # Register the tasks:// URL protocol and auto-repair Windows Terminal profile in background (never blocks start-up).
         try:
             import threading as _threading
 
-            def _register_protocol():
+            def _register_protocol_and_profiles():
                 try:
                     try:
                         from notification_service import ensure_tasks_protocol_registered
@@ -10068,8 +10068,17 @@ class TasksApp(App):
                 except Exception:
                     pass
 
+                try:
+                    try:
+                        from terminal_profile_service import ensure_windows_terminal_profile
+                    except ImportError:
+                        from src.services.terminal_profile_service import ensure_windows_terminal_profile
+                    ensure_windows_terminal_profile()
+                except Exception:
+                    pass
+
             _threading.Thread(
-                target=_register_protocol, daemon=True, name="TasksProtocolRegistration"
+                target=_register_protocol_and_profiles, daemon=True, name="TasksSystemIntegrations"
             ).start()
         except Exception:
             pass

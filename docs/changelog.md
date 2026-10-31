@@ -10,6 +10,18 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 ## [Unreleased]
 
 
+## [2.3.2] - 2026-10-31
+
+### Fixed
+- **Windows Terminal Profil Reparatur & Auto-Migration**:
+  - src/services/terminal_profile_service.py: Neuer autarker Python-Service zur Erkennung, Konfiguration und Reparatur des Windows-Terminal-Profils (unterstützt MSIX- und Unpackaged-Pfade).
+  - Veraltete Profil-Befehle (wie z. B. obsoletes 
+un.bat oder alte Skripte) werden vollautomatisch auf die moderne Tasks.exe migriert.
+  - src/ui/tui_app.py: Asynchroner Hintergrund-Aufruf (TasksSystemIntegrations) beim App-Start repariert fehlerhafte oder verlegte Terminal-Profile geräuschlos und selbstständig.
+  - installer/tasks.iss: Profil-Konfiguration wird nicht mehr bei Updates (/UPDATE=1) übersprungen, sondern hält das Windows-Terminal-Profil immer synchron mit der installierten Version.
+  - 8 neue automatisierte Unit-Tests in 	ests/test_terminal_profile.py.
+
+
 ## [2.3.1] - 2026-10-31
 
 ### Added

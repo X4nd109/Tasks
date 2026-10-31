@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.3.1"
+#define AppVersion "2.3.2"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"
@@ -81,12 +81,12 @@ Filename: "powershell.exe"; \
   Description: "Globalen Terminal-Befehl 'tasks' einrichten (empfohlen)"; \
   Check: ShouldSetupTasksCommand
 
-; 3. Windows-Terminal-Profil mit Logo einrichten (als Checkbox auf Fertigstellen-Seite)
+; 3. Windows-Terminal-Profil mit Logo einrichten/migrieren (automatisch bei Installation & Update)
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $file = $candidates | Where-Object {{ Test-Path $_ }} | Select-Object -First 1; if ($file) {{ try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; $icon = Join-Path $app 'assets\app_icon.png'; if (-not (Test-Path $icon)) {{ $icon = Join-Path $app 'assets\app_icon.ico' }}; $entry = [ordered]@{{ guid = $guid; name = 'Tasks'; commandline = (Join-Path $app 'Tasks.exe'); startingDirectory = $app; icon = $icon; tabTitle = 'Tasks'; hidden = $false }}; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
   WorkingDir: "{app}"; \
-  Flags: runhidden postinstall; \
-  Description: "Windows-Terminal-Profil mit Logo einrichten (empfohlen)"; \
+  StatusMsg: "Richte Windows-Terminal-Profil ein..."; \
+  Flags: runhidden; \
   Check: ShouldSetupTerminalProfile
 
 ; 4. Programm starten (optional)
@@ -127,7 +127,6 @@ end;
 function ShouldSetupTerminalProfile: Boolean;
 begin
   Result := (ExpandConstant('{param:noterminal|0}') <> '1') and
-            (ExpandConstant('{param:update|0}') <> '1') and
             (DirExists(ExpandConstant('{localappdata}\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe')) or
              FileExists(ExpandConstant('{localappdata}\Microsoft\Windows Terminal\settings.json')));
 end;

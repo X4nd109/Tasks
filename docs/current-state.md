@@ -1,11 +1,21 @@
 # Current Project State & Session Handoff — Tasks
 
 > **Last Updated**: 2026-10-31  
-> **Active Milestone**: Benutzerfreundliches & modernes Tasks-Update-System (Auto-Sync Toasts, Catppuccin PowerShell Runner, tasks://update Deep-Link) (Completed)
+> **Active Milestone**: Windows Terminal Profil Reparatur & Auto-Migration (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Windows Terminal Profil Reparatur & Auto-Migration (2026-10-31)**:
+  - **Problem**: Nach der Umstellung auf Standalone-Binaries schloss sich das Windows-Terminal-Profil sofort wieder, da noch das veraltete 
+un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übersprang.
+  - **Lösung & Implementierung**:
+    - src/services/terminal_profile_service.py: Autarker Python-Service zur Erkennung von Windows-Terminal-Installationen (MSIX / Unpackaged) und atomaren Aktualisierung von settings.json.
+    - src/ui/tui_app.py: Asynchroner Hintergrund-Aufruf (TasksSystemIntegrations) bei jedem App-Start repariert veraltete oder fehlerhafte Profile geräuschlos und selbstständig.
+    - installer/tasks.iss: Die Bedingung ShouldSetupTerminalProfile schließt Updates (/UPDATE=1) nicht mehr aus, sondern migriert bestehende Profile immer auf Tasks.exe.
+    - Sofort-Reparatur des lokalen Profils auf C:\\Users\\xandi\\Desktop\\Tasks\\Tasks.exe.
+    - 8 neue automatisierte Unit-Tests in 	ests/test_terminal_profile.py (100% OK).
 
 - [x] **Benutzerfreundliches & modernes Tasks-Update-System (Auto-Sync Toasts, Catppuccin PowerShell Runner, tasks://update Deep-Link) (2026-10-31)**:
   - **Problem**: Das bisherige Update-System funktionierte technisch, war jedoch intransparent: keine automatische Update-Prüfung im Hintergrund mit Toast-Meldung, ungestaltete Eingabeaufforderung die unvermittelt aufging und sich bei Fehlern schlagartig schloss.
@@ -739,20 +749,22 @@
 
 ## 2. In Progress / Immediate Next Steps
 
-- [x] **Release-Tagging & Distribution (v2.3.1)**: Vollständige Bereitstellung des modernen Tasks-Update-Systems (Auto-Sync Windows Toasts, isolierter Catppuccin-PowerShell-Runner im Temp-Verzeichnis, 	asks://update Deep-Link).
+- [x] **Release-Tagging & Distribution (v2.3.2)**: Bereitstellung der Windows-Terminal-Profil Reparatur, Auto-Migration und Installer-Hardening.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session (Release v2.3.1)**:
-  - **Benutzerfreundliches & modernes Tasks-Update-System**:
-    - Periodische Update-Prüfung im Hintergrund-Auto-Sync mit 6-Stunden-Throttling.
-    - Native Windows Toast-Benachrichtigung (*Tasks Update verfügbar (vX.Y.Z)*) mit Quantum-Prism-Logo und 	asks://update Deep-Link.
-    - Deep-Link Protocol Dispatching (	asks://update -> IPC OPEN_UPDATE -> UpdateReminderModal).
-    - Isolierter Catppuccin Mocha PowerShell Runner (update_runner.ps1) im Temp-Ordner (%TEMP%\Tasks_Update), der vom Überschreiben durch Inno Setup unberührt bleibt, einen animierten Spinner und eine 5-Schritt-Anzeige bietet und bei Fehlern mit detaillierten Ausgaben pausiert (Read-Host).
-    - Saubere Parameterübergabe mit PowerShell Argument-Quoting und -WorkingDirectory beim Neustart.
+- **Erreicht in dieser Session (Release v2.3.2)**:
+  - **Windows Terminal Profil Reparatur & Auto-Migration**:
+    - Problem gelöst, bei dem sich das Windows Terminal Profil wegen des veralteten 
+un.bat-Aufrufs sofort wieder schloss.
+    - 	erminal_profile_service.py erstellt: Erkennt MSIX- und Unpackaged-Settings und migriert veraltete 
+un.bat- oder Aufgaben-Detector-Einträge atomar auf Tasks.exe.
+    - Hintergrund-Auto-Repair in 	ui_app.py bei jedem Start der Anwendung.
+    - installer/tasks.iss angepasst: Hält das Windows-Terminal-Profil auch bei silenten Updates immer synchron.
+    - Lokales Profil sofort repariert.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Codebase und Dokumentation sind auf Stand v2.3.1.
-  - Alle 553 Tests laufen zu 100% fehlerfrei durch.
+  - Codebase und Dokumentation sind auf Stand v2.3.2.
+  - Alle Tests laufen zu 100% fehlerfrei durch.

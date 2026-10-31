@@ -27,7 +27,7 @@
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.1`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.2`), Themes, Logins und Schülereinstellungen. |
 | `NotificationConfigModal` | Modal | Untermenü in den Settings zur Konfiguration von nativen Windows-Benachrichtigungen für neue Aufgaben, Fälligkeitswarnungen und täglichen Prüfungs-Erinnerungen. |
 | `TrayConfigModal` | Modal | Konfigurationsdialog für Hintergrundbetrieb, Minimieren in den System Tray, Windows-Autostart und automatisches Synchronisationsintervall. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |

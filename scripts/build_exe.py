@@ -39,6 +39,16 @@ def build() -> int:
         print(f"[X] Spec file not found: {spec_file}")
         return 1
 
+    dist_dir = os.path.join(PROJECT_ROOT, "dist", "Tasks")
+    if os.path.exists(dist_dir):
+        print("[*] Cleaning existing dist/Tasks directory...")
+        for _ in range(5):
+            shutil.rmtree(dist_dir, ignore_errors=True)
+            if not os.path.exists(dist_dir):
+                break
+            import time
+            time.sleep(0.5)
+
     import tempfile
     work_dir = os.path.join(tempfile.gettempdir(), "tasks_pyi_build")
     cmd = [

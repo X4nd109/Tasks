@@ -122,6 +122,7 @@ Tasks/
 │   │   ├── digi4school_service.py # Digi4School book downloader, OCR & TOC generator
 │   │   ├── teams_service.py    # Playwright MS Teams scraper
 │   │   ├── tray_service.py     # Windows System Tray daemon (pystray, dynamic icon, context menu)
+│   │   ├── terminal_profile_service.py # Windows Terminal profile management & auto-repair service
 │   │   ├── untis_service.py    # WebUntis JSON-RPC client, schoolquery2 resolver & timetable/absence matcher
 │   │   └── update_service.py   # GitHub release update checker, in-app downloader & isolated PowerShell update runner
 │   └── ui/                     # Presentation implementations
@@ -136,6 +137,7 @@ Tasks/
 │   ├── test_schoolbooks.py     # Unit tests for schoolbooks & git isolation
 │   ├── test_digi4school.py     # Unit tests for Digi4School downloader & CLI
 │   ├── test_dependency_checker.py # Unit tests for pre-flight dependency checker
+│   ├── test_terminal_profile.py # Unit tests for Windows Terminal profile auto-repair
 │   └── test_update_service.py  # Unit tests for update checker & modals
 ├── AGENTS.md                   # Tier 1 master documentation index (< 3 KB)
 ├── config.json                 # User configuration file
