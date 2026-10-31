@@ -27,14 +27,14 @@
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.0`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.1`), Themes, Logins und Schülereinstellungen. |
 | `NotificationConfigModal` | Modal | Untermenü in den Settings zur Konfiguration von nativen Windows-Benachrichtigungen für neue Aufgaben, Fälligkeitswarnungen und täglichen Prüfungs-Erinnerungen. |
 | `TrayConfigModal` | Modal | Konfigurationsdialog für Hintergrundbetrieb, Minimieren in den System Tray, Windows-Autostart und automatisches Synchronisationsintervall. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
 | `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) unten rechts mit bündig darüber gestapeltem 1-Zeilen Clear-Button (`🗑️ Clear`, Tastenkürzel `[Ctrl+L]`), vorgeschaltetem Sicherheits-Bestätigungsdialog (`ClearChatConfirmModal`) und vollständiger Entfernung der oberen Toolbar zur Rückgewinnung von Chat-Zeilen sowie direkter Gemini / OpenAI REST-Anbindung. |
 | `ClearChatConfirmModal` | Modal | Englischer Sicherheits-Bestätigungsdialog vor dem Leeren des Chat-Verlaufs (`🗑️ Clear` / `Cancel [ESC]`). |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
-| `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases mit 1-Klick-In-App-Download, Fortschrittsbalken und automatischer Installation im selben Verzeichnis (ohne PATH-Änderung oder Datenverlust). |
+| `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases (auch via Windows Toast & `tasks://update`), In-App-Download mit Fortschrittsbalken und Start des isolierten Catppuccin-PowerShell-Update-Runners (`update_runner.ps1`). |
 | `LoginChoiceModal` (`[L]`) | Modal | Zentrales Auswahlmenü für Anmeldungen bei Moodle, Microsoft Teams und WebUntis. |
 | `TeamsSetupModal` | Modal | Geführter Teams-Login via Playwright-Chromium mit Passkey-, 2FA- oder Kennwort-Unterstützung. |
 | `MoodleLoginModal` | Modal | Eingabe von Moodle-Benutzername (oder E-Mail mit automatischem Domain-Stripping) und Passwort mit blitzschneller HTTP-Authentifizierung und Fehleranzeige. |

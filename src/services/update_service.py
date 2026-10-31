@@ -210,25 +210,226 @@ def download_update_installer(
         return False
 
 
-def launch_update_and_restart(installer_path: str, app_dir: Optional[str] = None) -> bool:
+def generate_powershell_updater_script(
+    installer_path: str,
+    target_app_dir: str,
+    current_version: str = "",
+    target_version: str = "",
+) -> str:
     """
-    Bereitet das Update vor:
-    Schreibt die Pfadangabe des Installers in eine Pending-Datei für run.bat.
-    Wurde die App über run.bat gestartet, übernimmt run.bat das Update direkt im selben Terminal.
-    Andernfalls wird ein schlanker Fallback-Prozess (ohne PowerShell und ohne setup.bat) ausgeführt.
+    Generates an isolated Catppuccin Mocha themed PowerShell updater script.
+    
+    The script runs from %TEMP%\\Tasks_Update\\update_runner.ps1 and provides:
+    - Step-by-step progress reporting ([1/5] to [5/5]).
+    - Catppuccin Mocha ANSI styling (lavender, green, blue, dark base).
+    - Waiting for Tasks.exe / TasksTray.exe termination.
+    - Verification of installer package.
+    - Silent execution of Inno Setup installer with animated progress spinner.
+    - Verification of installation files.
+    - Cleanup of temporary files and graceful restart of Tasks.
+    - Diagnostic error display with Read-Host pause so the window never vanishes abruptly.
+    """
+    temp_dir = get_update_temp_dir()
+    template = '''# Tasks Update Manager - Catppuccin Mocha Themed Runner
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$Host.UI.RawUI.WindowTitle = "Tasks Update Manager"
+
+$e = [char]27
+$cLav    = "$e[38;2;180;190;254m"  # Catppuccin Lavender (#b4befe)
+$cBlue   = "$e[38;2;137;180;250m"  # Catppuccin Blue (#89b4fa)
+$cGreen  = "$e[38;2;166;227;161m"  # Catppuccin Green (#a6e3a1)
+$cRed    = "$e[38;2;243;139;168m"  # Catppuccin Red (#f38ba8)
+$cYellow = "$e[38;2;249;226;175m"  # Catppuccin Yellow (#f9e2af)
+$cSub    = "$e[38;2;166;173;200m"  # Catppuccin Subtext0 (#a6adc8)
+$cDim    = "$e[38;2;108;112;134m"  # Catppuccin Overlay0 (#6c7086)
+$cBold   = "$e[1m"
+$cReset  = "$e[0m"
+
+$installerPath = '__INSTALLER_PATH__'
+$targetAppDir  = '__TARGET_APP_DIR__'
+$currentVer    = '__CURRENT_VERSION__'
+$targetVer     = '__TARGET_VERSION__'
+$tempDir       = '__TEMP_DIR__'
+$pendingFile   = Join-Path $tempDir "pending_update.txt"
+$appliedFile   = Join-Path $tempDir "update_just_applied.txt"
+
+function Show-Header {
+    Clear-Host
+    Write-Host ""
+    Write-Host "$cLav  ╭────────────────────────────────────────────────────────╮$cReset"
+    Write-Host "$cLav  │$cBold$cBlue                   TASKS UPDATE MANAGER                 $cReset$cLav│$cReset"
+    if ($currentVer -and $targetVer) {
+        $verLine = "                 v$currentVer  ➜  v$targetVer"
+        $pad = 56 - $verLine.Length
+        if ($pad -lt 0) { $pad = 0 }
+        $verLineFormatted = $verLine + (" " * $pad)
+        Write-Host "$cLav  │$cSub$verLineFormatted$cReset$cLav│$cReset"
+    }
+    Write-Host "$cLav  ╰────────────────────────────────────────────────────────╯$cReset"
+    Write-Host ""
+}
+
+try {
+    Show-Header
+
+    # [1/5] Warten auf Beendigung von Tasks
+    Write-Host "$cBlue  [1/5]$cReset Warten auf Beendigung von Tasks..."
+    $waitCount = 0
+    while ($waitCount -lt 15) {
+        $procs = Get-Process -Name Tasks, TasksTray -ErrorAction SilentlyContinue
+        if (-not $procs) {
+            break
+        }
+        Start-Sleep -Milliseconds 800
+        $waitCount++
+    }
+    $remaining = Get-Process -Name Tasks, TasksTray -ErrorAction SilentlyContinue
+    if ($remaining) {
+        $remaining | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 500
+    }
+    Write-Host "$cGreen        [✓] Tasks erfolgreich beendet.$cReset"
+    Write-Host ""
+
+    # [2/5] Installationspaket überprüfen
+    Write-Host "$cBlue  [2/5]$cReset Installationspaket überprüfen..."
+    if (-not (Test-Path -LiteralPath $installerPath)) {
+        throw "Installationsdatei wurde nicht gefunden: $installerPath"
+    }
+    $fileSize = (Get-Item -LiteralPath $installerPath).Length
+    if ($fileSize -lt 1048576) {
+        throw "Installationsdatei ist unvollständig ($fileSize Bytes)."
+    }
+    $sizeMb = [math]::Round($fileSize / 1MB, 1)
+    Write-Host "$cGreen        [✓] Installationspaket verifiziert ($sizeMb MB).$cReset"
+    Write-Host ""
+
+    # [3/5] Ausführung des Inno Setup Installers
+    Write-Host "$cBlue  [3/5]$cReset Update-Dateien werden installiert..."
+    $instArgs = @(
+        "`"/DIR=$targetAppDir`"",
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/NOTASKS=1",
+        "/UPDATE=1"
+    )
+    $proc = Start-Process -FilePath $installerPath -ArgumentList $instArgs -PassThru
+
+    $spinner = @("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+    $i = 0
+    while (-not $proc.HasExited) {
+        $char = $spinner[$i % $spinner.Length]
+        $bar = "━" * (($i % 24) + 1)
+        Write-Host -NoNewline "`r$cYellow        $char [ $bar ] Extrahiere und aktualisiere Komponenten...$cReset"
+        Start-Sleep -Milliseconds 120
+        $i++
+    }
+    Write-Host "`r$cGreen        [✓] Installation abgeschlossen.                         $cReset"
+    Write-Host ""
+
+    if ($proc.ExitCode -ne 0) {
+        throw "Inno Setup Installer wurde mit Fehlercode $($proc.ExitCode) beendet."
+    }
+
+    # [4/5] Installation verifizieren
+    Write-Host "$cBlue  [4/5]$cReset Installation überprüfen..."
+    $exePath = Join-Path $targetAppDir "Tasks.exe"
+    $cmdPath = Join-Path $targetAppDir "tasks.cmd"
+    if (-not (Test-Path -LiteralPath $exePath) -and -not (Test-Path -LiteralPath $cmdPath)) {
+        throw "Zielanwendung konnte nach der Installation nicht gefunden werden ($targetAppDir)."
+    }
+    Set-Content -Path $appliedFile -Value "1" -Encoding UTF8 -ErrorAction SilentlyContinue
+    Write-Host "$cGreen        [✓] Programmdateien erfolgreich verifiziert.$cReset"
+    Write-Host ""
+
+    # [5/5] Bereinigung und Neustart
+    Write-Host "$cBlue  [5/5]$cReset Temporäre Dateien bereinigen und Tasks neu starten..."
+    Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $pendingFile -Force -ErrorAction SilentlyContinue
+    Write-Host "$cGreen        [✓] Bereinigung abgeschlossen.$cReset"
+    Write-Host ""
+
+    Write-Host "$cLav  ╭────────────────────────────────────────────────────────╮$cReset"
+    Write-Host "$cLav  │$cBold$cGreen        ✨ Update erfolgreich installiert!              $cReset$cLav│$cReset"
+    Write-Host "$cLav  │$cSub           Tasks wird automatisch neu gestartet...        $cReset$cLav│$cReset"
+    Write-Host "$cLav  ╰────────────────────────────────────────────────────────╯$cReset"
+    Write-Host ""
+
+    Start-Sleep -Seconds 1
+    if (Test-Path -LiteralPath $exePath) {
+        Start-Process -FilePath $exePath -WorkingDirectory $targetAppDir
+    } elseif (Test-Path -LiteralPath $cmdPath) {
+        Start-Process -FilePath $cmdPath -WorkingDirectory $targetAppDir
+    }
+    exit 0
+
+} catch {
+    Write-Host ""
+    Write-Host "$cRed  ╭────────────────────────────────────────────────────────╮$cReset"
+    Write-Host "$cRed  │$cBold                   UPDATE FEHLGESCHLAGEN                  $cReset$cRed│$cReset"
+    Write-Host "$cRed  ╰────────────────────────────────────────────────────────╯$cReset"
+    Write-Host "$cRed  Fehlerdetails: $($_.Exception.Message)$cReset"
+    Write-Host ""
+    Write-Host "$cSub  Das Fenster bleibt zur Fehleranalyse geöffnet.$cReset"
+    Write-Host "$cSub  Drücken Sie die Eingabetaste zum Beenden...$cReset"
+    Read-Host
+    exit 1
+}
+'''
+    script = (
+        template.replace("__INSTALLER_PATH__", os.path.abspath(installer_path).replace("'", "''"))
+        .replace("__TARGET_APP_DIR__", os.path.abspath(target_app_dir).replace("'", "''"))
+        .replace("__CURRENT_VERSION__", (current_version or "").lstrip("vV").replace("'", "''"))
+        .replace("__TARGET_VERSION__", (target_version or "").lstrip("vV").replace("'", "''"))
+        .replace("__TEMP_DIR__", os.path.abspath(temp_dir).replace("'", "''"))
+    )
+    return script
+
+
+def launch_update_and_restart(
+    installer_path: str,
+    app_dir: Optional[str] = None,
+    current_version: str = "",
+    target_version: str = "",
+) -> bool:
+    """
+    Bereitet das Update vor und startet die Benutzeroberfläche:
+    1. Schreibt die Pfadangabe des Installers in pending_update.txt.
+    2. Generiert das Catppuccin-PowerShell-Update-Skript (%TEMP%\\Tasks_Update\\update_runner.ps1).
+    3. Startet update_runner.ps1 in einem neuen Konsolenfenster.
+    4. Schreibt weiterhin apply_update.cmd für Abwärtskompatibilität.
     """
     target_app_dir = app_dir or WORKSPACE_DIR
     temp_dir = get_update_temp_dir()
     pending_file = os.path.join(temp_dir, "pending_update.txt")
     update_applied_file = os.path.join(temp_dir, "update_just_applied.txt")
 
+    abs_installer = os.path.abspath(installer_path)
+    abs_app_dir = os.path.abspath(target_app_dir)
+
     try:
         with open(pending_file, "w", encoding="utf-8") as f:
-            f.write(os.path.abspath(installer_path))
+            f.write(abs_installer)
     except Exception as e:
         logger.error("Fehler beim Schreiben von pending_update.txt: %s", e)
         return False
 
+    # 1. PowerShell Runner generieren
+    ps_content = generate_powershell_updater_script(
+        installer_path=abs_installer,
+        target_app_dir=abs_app_dir,
+        current_version=current_version or APP_VERSION,
+        target_version=target_version,
+    )
+    ps_script = os.path.join(temp_dir, "update_runner.ps1")
+    try:
+        with open(ps_script, "w", encoding="utf-8") as f:
+            f.write(ps_content)
+    except Exception as e:
+        logger.error("Fehler beim Schreiben von update_runner.ps1: %s", e)
+
+    # 2. CMD Runner für Abwärtskompatibilität generieren
     runner_script = os.path.join(temp_dir, "apply_update.cmd")
     script_content = f"""@echo off
 chcp 65001 >nul
@@ -256,22 +457,27 @@ if exist "{target_app_dir}\\Tasks.exe" (
 )
 exit
 """
-
     try:
         with open(runner_script, "w", encoding="utf-8") as f:
             f.write(script_content)
 
-        # Wenn run.bat aktiv ist, handhabt run.bat das Update direkt im gleichen Terminal
         if os.environ.get("RUN_FROM_BATCH") == "1":
             return True
 
-        # Fallback für manuelle / eigenständige Python-Aufrufe
+        # In neuem Konsolenfenster starten (CREATE_NEW_CONSOLE = 0x00000010)
         creation_flags = 0
         if sys.platform == "win32":
-            creation_flags = 0x00000008 | 0x00000200
+            creation_flags = 0x00000010
 
         subprocess.Popen(
-            ["cmd.exe", "/c", runner_script],
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                ps_script,
+            ],
             creationflags=creation_flags,
             close_fds=True,
             shell=False,
@@ -280,3 +486,4 @@ exit
     except Exception as e:
         logger.error("Fehler beim Starten des Update-Runners: %s", e)
         return False
+

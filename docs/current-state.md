@@ -1,11 +1,29 @@
 # Current Project State & Session Handoff — Tasks
 
 > **Last Updated**: 2026-10-31  
-> **Active Milestone**: Windows Toast Notifications & Einstellungsmenü (Neue Aufgaben, Fälligkeitswarnungen, Prüfungs-Erinnerungen) (Completed)
+> **Active Milestone**: Benutzerfreundliches & modernes Tasks-Update-System (Auto-Sync Toasts, Catppuccin PowerShell Runner, tasks://update Deep-Link) (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Benutzerfreundliches & modernes Tasks-Update-System (Auto-Sync Toasts, Catppuccin PowerShell Runner, tasks://update Deep-Link) (2026-10-31)**:
+  - **Problem**: Das bisherige Update-System funktionierte technisch, war jedoch intransparent: keine automatische Update-Prüfung im Hintergrund mit Toast-Meldung, ungestaltete Eingabeaufforderung die unvermittelt aufging und sich bei Fehlern schlagartig schloss.
+  - **Lösung & Implementierung**:
+    - **Auto-Sync-Prüfung mit 6h-Throttling**:
+      - NotificationEngine.check_update_notification() prüft periodisch in _run_notification_checks und _check_auto_sync auf neuere Releases.
+      - Maximal 1 Toast alle 6 Stunden pro Release-Tag (cache/notification_state.json), um Notification-Spam zuverlässig zu verhindern.
+      - Native Windows Toast-Benachrichtigung (Tasks Update verfügbar (vX.Y.Z)) mit App-Logo und Deep-Link `tasks://update`.
+    - **Isolierter Catppuccin Mocha PowerShell Runner (update_runner.ps1)**:
+      - Generiert via generate_powershell_updater_script(...) in `%TEMP%\Tasks_Update\update_runner.ps1`. Da das Skript aus `%TEMP%` läuft, bleibt es vom Überschreiben durch Inno Setup unberührt.
+      - Öffnet ein eigenständiges Terminalfenster (CREATE_NEW_CONSOLE) im edlen Catppuccin Mocha Theme (Lavender, Green, Blue, Red, Yellow, Dark Base).
+      - Klare 5-Schritt-Anzeige: [1/5] Warten auf Beendigung von Tasks, [2/5] Verifikation des Installers, [3/5] Installation mit animiertem Progress-Spinner, [4/5] Validierung der installierten Binaries, [5/5] Bereinigung und sanfter Neustart von Tasks.exe.
+      - Robuste Fehlerdiagnose: Bei unerwarteten Ausnahmen oder Installer-Fehlercodes bleibt das Fenster geöffnet und zeigt den Fehler in Rot an (Read-Host Pause, kein abruptes Schließen).
+    - **URI Protocol Dispatching (`tasks://update`)**:
+      - Klick auf den Toast öffnet Tasks direkt oder sendet den IPC-Befehl OPEN_UPDATE an die laufende Hintergrundinstanz (SingleInstanceServer), welche das Fenster wiederherstellt und das UpdateReminderModal anzeigt.
+      - CLI-Parameter `--open-update` in `main.py` und `run_tui(..., open_update_dialog=True)` in `src/ui/tui_app.py`.
+    - **Testsuite**:
+      - Umfassende Tests in `tests/test_update_service.py`, `tests/test_notifications.py` und `tests/test_notification_service.py` inkl. Validierung gegen den offiziellen PowerShell-Parser ([System.Management.Automation.Language.Parser]::ParseInput).
 
 - [x] **Nativer Windows-Prozess ("Tasks"), Standalone-Binaries & Batch-Dateien-Bereinigung (2026-10-31)**:
   - **Problem**: Im Windows Task-Manager tauchte die Anwendung lediglich generisch als "Python" oder "Windows-Terminal" auf. Bei der Installation wurden bisher sämtliche rohe `.py`-Dateien und temporäre Batch-Skripte mitkopiert.
@@ -721,174 +739,20 @@
 
 ## 2. In Progress / Immediate Next Steps
 
-- [ ] **Background Task Notifications**:
-  - Optional Windows notification toast for assignments due within 24 hours.
-- [ ] **Extended Test Coverage**:
-  - Expand offline test fixtures for WebUntis multi-day holiday and substitution edge cases.
-- [ ] **Git Synchronization Refinement**:
-  - Enhance `git_sync_service.py` conflict resolution for user notes in `data/exam_notes.json`.
-
----
-
-## 3. Known Issues & Blockers
-
-- **Keine**: Alle 409 automatisierten Unit-Tests laufen fehlerfrei durch (`Ran 409 tests — OK`).
-  - Hinweis: `tests/test_digi4school.py` fragt bei interaktivem `stdin` (`isatty() == True`) nach E-Mail/Passwort. In CI bzw. mit nicht-interaktivem `stdin` laufen alle Tests grün; in einer TTY-Shell ohne Eingabedaten können die zwei Credential-Tests `EOFError` werfen (umgebungsbedingt, unabhängig vom AI-Chat).
-
----
-
-## 4. Session Handoff Notes (Context for Next Agent)
-
-- **Latest Achievement (2026-10-26 — Release v2.1.0: AI Chat & Form Input 3-Line Overhaul, Tests-Matching Back Button, Interactive Table Sorting & Statusbar Pills)**:
-  - **3-Zeilen-Schriftfeld-Verhalten (`ChatInputArea`)**:
-    - Feste 3-Zeilen-Tipphöhe mit dünnem soliden Rahmen (`border: solid`) und dynamischem Zeilensprung (1 Zeile mittig -> 2 Zeilen oben/mitte -> 3 Zeilen oben/mitte/unten -> ab 4 Zeilen vertikales Scrollen auf der unteren Zeile mit Scrollbar).
-    - Exklusiv aktiv für Freitext-Eingabefelder: AI Chat (`#ai_chat_input`), Aufgaben-Beschreibung (`#inp_add_desc`), Prüfungsstoff (`#inp_add_exam_topics`, `#inp_exam_topics`).
-    - Alle restlichen Dialogfelder (Fach, Titel, Datum, Uhrzeit, Lehrer, Raum, Settings, Logins) verbleiben als kompakte Standard-`Input`-Widgets.
-  - **Back- & Clear-Button im AI-Menü**:
-    - `#btn_ai_back` optisch und maßlich exakt wie `#btn_exams_back` im Tests-Menü: Beschriftung `"↩️ Back"`, Breite genau 9 Zeichen (`min-width: 4`).
-    - Um 1 Zeile nach unten versetzt (`align: right bottom;` in `#ai_input_btn_box`), wodurch der Button bündig mit der Unterkante von `#ai_chat_input` abschließt.
-    - `#btn_ai_clear_chat` mit Text `"Clear"` (statt `🗑️`), verbreitert und fest in `#ai_chat_toolbar` oben rechts unter dem Aufgaben-Banner verankert.
-  - **Interaktive Tabellensortierung & Statusleiste**:
-    - Klickbare Spaltenheader (`Platform`, `Subject`, `Due Date`, `Status`, `Teacher`) mit Richtungsanzeige (`↑`/`↓`), Startsortierung `Due Date ↓`, hover-glow und lückenloser `1..N`-Nummerierung.
-    - Status-Pills nebeneinander als zentrierte Gruppe ohne störende Emojis.
-    - Sicherer `Ctrl+C`-Exit mit Input/TextArea-Guard.
-  - **Qualitätssicherung**:
-    - Alle 420 Tests im Gesamtprojekt fehlerfrei bestanden (`Ran 420 tests — OK`).
-    - Version in `src/core/config.py`, `installer/tasks.iss`, `installer/build_installer.py`, `docs/features.md`, `docs/current-state.md` und `docs/changelog.md` auf `2.1.0` angehoben.
-
-- **Previous Achievement (2026-10-25 — Backspace Quick-Search Menu Top-Docking & Fixed 3-Tab Boxes Overhaul)**:
-  - **Oberkante bündig mit Fenster**: `margin-top: 0;` auf `UnifiedCommandPalette > Vertical` und `#--container` gesetzt, wodurch das Suchmenü direkt bündig an der oberen Fensterkante andockt.
-  - **Feste 3 Tab-Boxen nebeneinander**: Drei gleich große Boxen (`width: 18;`, `height: 1;`) mit festen Plätzen: `Courses` (links), `Schoolbooks` (Mitte), `Directories` (rechts) – ohne Positionswechsel.
-  - **Farben & Typografie**: Der gerade aktive Tab hat die jeweilige Hintergrundfarbe mit weißer Fettschrift (`Courses` Cyan `#04a5e5`, `Schoolbooks` Rot `#e64553`, `Directories` Grün `#40a02b`). Die inaktiven Tabs sind dezent ausgegraut mit Hover-Highlighting.
-  - **Mausklick- & Tastatur-Steuerung**: Umschalten vorwärts mit `Tab` und rückwärts mit `Shift+Tab` sowie Direktumschaltung per Mausklick auf jede der drei Tab-Boxen (inklusive Fokus-Erhalt im Such-Eingabefeld).
-  - **Qualitätssicherung**:
-    - Neuer automatisierter Test `test_palette_tabs_layout_and_switch` in `tests/test_directories.py`.
-    - Alle 19 Tests in `tests/test_directories.py` und 77 Tests in `tests/test_tui_app.py` fehlerfrei bestanden.
-
-- **Previous Achievement (2026-10-25 — Main Tasks Table Column Sorting, Safe Ctrl+C Exit & Status Bar Pill Overhaul)**:
-  - **Interaktive Spaltensortierung mit Header-Pfeilen (`TasksDataTable`)**:
-    - Klick auf `Platform`, `Subject`, `Due Date`, `Status` oder `Teacher` sortiert die Tabelle aufsteigend (`↑`) bzw. absteigend (`↓`) im 2-Wege-Toggle.
-    - **Standard-Start**: Beim Öffnen der TUI wird die Tabelle automatisch nach Fälligkeitsdatum absteigend sortiert (`Due Date ↓`, nächste Fälligkeit zuerst).
-    - **Pfeil-Sichtbarkeit auf allen Spalten**: Breitenberechnung garantiert ausreichend Platz (`Platform` 10, `Subject` 9, `Teacher` 9, `Due Date` 28, `Status` 11), sodass der Pfeil auf jeder Spalte vollständig sichtbar ist und nicht abgeschnitten wird.
-    - **Sequenzielle 1..N Zeilennummerierung**: Egal welche Spalte sortiert wird, die `#`-Spalte zählt immer fortlaufend von 1 oben bis N unten durch. Direktauswahl `1`–`9` öffnet stets die jeweilige Zeile von oben.
-    - **Spaltenspezifisches Hover-Highlighting**: Nur sortierbare Header erhalten beim Hovern mit der Maus einen Akzent-Glow (`datatable--header-hover`); `#` und `Assignment` bleiben unberührt.
-  - **TUI-Verlassen mit `Ctrl+C` mit Kopierschutz in Schriftfeldern**:
-    - `Binding("ctrl+c", "quit_app", "Quit", show=False)` in `TasksApp.BINDINGS`.
-    - In `action_quit_app()` wird geprüft, ob ein Textfeld (`Input`, `TextArea`) fokussiert oder Text markiert ist; falls ja, greift der Exit nicht und das native Kopieren in die Zwischenablage (`Ctrl+C`) funktioniert ungestört.
-    - Tooltip des Exit-Buttons auf `Exit [Q / Ctrl+C]` aktualisiert.
-  - **Statusleiste Overhaul (Direkt benachbarte Farb-Badges & Zentrierung)**:
-    - Alle Status-Pills (`To Do`, `Moodle`, `Teams`, `Manual`, `Next`, `Sync`) liegen ohne Spaltenabstand direkt nebeneinander und sind im Terminalfenster horizontal zentriert.
-    - Vollständige Bereinigung aller Emojis.
-    - Farbige Pills mit Textkontrast (`Moodle` weiß auf orange, `Teams` weiß auf blau, `Manual` weiß auf grün, `To Do` dynamisch weiß auf rot / schwarz auf gelb / weiß auf grün, `Next` weiß auf violett, `Sync` hell auf schiefergrau).
-    - `Next`-Exam-Format auf `Next: [Fach] in [Tage]d` verschlankt (ohne Datumspräfix und Klammern).
-    - `Sync`-Badge zeigt die exakte Uhrzeit des letzten Syncs (`Sync: [HH:MM]`).
-  - **Qualitätssicherung**:
-    - 77 Tests in `tests/test_tui_app.py` und 100% aller 409 Tests im Gesamtprojekt grün.
-
-- **Previous Achievement (2026-10-25 — Git Cloud-Sync Setup Tutorial & TUI Integration)**:
-  - **Umfassender Setup-Guide (`docs/tutorials/git-sync.md`)**:
-    - Vollständig englischsprachige Schritt-für-Schritt-Anleitung zur Einrichtung von Git Cloud-Sync.
-    - Detaillierte Abschnitte zur Erstellung eines privaten GitHub-Repositories (Datenschutz für Schulnotizen), Erstellung eines Classic Personal Access Tokens (PAT) ohne Ablaufdatum (`No expiration`) mit vollen Rechten (`all scopes`), Token-Kopieren und App-Konfiguration (`🚀 Test & Connect`).
-  - **Asset-Reorganisation (`assets/git-sync-tutorial/`)**:
-    - 8 Screenshots aus `assets/Git Sync Tutorial Screenshots/` nach `assets/git-sync-tutorial/` migriert und sauber nummeriert (`01_create_new_repo.png` bis `08_copy_token.png`).
-  - **TUI-Modal-Integration (`GitSetupModal`)**:
-    - Direkte URL (`https://github.com/X4nd109/Tasks/blob/main/docs/tutorials/git-sync.md`) direkt unterhalb der Beschreibung platziert (ohne redundantes Präfix und ohne Leerzeile darüber).
-    - Dialogbreite auf 76 Zeichen optimiert für sauberes Kopieren der URL im Terminal.
-  - **Qualitätssicherung & Doku**:
-    - Testsuite in `tests/test_git_sync.py` aktualisiert (alle 409 Tests fehlerfrei bestanden).
-    - `AGENTS.md`, `docs/features.md`, `docs/architecture.md`, `docs/changelog.md` und `docs/current-state.md` synchronisiert und auf GitHub gepusht.
-
-- **Previous Achievement (2026-10-24 — AI Explain Single-Execution Memory & Chat Clear Reset)**:
-  - **Dauerhafte Deduplizierung (`is_task_ai_explained`, `set_task_ai_explained`)**:
-    - Wenn der Benutzer in der Aufgaben-Detailansicht auf `🤖 Ai Explain [A]` klickt, speichert das System in `cache/ai_chats.json` unter `_explained_task_ids`, dass diese Aufgabe bereits erklärt wurde.
-    - Bei erneutem Klick auf `Ai Explain [A]` wird die Erklärung nicht nochmals an die KI gesendet, sondern der bestehende Chat direkt angezeigt (inkl. Hinweis `ℹ️ Existing explanation loaded.`).
-  - **Reset beim Chat-Leeren**:
-    - Klickt der Nutzer auf `🗑️` (Clear Chat) oder drückt `Ctrl+L`, wird die Aufgabe aus `_explained_task_ids` entfernt (`clear_task_chat_cache` & `set_task_ai_explained(task_id, False)`).
-    - Ein nachfolgender Klick auf `Ai Explain [A]` erklärt die Aufgabe wieder vollständig von Grund auf.
-  - **Fehler-Resilienz & Abwärtskompatibilität**:
-    - Tritt ein Fehler auf (z. B. fehlender API-Key oder Netzwerkfehler), wird die Aufgabe nicht fälschlich als erklärt markiert.
-    - Vorherige Chatverläufe mit Erklärungs-Prompts werden rückwirkend erkannt.
-    - `cleanup_ai_chats_cache` entfernt verwaiste IDs abgeschlossener Aufgaben automatisch aus `_explained_task_ids`.
-  - **Umfassende Testabdeckung**: 104 AI-Tests erfolgreich (alle 407 Tests im Gesamtprojekt grün).
-
-- **Release v1.3.0 Milestone Summary (2026-10-24)**:
-  - **In-App AI Chat Assistant (`AiChatScreen`)**: Vollständiger Ersatz des alten externen Web-Ai-Systems durch ein integriertes Vollbild-Terminal-Interface.
-  - **Browser-Style Task Tabs**: Horizontale, kompakte 1-Zeilen-Tableiste mit Fachkürzeln für inaktive Tabs und voller Fachtitel-Expansion für den aktiven Tab inklusive flüssigem Scrolling.
-  - **Auto-Attachment Extraction**: PyMuPDF (`fitz`), Markdown- und Quellcode-Extraktion bettet alle Aufgaben-Dateien ohne Zutun des Benutzers direkt in den Prompt-Kontext ein.
-  - **Rich Markdown & Code-Block Rendering**: Native Formatierung für Assistant-Antworten mit Highlighting für Inline-Code und Codeblöcke im Standard- und OLED-Theme.
-  - **Pulsierende Denk-Anzeige**: 3-Stufen-Animation (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`) mit 2,0s Zyklus und sauberem Timer-Lifecycle.
-  - **Universal Theme Support**: Semantische Textual-Variablen für fehlerfreie Darstellung über alle 22 Themes hinweg.
-  - **Intelligente Tab-Wiederherstellung & Lesefluss**: Merkt sich die zuletzt geöffnete Aufgabe und richtet das Chatfenster bei Antworten an der Fensteroberkante aus.
-  - **Auto-Growing Prompt-Eingabe**: Dynamisch wachsende Leiste (1–3 Zeilen) mit echtem `Shift+Enter` Zeilenumbruch (inkl. Win32-Hardware-Fallback) und verankertem, sattem Karminrot-Clear-Button (`#e03131`).
-  - **Smart Download Auto-Directory (`DownloadLocationModal`)**: 1-Klick-Download direkt in verknüpfte Schulfach-Ordner (`tasks download --auto-dir`).
-  - **Startzeit-Optimierung**: Kaltstart um ~40% beschleunigt durch Lazy Loading von Heavyweight-Paketen und asynchrone Cache-Pruning-Threads.
-
-- **Recent Achievements (2026-10-23 — Filter Menu Scrollbar & TUI Startup Speed Optimization)**:
-  - **Scrollbares Filter-Menü (`FilterMenuModal`)**:
-    - Umstellung des `#filter_dialog` Containers von `Vertical` auf `VerticalScroll(id="filter_dialog")`.
-    - CSS-Anpassung mit `overflow-y: auto;` und `scrollbar-gutter: stable;` für zuverlässiges Scrollen auf kleinen Bildschirmen (z. B. 80x20 Terminals) ohne abgeschnittene Buttons.
-  - **Startbeschleunigung (~40% schneller, ca. 760 ms Ersparnis)**:
-    - Lazy Loading für schwere Bibliotheken: `excuse_service` (`fpdf2`), `digi4school_service` (`fitz`/`PyMuPDF`, `PIL`, `pytesseract`) und `auth` (`playwright`, `requests`) in `src/ui/tui_app.py` und `src/main.py`.
-    - Asynchroner Daemon-Thread für `clean_browser_profile_caches()`, sodass der synchrone Festplattenscan vor dem Öffnen der TUI entfällt.
-    - Vollständige Verifikation: 316 Unit-Tests erfolgreich (100%), Kaltstartzeit von 1,88s auf 1,12s gesenkt.
-  - **Architektur & ADR**:
-    - Dokumentiert in `ADR-022: On-Demand Lazy Subsystem Loading & Non-Blocking Startup Optimization` und `docs/architecture.md`.
-
-- **Previous Achievements (2026-10-23 — Release v1.3.0: Smart Download Auto-Dir & Agent Streamlining)**:
-  - **Smart Download Auto-Directory Feature (`DownloadLocationModal`)**:
-    - Vollständig englischsprachiges Auswahldialog-Modal beim Klick auf `📥 Download [D]` mit Hotkeys `[1]`, `[2]`, `[3]` und `[ESC]`.
-    - `[1] Linked Course Folder`: Automatische Erkennung via `DirectoryService.find_matching_directory_for_course()`. Erstellt einen Unterordner mit dem Aufgabennamen im verknüpften Kursverzeichnis (`<Matched_Path>/<Aufgabentitel>/`) und speichert dort alle Dateien ab. Falls kein Ordner für das Fach verknüpft ist: Button deaktiviert (`disabled=True`) mit gelbem Hinweis `⚠️ No linked folder for '<Fach>' [1]`.
-    - `[2] Choose Folder Manually...`: Öffnet wie gewohnt den nativen Windows Explorer Folder Picker (`pick_directory`).
-    - `[3] Standard Downloads Folder`: Speichert direkt unter `%USERPROFILE%\Downloads\<Fach> - <Aufgabe>\`.
-  - **Headless CLI Erweiterung (`tasks download --auto-dir`)**:
-    - Neuer Flag `--auto-dir` (`-a`) für `tasks download <id>`.
-  - **Vollständige Bereinigung des alten Agent-Harnesses**:
-    - Button `🤖 Agent [G]` (`btn_det_agent`), Key-Binding `[G]` und `action_agent_open` entfernt.
-    - Dialoge `AiAgentConfigModal` und `AiConfigChoiceModal` entfernt; das Einstellungsmenü verlinkt wieder direkt auf `🤖 AI Explain Config`.
-    - Headless CLI-Befehl `tasks agent` entfernt und `src/services/ai_agent_service.py` gelöscht.
-  - **Testabdeckung**:
-    - Neue Test-Suite `tests/test_download_auto_dir.py` (7/7 Tests erfolgreich).
-    - Gesamte Test-Suite mit 100 % Erfolgsquote (316 Tests).
-- **Previous Achievements (2026-10-22 — Release v1.2.1: Global 'tasks' Agent-Skill & CLI Sync Command)**:
-  - Schlanker, token-effizienter Skill (`skills/tasks/SKILL.md`) optimiert für `/tasks`.
-  - Befehl `tasks skill [sync|status]`.
-- **Previous Achievements (2026-10-22 — Release v1.2.0: AI Explain & Desktop App Linking)**:
-  - AI Explain mit Provider-Vorlagen und Desktop App Linking.
-- **Entry Points**:
-  - Interactive TUI: `Tasks.exe` oder `python main.py`
-  - Agent / CLI: `tasks <subcommand>` (via `tasks.cmd`) oder `Tasks.exe <subcommand>`
-- **Test Verification**:
-  - Run all tests with `python -m unittest discover tests`.
-
----
-
-## 2. In Progress / Immediate Next Steps
-
-- [x] **Release-Tagging & Distribution (v2.3.0)**: Vollständige Bündelung von nativen Windows-Prozessen (`Tasks.exe`, `TasksTray.exe`), Windows Toast Notifications mit Logo, Auto-Sync Intervall, Bereinigung alter `.bat`-Skripte und 77.2 MB Standalone Inno Setup Installer.
-- [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob `[ESC]` im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
+- [x] **Release-Tagging & Distribution (v2.3.1)**: Vollständige Bereitstellung des modernen Tasks-Update-Systems (Auto-Sync Windows Toasts, isolierter Catppuccin-PowerShell-Runner im Temp-Verzeichnis, 	asks://update Deep-Link).
+- [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session (Release v2.3.0)**:
-  - **Nativer Windows-Prozess ("Tasks") & PyInstaller Standalone-Binaries**:
-    - `Tasks.exe` (Konsole) & `TasksTray.exe` (Fensterlos) via PyInstaller Onedir gebaut.
-    - Echte PE-Versionsressourcen mit Name "Tasks", Hersteller "Alexander Endl" und Verlinkung auf `https://github.com/X4nd109/Tasks`.
-    - Dev-Root Sharing: Bei Ausführung im Git-Repo greift `Tasks.exe` direkt auf die echten Daten (`data/`, `cache/`, `config.json`) des Projekt-Roots zu.
-    - Root `Tasks.exe` Launcher für Entwickler via C# und `csc.exe` kompiliert.
-  - **Batch-Dateien Bereinigung**:
-    - Alle veralteten `.bat`-Skripte (`setup.bat`, `run.bat`, `tasks.bat`, `scripts/*.bat`) gelöscht; `build.bat` und `tasks.cmd` verbleiben.
-  - **Windows Toast Notifications & Settings**:
-    - Neues Einstellungsmenü `🔔 Notifications` für neue Aufgaben, Fälligkeitsfristen und tägliche Prüfungs-Erinnerungen.
-    - Windows 10/11 `ToastGeneric`-Binding mit Quantum-Prism-Logo (`assets/app_icon.png`).
-  - **Auto-Sync Intervall**:
-    - Einstellbares Intervall (`5min`, `10min`, `30min` [Default], `1h`, `never`) in TUI, Tray und CLI.
-  - **Installer & Deinstallation (`Tasks_Setup.exe`)**:
-    - 77.2 MB Standalone-Installer mit Inno Setup 6, genau 1 Startmenü-Eintrag ("Tasks"), Playwright-Setup.
-    - Skill-Paketierung: `skills/tasks/SKILL.md` liegt nun direkt auf oberster Ebene der Installation vor.
-    - Clean-Update-Logik: Säubert bei Updates automatisch obsolete `.py`-, `.bat`- und `scripts/`-Dateien aus Vorversionen (unter striktem Schutz des `.git`-Entwicklungsordners).
-    - Vollständige Deinstallation: Entfernt alle Runtime-Caches, Daten, config.json, Logs, User-PATH, Windows-Terminal-Profile und den Autostart-Registry-Key rückstandslos.
+- **Erreicht in dieser Session (Release v2.3.1)**:
+  - **Benutzerfreundliches & modernes Tasks-Update-System**:
+    - Periodische Update-Prüfung im Hintergrund-Auto-Sync mit 6-Stunden-Throttling.
+    - Native Windows Toast-Benachrichtigung (*Tasks Update verfügbar (vX.Y.Z)*) mit Quantum-Prism-Logo und 	asks://update Deep-Link.
+    - Deep-Link Protocol Dispatching (	asks://update -> IPC OPEN_UPDATE -> UpdateReminderModal).
+    - Isolierter Catppuccin Mocha PowerShell Runner (update_runner.ps1) im Temp-Ordner (%TEMP%\Tasks_Update), der vom Überschreiben durch Inno Setup unberührt bleibt, einen animierten Spinner und eine 5-Schritt-Anzeige bietet und bei Fehlern mit detaillierten Ausgaben pausiert (Read-Host).
+    - Saubere Parameterübergabe mit PowerShell Argument-Quoting und -WorkingDirectory beim Neustart.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Codebase und Dokumentation sind auf Stand v2.3.0.
-  - Alle 546 Tests laufen zu 100% fehlerfrei durch.
+  - Codebase und Dokumentation sind auf Stand v2.3.1.
+  - Alle 553 Tests laufen zu 100% fehlerfrei durch.

@@ -90,6 +90,9 @@ class NotificationEngine:
         self.known_task_ids: List[str] = []
         self.due_notified_task_ids: dict = {}
         self.exam_notified_dates: dict = {}
+        self.last_update_check: float = 0.0
+        self.last_update_notified_tag: str = ""
+        self.last_update_notified_time: float = 0.0
         self.load_state()
 
     # -- State persistence ---------------------------------------------------
@@ -119,10 +122,25 @@ class NotificationEngine:
             str(k): str(v) for k, v in exams.items()
         } if isinstance(exams, dict) else {}
 
+        try:
+            self.last_update_check = float(state.get("last_update_check", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self.last_update_check = 0.0
+
+        self.last_update_notified_tag = str(state.get("last_update_notified_tag", "") or "")
+
+        try:
+            self.last_update_notified_time = float(state.get("last_update_notified_time", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            self.last_update_notified_time = 0.0
+
         return {
             "known_task_ids": list(self.known_task_ids),
             "due_notified_task_ids": dict(self.due_notified_task_ids),
             "exam_notified_dates": dict(self.exam_notified_dates),
+            "last_update_check": self.last_update_check,
+            "last_update_notified_tag": self.last_update_notified_tag,
+            "last_update_notified_time": self.last_update_notified_time,
         }
 
     def save_state(self) -> bool:
@@ -131,6 +149,9 @@ class NotificationEngine:
             "known_task_ids": list(self.known_task_ids),
             "due_notified_task_ids": dict(self.due_notified_task_ids),
             "exam_notified_dates": dict(self.exam_notified_dates),
+            "last_update_check": self.last_update_check,
+            "last_update_notified_tag": self.last_update_notified_tag,
+            "last_update_notified_time": self.last_update_notified_time,
         }
         try:
             directory = os.path.dirname(self.state_file)
@@ -338,3 +359,64 @@ class NotificationEngine:
 
         self.save_state()
         return notified
+
+    # -- Update notifications ------------------------------------------------
+
+    def check_update_notification(
+        self,
+        update_info: Optional[dict] = None,
+        force: bool = False,
+        cooldown_seconds: float = 21600.0,
+    ) -> bool:
+        """
+        Checks for an available application update and displays a toast notification.
+        Throttled to at most once every ``cooldown_seconds`` (default 6h) per release tag.
+        Returns ``True`` if a notification was sent, ``False`` otherwise.
+        """
+        now = time.time()
+        info = update_info
+        if info is None:
+            # Throttle the network call to GitHub (30m between checks, 5m retry on offline/error)
+            check_cooldown = 1800.0
+            if not force and (now - self.last_update_check < check_cooldown):
+                return False
+            try:
+                try:
+                    from update_service import check_for_updates
+                except ImportError:
+                    from src.services.update_service import check_for_updates
+                info = check_for_updates()
+            except Exception:
+                info = None
+
+            if info:
+                self.last_update_check = now
+            else:
+                # If offline or no update, allow retry after 5 minutes instead of locking out for hours
+                self.last_update_check = max(0.0, now - (check_cooldown - 300.0))
+            self.save_state()
+
+        if not info or not isinstance(info, dict):
+            return False
+
+        tag = str(info.get("tag_name") or info.get("latest_version") or "").strip()
+        if not tag:
+            return False
+
+        tag_norm = tag.lstrip("vV")
+        last_norm = self.last_update_notified_tag.lstrip("vV")
+
+        if not force:
+            if tag_norm and tag_norm == last_norm and (now - self.last_update_notified_time < cooldown_seconds):
+                return False
+
+        try:
+            sent = NotificationService().notify_update_available(info)
+        except Exception:
+            sent = False
+
+        if sent:
+            self.last_update_notified_tag = tag
+            self.last_update_notified_time = now
+            self.save_state()
+        return sent

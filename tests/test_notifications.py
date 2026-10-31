@@ -181,6 +181,20 @@ class TestNotificationServiceMessages(unittest.TestCase):
         self.assertIn("in 4d", kwargs["msg"])
         self.assertEqual(kwargs["launch_url_or_action"], "tasks://exam/e_1")
 
+    @patch.object(NotificationService, "send_notification", return_value=True)
+    def test_notify_update_available(self, mock_send):
+        info = {
+            "current_version": "1.0.2",
+            "latest_version": "2.4.0",
+            "tag_name": "v2.4.0",
+        }
+        self.assertTrue(self.svc.notify_update_available(info))
+        mock_send.assert_called_once()
+        kwargs = mock_send.call_args.kwargs
+        self.assertIn("Tasks Update verfügbar (v2.4.0)", kwargs["title"])
+        self.assertIn("Eine neue Version steht bereit", kwargs["msg"])
+        self.assertEqual(kwargs["launch_url_or_action"], "tasks://update")
+
     def test_default_icon_path(self):
         self.assertTrue(self.svc.default_icon)
         self.assertTrue(os.path.isfile(self.svc.default_icon))
@@ -292,6 +306,40 @@ class TestNotificationEngine(unittest.TestCase):
             self.assertEqual(notified_again, [])
             mock_notify.assert_not_called()
 
+    @patch.object(NotificationService, "notify_update_available", return_value=True)
+    def test_check_update_notification_throttling(self, mock_notify):
+        info = {"latest_version": "2.4.0", "tag_name": "v2.4.0"}
+        # Initial notification
+        sent = self.engine.check_update_notification(update_info=info)
+        self.assertTrue(sent)
+        mock_notify.assert_called_once_with(info)
+        self.assertEqual(self.engine.last_update_notified_tag, "v2.4.0")
+
+        # Second notification within 6h cooldown is suppressed (even with normalized tag variant '2.4.0')
+        mock_notify.reset_mock()
+        info_normalized = {"latest_version": "2.4.0", "tag_name": "2.4.0"}
+        sent_again = self.engine.check_update_notification(update_info=info_normalized)
+        self.assertFalse(sent_again)
+        mock_notify.assert_not_called()
+
+        # Force bypasses throttling
+        sent_forced = self.engine.check_update_notification(update_info=info, force=True)
+        self.assertTrue(sent_forced)
+        mock_notify.assert_called_once_with(info)
+
+        # A newer release tag (e.g. v2.5.0) notifies immediately
+        mock_notify.reset_mock()
+        info_new = {"latest_version": "2.5.0", "tag_name": "v2.5.0"}
+        sent_new = self.engine.check_update_notification(update_info=info_new)
+        self.assertTrue(sent_new)
+        mock_notify.assert_called_once_with(info_new)
+        self.assertEqual(self.engine.last_update_notified_tag, "v2.5.0")
+
+        # Persistence check
+        new_engine = NotificationEngine(self.state_file)
+        self.assertEqual(new_engine.last_update_notified_tag, "v2.5.0")
+        self.assertTrue(new_engine.last_update_notified_time > 0)
+
 
 class TestProtocolUriAndIpc(unittest.TestCase):
     """Tests parsing and dispatch of tasks:// protocol URIs."""
@@ -309,12 +357,28 @@ class TestProtocolUriAndIpc(unittest.TestCase):
         self.assertEqual(cmd, "SHOW")
         self.assertIsNone(target)
 
+    def test_parse_protocol_uri_update(self):
+        cmd, target = _parse_protocol_uri("tasks://update")
+        self.assertEqual(cmd, "OPEN_UPDATE")
+        self.assertIsNone(target)
+
+        cmd, target = _parse_protocol_uri("tasks://update/")
+        self.assertEqual(cmd, "OPEN_UPDATE")
+        self.assertIsNone(target)
+
     @patch("main._send_instance_command", return_value="OK:OPEN_TASK")
     def test_handle_protocol_uri_dispatches_to_running_instance(self, mock_send):
         with patch("sys.stdout", new_callable=io.StringIO):
             res = _handle_protocol_uri("tasks://task/task_42")
         self.assertTrue(res)
         mock_send.assert_called_once_with("OPEN_TASK:task_42")
+
+    @patch("main._send_instance_command", return_value="OK:OPEN_UPDATE")
+    def test_handle_protocol_uri_update_dispatches_to_running_instance(self, mock_send):
+        with patch("sys.stdout", new_callable=io.StringIO):
+            res = _handle_protocol_uri("tasks://update")
+        self.assertTrue(res)
+        mock_send.assert_called_once_with("OPEN_UPDATE")
 
 
 class TestNotificationConfigModal(unittest.IsolatedAsyncioTestCase):

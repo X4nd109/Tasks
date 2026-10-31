@@ -174,11 +174,15 @@ def ensure_tasks_protocol_registered() -> bool:
     try:
         import winreg  # type: ignore[import-not-found]
 
-        root = _workspace_root()
-        main_py = os.path.join(root, "main.py")
-        command = f'"{_python_executable_without_console()}" "{main_py}" --uri "%1"'
-        png_icon = os.path.join(root, "assets", "app_icon.png")
-        ico_icon = os.path.join(root, "assets", "app_icon.ico")
+        if getattr(sys, "frozen", False):
+            exe_path = os.path.abspath(sys.executable)
+            command = f'"{exe_path}" --uri "%1"'
+        else:
+            root = _workspace_root()
+            main_py = os.path.join(root, "main.py")
+            command = f'"{_python_executable_without_console()}" "{main_py}" --uri "%1"'
+        png_icon = os.path.join(_workspace_root(), "assets", "app_icon.png")
+        ico_icon = os.path.join(_workspace_root(), "assets", "app_icon.ico")
 
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Classes\tasks") as key:
             winreg.SetValueEx(key, "", 0, winreg.REG_SZ, "URL:Tasks Protocol")
@@ -361,3 +365,18 @@ class NotificationService:
             title="Tasks sync complete",
             msg=f"{count} new {noun} found.",
         )
+
+    def notify_update_available(self, update_info: dict) -> bool:
+        """Notifies the user that a newer Tasks release is available."""
+        if not isinstance(update_info, dict):
+            return False
+        latest_version = (
+            update_info.get("latest_version")
+            or str(update_info.get("tag_name", "")).lstrip("vV")
+        )
+        if not latest_version:
+            return False
+        title = f"Tasks Update verfügbar (v{latest_version})"
+        msg = "Eine neue Version steht bereit. Klicke hier zum Installieren."
+        launch = "tasks://update"
+        return self.send_notification(title=title, msg=msg, launch_url_or_action=launch)

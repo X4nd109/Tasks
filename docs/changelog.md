@@ -9,6 +9,25 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+
+## [2.3.1] - 2026-10-31
+
+### Added
+- **Benutzerfreundliches & modernes Tasks-Update-System**:
+  - **Hintergrund-Update-Prüfung & Windows Toasts**:
+    - Periodische Prüfung im Auto-Sync-Zyklus (_run_notification_checks) auf neuere GitHub-Releases.
+    - Windows Toast-Benachrichtigung (*Tasks Update verfügbar (vX.Y.Z)*) mit offiziellem App-Logo und Deep-Link tasks://update.
+    - 6-Stunden-Throttling pro Release-Tag (cache/notification_state.json), um Notification-Spam zuverlässig zu verhindern.
+  - **Catppuccin Mocha PowerShell Update Runner (update_runner.ps1)**:
+    - Läuft isoliert im %TEMP%\Tasks_Update\-Verzeichnis, geschützt vor dem Überschreiben durch Inno Setup.
+    - Eigenständiges Terminalfenster (CREATE_NEW_CONSOLE) im edlen Catppuccin Mocha Theme (Lavender, Green, Blue, Red, Yellow, Dark Base).
+    - Klare 5-Schritt-Anzeige: [1/5] Warten auf Beendigung von Tasks, [2/5] Verifikation des Installers, [3/5] Installation mit animiertem Spinner, [4/5] Validierung der neuen Binaries, [5/5] Bereinigung und sanfter Neustart.
+    - Vollständiger Fehlerschutz: Bleibt bei Fehlern geöffnet und zeigt detaillierte Diagnosen in Rot an (Read-Host Pause, kein abrupt schließendes Fenster).
+  - **Deep-Link Protocol Dispatching (tasks://update)**:
+    - Klick auf den Toast öffnet Tasks direkt oder sendet den IPC-Befehl OPEN_UPDATE an die laufende Instanz, welche das UpdateReminderModal anzeigt.
+    - CLI-Unterstützung für main.py --open-update bzw. Tasks.exe --open-update.
+
+
 ## [2.3.0] - 2026-10-31
 
 ### Added

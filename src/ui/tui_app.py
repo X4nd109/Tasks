@@ -3889,13 +3889,20 @@ class UpdateReminderModal(ModalScreen[None]):
             pbar = self.query_one("#update_pbar", ProgressBar)
             pbar.update(progress=100, total=100)
             status_lbl = self.query_one("#update_status_lbl", Label)
-            status_lbl.update("[bold #a6e3a1]✓ Download complete! Preparing installation...[/]")
+            status_lbl.update("[bold #a6e3a1]✓ Download complete! Update-Manager wird gestartet...[/]")
             self.query_one("#update_download_buttons_row", Horizontal).styles.display = "none"
         except Exception:
             pass
 
         # Installer im Hintergrund starten und Anwendung beenden
-        launched = launch_update_and_restart(target_path, WORKSPACE_DIR)
+        cur_v = self.update_info.get("current_version", APP_VERSION)
+        lat_v = self.update_info.get("latest_version", "")
+        launched = launch_update_and_restart(
+            target_path,
+            WORKSPACE_DIR,
+            current_version=cur_v,
+            target_version=lat_v,
+        )
         if launched:
             # Kurzer visueller Übergang vor dem Schließen
             self.set_timer(1.2, lambda: self.app.exit(return_code=42))
@@ -9948,6 +9955,7 @@ class TasksApp(App):
         start_hidden: bool = False,
         initial_task_id: Optional[str] = None,
         initial_exam_id: Optional[str] = None,
+        open_update_dialog: bool = False,
     ):
         super().__init__()
         self.mgr = mgr or TaskManager(autostart_prefetch=True)
@@ -9955,6 +9963,7 @@ class TasksApp(App):
         self.start_hidden = start_hidden
         self.initial_task_id = initial_task_id
         self.initial_exam_id = initial_exam_id
+        self.open_update_dialog = open_update_dialog
         self._notification_engine = None
         try:
             if NotificationEngine is not None:
@@ -10032,7 +10041,9 @@ class TasksApp(App):
             self.action_sync_tasks()
 
         # Prüfe im Hintergrund auf neue Releases (geräuschlos, blockiert Start nicht)
-        if not self.is_headless:
+        if self.open_update_dialog:
+            self._start_update_checker(force_show=True)
+        elif not self.is_headless:
             self._start_update_checker()
 
         # Win32 Console Icon setzen (falls im klassischen conhost CMD-Fenster ausgeführt)
@@ -10122,6 +10133,21 @@ class TasksApp(App):
             pass
         try:
             engine.check_exam_reminders(self._get_all_exams())
+        except Exception:
+            pass
+        try:
+            if not getattr(self, "_update_notification_checking", False):
+                self._update_notification_checking = True
+                def _bg_update_check():
+                    try:
+                        engine.check_update_notification()
+                    finally:
+                        self._update_notification_checking = False
+                threading.Thread(
+                    target=_bg_update_check,
+                    daemon=True,
+                    name="UpdateNotificationCheckThread",
+                ).start()
         except Exception:
             pass
 
@@ -10250,6 +10276,10 @@ class TasksApp(App):
             self.restore_from_tray()
             self.call_from_thread(self._open_exam_by_id, exam_id)
             return "OK:OPEN_EXAM"
+        elif cmd_upper == "OPEN_UPDATE":
+            self.restore_from_tray()
+            self.call_from_thread(self._start_update_checker, True)
+            return "OK:OPEN_UPDATE"
         elif cmd_upper == "QUIT":
             self.call_from_thread(self.action_real_quit)
             return "OK:QUITTING"
@@ -10324,7 +10354,7 @@ class TasksApp(App):
         self.action_quit_app(force=True)
 
 
-    def _start_update_checker(self) -> None:
+    def _start_update_checker(self, force_show: bool = False) -> None:
         """Startet die Prüfung auf neuere GitHub-Releases in einem Hintergrund-Thread."""
         def worker():
             try:
@@ -10336,6 +10366,13 @@ class TasksApp(App):
                 update_info = check_for_updates()
                 if update_info:
                     self.call_from_thread(self._show_update_modal, update_info)
+                elif force_show:
+                    self.call_from_thread(
+                        self.notify,
+                        f"Tasks is up to date (v{APP_VERSION}).",
+                        title="Update Check",
+                        severity="information",
+                    )
             except Exception:
                 pass
 
@@ -11695,6 +11732,7 @@ def run_tui(
     start_hidden: bool = False,
     initial_task_id: Optional[str] = None,
     initial_exam_id: Optional[str] = None,
+    open_update_dialog: bool = False,
 ):
     """Startet die moderne Textual-TUI-Anwendung."""
     if not start_hidden and not getattr(sys, "_launching_tui_printed", False):
@@ -11711,6 +11749,7 @@ def run_tui(
         start_hidden=start_hidden,
         initial_task_id=initial_task_id,
         initial_exam_id=initial_exam_id,
+        open_update_dialog=open_update_dialog,
     )
 
     try:

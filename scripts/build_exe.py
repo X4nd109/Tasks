@@ -39,7 +39,18 @@ def build() -> int:
         print(f"[X] Spec file not found: {spec_file}")
         return 1
 
-    cmd = [sys.executable, "-m", "PyInstaller", spec_file, "--noconfirm", "--clean"]
+    import tempfile
+    work_dir = os.path.join(tempfile.gettempdir(), "tasks_pyi_build")
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        spec_file,
+        "--noconfirm",
+        "--clean",
+        "--workpath",
+        work_dir,
+    ]
     print(f"[*] Executing: {' '.join(cmd)}")
     ret = subprocess.call(cmd)
     if ret != 0:

@@ -119,6 +119,9 @@ def _parse_protocol_uri(uri: str):
                 return f"OPEN_TASK:{target}", target
             if kind == "exam":
                 return f"OPEN_EXAM:{target}", target
+    elif len(segments) == 1:
+        if segments[0].strip().lower() == "update":
+            return "OPEN_UPDATE", None
 
     return "SHOW", None
 
@@ -161,6 +164,8 @@ def _handle_protocol_uri(uri: str) -> bool:
             print(f"Opened assignment {target} in the running Tasks instance.", flush=True)
         elif command.startswith("OPEN_EXAM:"):
             print(f"Opened exam {target} in the running Tasks instance.", flush=True)
+        elif command == "OPEN_UPDATE":
+            print("Opened update reminder in the running Tasks instance.", flush=True)
         else:
             print("Tasks window restored.", flush=True)
         return True
@@ -169,6 +174,8 @@ def _handle_protocol_uri(uri: str) -> bool:
         _spawn_tui("--open-task", target)
     elif command.startswith("OPEN_EXAM:") and target:
         _spawn_tui("--open-exam", target)
+    elif command == "OPEN_UPDATE":
+        _spawn_tui("--open-update")
     else:
         _spawn_tui()
     return False
@@ -427,7 +434,8 @@ if __name__ == "__main__":
 
     _open_task_arg = _get_arg_value("--open-task")
     _open_exam_arg = _get_arg_value("--open-exam")
-    if _open_task_arg or _open_exam_arg:
+    _open_update_arg = "--open-update" in sys.argv
+    if _open_task_arg or _open_exam_arg or _open_update_arg:
         if sys.platform == "win32":
             try:
                 from single_instance import send_instance_command as _send
@@ -441,6 +449,7 @@ if __name__ == "__main__":
             run_tui(
                 initial_task_id=_open_task_arg or None,
                 initial_exam_id=_open_exam_arg or None,
+                open_update_dialog=_open_update_arg,
             ) or 0
         )
 

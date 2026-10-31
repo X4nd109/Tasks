@@ -242,6 +242,99 @@ class TestUpdateService(unittest.TestCase):
         finally:
             os.environ.pop("RUN_FROM_BATCH", None)
 
+    def test_generate_powershell_updater_script(self):
+        """Prüft, dass das PowerShell-Update-Skript Catppuccin Mocha Styling, alle 5 Schritte und Fehlerbehandlung enthält."""
+        from src.services.update_service import generate_powershell_updater_script
+
+        script = generate_powershell_updater_script(
+            installer_path=r"C:\Temp\Tasks_Setup.exe",
+            target_app_dir=r"C:\Program Files\Tasks",
+            current_version="2.3.0",
+            target_version="2.4.0",
+        )
+
+        # Catppuccin Mocha ANSI codes
+        self.assertIn("38;2;180;190;254m", script)  # Lavender
+        self.assertIn("38;2;166;227;161m", script)  # Green
+        self.assertIn("38;2;137;180;250m", script)  # Blue
+        self.assertIn("38;2;243;139;168m", script)  # Red
+
+        # Alle 5 Schritte
+        self.assertIn("[1/5]", script)
+        self.assertIn("[2/5]", script)
+        self.assertIn("[3/5]", script)
+        self.assertIn("[4/5]", script)
+        self.assertIn("[5/5]", script)
+
+        # Inno Setup Parameter mit sauberem Quoting für Pfade mit Leerzeichen
+        self.assertIn('`"/DIR=$targetAppDir`"', script)
+        self.assertIn("/VERYSILENT", script)
+        self.assertIn("/SUPPRESSMSGBOXES", script)
+        self.assertIn("/NORESTART", script)
+        self.assertIn("/NOTASKS=1", script)
+        self.assertIn("/UPDATE=1", script)
+
+        # WorkingDirectory beim Neustart gesetzt
+        self.assertIn("-WorkingDirectory $targetAppDir", script)
+
+        # Fehlerbehandlung: Read-Host bei Fehlern damit das Fenster offen bleibt
+        self.assertIn("Read-Host", script)
+        self.assertIn("UPDATE FEHLGESCHLAGEN", script)
+
+    def test_powershell_script_syntax_with_parser(self):
+        """Validiert das generierte PowerShell-Skript gegen den offiziellen PowerShell-Parser, auch bei Pfaden mit Sonderzeichen."""
+        import subprocess
+        from src.services.update_service import generate_powershell_updater_script
+
+        # Teste Pfad mit Leerzeichen, einfachen Anführungszeichen und Dollarzeichen
+        script = generate_powershell_updater_script(
+            installer_path=r"C:\Temp Folder's\Tasks_Setup.exe",
+            target_app_dir=r"C:\Program Files\Tasks $App",
+            current_version="2.3.0",
+            target_version="2.4.0",
+        )
+        ps_cmd = (
+            "$raw = [Console]::In.ReadToEnd(); "
+            "$errs = $null; "
+            "[System.Management.Automation.Language.Parser]::ParseInput($raw, [ref]$null, [ref]$errs) > $null; "
+            "if ($errs -and $errs.Count -gt 0) { exit $errs.Count } else { exit 0 }"
+        )
+        try:
+            res = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-Command", ps_cmd],
+                input=script.encode("utf-8"),
+                capture_output=True,
+            )
+            self.assertEqual(res.returncode, 0, f"PowerShell-Syntaxfehler: {res.stderr.decode('utf-8', errors='replace')}")
+        except FileNotFoundError:
+            pass
+
+    @patch("subprocess.Popen")
+    def test_launch_update_and_restart_powershell_execution(self, mock_popen):
+        """Prüft, dass launch_update_and_restart update_runner.ps1 generiert und via powershell.exe startet."""
+        import tempfile
+        import os
+        from src.services.update_service import launch_update_and_restart, get_update_temp_dir
+
+        os.environ.pop("RUN_FROM_BATCH", None)
+        with tempfile.TemporaryDirectory() as fake_app:
+            installer_path = os.path.join(fake_app, "Tasks_Setup.exe")
+            ok = launch_update_and_restart(installer_path, app_dir=fake_app, current_version="2.3.0", target_version="2.4.0")
+            self.assertTrue(ok)
+
+            ps_file = os.path.join(get_update_temp_dir(), "update_runner.ps1")
+            self.assertTrue(os.path.exists(ps_file))
+            with open(ps_file, "r", encoding="utf-8") as f:
+                ps_text = f.read()
+            self.assertIn("Tasks Update Manager", ps_text)
+
+            mock_popen.assert_called_once()
+            cmd_args = mock_popen.call_args[0][0]
+            self.assertEqual(cmd_args[0], "powershell.exe")
+            self.assertIn("-ExecutionPolicy", cmd_args)
+            self.assertIn("Bypass", cmd_args)
+            self.assertEqual(cmd_args[-1], ps_file)
+
     def test_welcome_task_english_buttons_text(self):
         """Prüft, dass die Getting Started Aufgabe rein auf Englisch verfasst ist und UI-Buttons referenziert."""
         from src.core.task_manager import TaskManager
