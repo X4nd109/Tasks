@@ -70,6 +70,12 @@ def build() -> int:
         if os.path.isfile(src_icon):
             shutil.copy2(src_icon, os.path.join(target_assets, icon_name))
 
+    # Copy skills directory to dist top-level
+    src_skills = os.path.join(PROJECT_ROOT, "skills")
+    target_skills = os.path.join(dist_dir, "skills")
+    if os.path.isdir(src_skills):
+        shutil.copytree(src_skills, target_skills, dirs_exist_ok=True)
+
     # Strip large tutorial screenshots from dist to keep installation lean
     tutorial_dir = os.path.join(dist_dir, "assets", "git-sync-tutorial")
     if os.path.isdir(tutorial_dir):

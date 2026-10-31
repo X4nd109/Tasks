@@ -1729,6 +1729,7 @@ def resolve_skill_source_file(source_file: Optional[str] = None) -> Optional[str
     try:
         from config import WORKSPACE_DIR as _workspace
         candidates.append(os.path.join(_workspace, "skills", "tasks", "SKILL.md"))
+        candidates.append(os.path.join(_workspace, "_internal", "skills", "tasks", "SKILL.md"))
     except Exception:
         pass
     candidates.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "skills", "tasks", "SKILL.md")))

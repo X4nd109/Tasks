@@ -19,10 +19,11 @@
       - `tasks.cmd` startet bevorzugt direkt die kompilierte `Tasks.exe` und dient als schlanker Terminal-Runner.
       - Intelligente Dev-Root-Erkennung in `src/core/config.py`: Wenn `Tasks.exe` aus dem Git-Repository gestartet wird, nutzt sie direkt die Daten (`data/`, `cache/`, `config.json`) des Projekt-Roots. Keine doppelten Cache-/Daten-Ordner mehr in `dist/Tasks`.
       - `Tasks.exe` Launcher direkt im Projekt-Root (`scripts/RootLauncher.cs`), sodass Entwickler Tasks per Doppelklick oder Terminal direkt aus dem Root starten können.
-    - **Inno Setup Installer (`Tasks_Setup.exe`)**:
-      - Verpackt ausschließlich kompilierte Binaries (`dist/Tasks/*`), Assets und `tasks.cmd` (Dateigröße ~77.2 MB).
-      - Genau ein einziger Startmenü-Eintrag ("Tasks").
-      - Automatische Bereinigung alter `.py`- und `.bat`-Dateien bei Updates mit striktem Schutz des Entwicklungs-Repositories (`if not DirExists(AppDir + '\.git')`).
+    - **Inno Setup Installer (`Tasks_Setup.exe`) & Deinstallation**:
+      - Verpackt ausschließlich kompilierte Binaries (`dist/Tasks/*`), Assets, `skills/tasks/SKILL.md` und `tasks.cmd` (Dateigröße ~77.2 MB).
+      - Automatische Bereinigung alter `.py`-, `scripts/`- und `.bat`-Dateien bei Updates mit striktem Schutz des Entwicklungs-Repositories (`if not DirExists(AppDir + '\.git')`).
+      - Autarke Einrichtung von User-`PATH` und Windows-Terminal-Profil (mit App-Logo und direktem Aufruf von `Tasks.exe`) via Inline-PowerShell, ganz ohne Hilfs-Batchdateien.
+      - **Vollständige Deinstallation**: Entfernt bei Uninstall restlos alle Runtime-Dateien (`cache/`, `data/`, `config.json`, `skills/`, `assets/`, `*.log`), reinigt den User-`PATH`, deregistriert das Windows-Terminal-Profil, löscht den Autostart-Registry-Key (`HKCU\...\Run\Tasks`) und entfernt das Anwendungsverzeichnis sauber vom System.
 
 - [x] **Windows Toast Notifications & Neues Benachrichtigungsmenü (`NotificationConfigModal`) (2026-10-31)**:
   - **Problem**: Nach Hintergrund-Syncs oder vor Fristabläufen und Prüfungen gab es keine nativen Windows-Benachrichtigungen; der Nutzer musste die TUI manuell öffnen, um Fälligkeiten zu prüfen.

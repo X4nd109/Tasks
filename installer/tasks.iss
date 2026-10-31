@@ -44,6 +44,8 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ; Windows 10 minimum
 MinVersion=10.0
+CloseApplications=yes
+CloseApplicationsFilter=Tasks.exe,TasksTray.exe
 
 [Languages]
 Name: "german"; MessagesFile: "compiler:Languages\German.isl"
@@ -72,17 +74,18 @@ Filename: "{app}\Tasks.exe"; \
   Flags: runhidden waituntilterminated
 
 ; 2. Terminal-Befehl 'tasks' einrichten (als Checkbox auf Fertigstellen-Seite)
-Filename: "{app}\scripts\setup_command.bat"; \
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $p = [Environment]::GetEnvironmentVariable('Path', 'User'); if (-not $p) {{ $p = '' }}; $parts = $p.Split(';') | Where-Object {{ $_ -ne '' }}; if ($parts -notcontains $app) {{ [Environment]::SetEnvironmentVariable('Path', (($parts + $app) -join ';'), 'User') }}"""; \
   WorkingDir: "{app}"; \
-  Flags: postinstall shellexec; \
+  Flags: runhidden postinstall; \
   Description: "Globalen Terminal-Befehl 'tasks' einrichten (empfohlen)"; \
   Check: ShouldSetupTasksCommand
 
 ; 3. Windows-Terminal-Profil mit Logo einrichten (als Checkbox auf Fertigstellen-Seite)
-Filename: "{app}\scripts\setup_terminal_profile.bat"; \
-  Parameters: "/silent"; \
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $file = $candidates | Where-Object {{ Test-Path $_ }} | Select-Object -First 1; if ($file) {{ try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; $icon = Join-Path $app 'assets\app_icon.png'; if (-not (Test-Path $icon)) {{ $icon = Join-Path $app 'assets\app_icon.ico' }}; $entry = [ordered]@{{ guid = $guid; name = 'Tasks'; commandline = (Join-Path $app 'Tasks.exe'); startingDirectory = $app; icon = $icon; tabTitle = 'Tasks'; hidden = $false }}; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
   WorkingDir: "{app}"; \
-  Flags: postinstall shellexec; \
+  Flags: runhidden postinstall; \
   Description: "Windows-Terminal-Profil mit Logo einrichten (empfohlen)"; \
   Check: ShouldSetupTerminalProfile
 
@@ -94,14 +97,26 @@ Filename: "{app}\Tasks.exe"; \
 
 [UninstallRun]
 ; Vor dem Löschen der Dateien: Terminal-Befehl 'tasks' aus dem User-PATH entfernen
-Filename: "{cmd}"; Parameters: "/c ""{app}\scripts\remove_command.bat /silent"""; Flags: runhidden; RunOnceId: "RemoveTasksCommand"
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $p = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($p) {{ $parts = $p.Split(';') | Where-Object {{ $_ -ne '' -and $_.TrimEnd('\') -ne $app.TrimEnd('\') }}; [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User') }}"""; \
+  Flags: runhidden; RunOnceId: "RemoveTasksCommand"
+
 ; Vor dem Löschen der Dateien: Windows-Terminal-Profil entfernen
-Filename: "{cmd}"; Parameters: "/c ""{app}\scripts\remove_terminal_profile.bat /silent"""; Flags: runhidden; RunOnceId: "RemoveTerminalProfile"
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $file = $candidates | Where-Object {{ Test-Path $_ }} | Select-Object -First 1; if ($file) {{ try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
+  Flags: runhidden; RunOnceId: "RemoveTerminalProfile"
 
 [UninstallDelete]
-; Beim Deinstallieren nur temporäre Caches entfernen (config.json und Aufgaben bleiben für Neuinstallationen erhalten)
+; Vollständige Bereinigung aller Runtime-Verzeichnisse und temporären Dateien
 Type: filesandordirs; Name: "{app}\cache"
+Type: filesandordirs; Name: "{app}\data"
+Type: filesandordirs; Name: "{app}\skills"
+Type: filesandordirs; Name: "{app}\scripts"
+Type: filesandordirs; Name: "{app}\assets"
+Type: filesandordirs; Name: "{app}\_internal"
+Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\.first_run_completed"
+Type: files; Name: "{app}\*.log"
 
 [Code]
 function ShouldSetupTasksCommand: Boolean;
@@ -134,10 +149,33 @@ begin
       DeleteFile(AppDir + '\requirements.txt');
       DelTree(AppDir + '\src', True, True, True);
       DelTree(AppDir + '\tests', True, True, True);
+      DelTree(AppDir + '\scripts', True, True, True);
       DelTree(AppDir + '\__pycache__', True, True, True);
       DelTree(AppDir + '\assets\git-sync-tutorial', True, True, True);
+      DelTree(AppDir + '\assets\icons', True, True, True);
+      DeleteFile(AppDir + '\assets\default_courses.json');
       // Alten Startmenü-Unterordner aus Versionen <= 2.2.0 bereinigen
       DelTree(ExpandConstant('{autoprograms}\Tasks'), True, True, True);
+    end;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDir: string;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Autostart Registry-Eintrag entfernen
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Tasks');
+  end;
+  if CurUninstallStep = usPostUninstall then
+  begin
+    AppDir := ExpandConstant('{app}');
+    // Restordner restlos entfernen, wenn kein Entwicklungsordner (.git)
+    if not DirExists(AppDir + '\.git') then
+    begin
+      DelTree(AppDir, True, True, True);
     end;
   end;
 end;

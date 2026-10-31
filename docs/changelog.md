@@ -15,7 +15,9 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 - **Nativer Windows-Prozess ("Tasks") & PyInstaller Standalone-Binaries**:
   - `tasks.spec` & `scripts/build_exe.py`: Dual-Target Onedir-Kompilierung für `Tasks.exe` (interaktive TUI & Headless CLI) und `TasksTray.exe` (fensterloser Hintergrund-Tray-Prozess).
   - Native Windows Task-Manager Integration: Echte PE-Versionsressourcen (`version_info.txt`, `version_info_tray.txt`) mit Produkt- und Dateibeschreibung `Tasks`, Hersteller `Alexander Endl` und Verlinkung auf das GitHub-Repository.
-  - `installer/tasks.iss` & `installer/build_installer.py`: Verpackt ausschließlich kompilierte Binaries und Assets; reduziert das Startmenü auf exakt einen Eintrag (`Tasks`) und säubert bei Updates automatisch obsolete `.py`- und `.bat`-Dateien aus älteren Installationen (mit striktem Git-Schutz für Entwicklungsumgebungen).
+  - `installer/tasks.iss` & `installer/build_installer.py`: Verpackt ausschließlich kompilierte Binaries, Assets und `skills/tasks/SKILL.md`; reduziert das Startmenü auf exakt einen Eintrag (`Tasks`) und säubert bei Updates automatisch obsolete `.py`-, `scripts/`- und `.bat`-Dateien aus älteren Installationen (mit striktem Git-Schutz für Entwicklungsumgebungen).
+  - Saubere Deinstallation: Uninstaller bereinigt automatisch alle Runtime-Dateien (`cache/`, `data/`, `config.json`, `*.log`), User-`PATH`, Windows Terminal Profile und den Windows-Autostart-Registry-Key.
+  - Autarkes Terminal- & PATH-Setup: Direkte Ausführung über Inline-PowerShell in Inno Setup ohne Abhängigkeit von temporären Batch-Skripten.
   - `build.bat`: Lokales Build-Skript zum schnellen Erstellen der Standalone-Binaries.
 - **Windows Toast Notifications & Neues Benachrichtigungsmenü (`NotificationConfigModal`)**:
   - `SettingsModal`: Neuer Menüpunkt `🔔 Notifications [9/N]` im 2-Spalten-Layout neben `🖥️ System Tray & Autostart`.
