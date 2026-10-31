@@ -9,6 +9,32 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-31
+
+### Added
+- **Nativer Windows-Prozess ("Tasks") & PyInstaller Standalone-Binaries**:
+  - `tasks.spec` & `scripts/build_exe.py`: Dual-Target Onedir-Kompilierung für `Tasks.exe` (interaktive TUI & Headless CLI) und `TasksTray.exe` (fensterloser Hintergrund-Tray-Prozess).
+  - Native Windows Task-Manager Integration: Echte PE-Versionsressourcen (`version_info.txt`, `version_info_tray.txt`) mit Produkt- und Dateibeschreibung `Tasks`, Hersteller `Alexander Endl` und Verlinkung auf das GitHub-Repository.
+  - `installer/tasks.iss` & `installer/build_installer.py`: Verpackt ausschließlich kompilierte Binaries und Assets; reduziert das Startmenü auf exakt einen Eintrag (`Tasks`) und säubert bei Updates automatisch obsolete `.py`- und `.bat`-Dateien aus älteren Installationen (mit striktem Git-Schutz für Entwicklungsumgebungen).
+  - `build.bat`: Lokales Build-Skript zum schnellen Erstellen der Standalone-Binaries.
+- **Windows Toast Notifications & Neues Benachrichtigungsmenü (`NotificationConfigModal`)**:
+  - `SettingsModal`: Neuer Menüpunkt `🔔 Notifications [9/N]` im 2-Spalten-Layout neben `🖥️ System Tray & Autostart`.
+  - `NotificationConfigModal`: Konfigurationsdialog mit Toggles für neue Aufgaben und Prüfungs-Erinnerungen, Select für Fälligkeitsfenster (`1h`, `2h` [Default], `3h`, `5h`, `1d`, `never`), Uhrzeit für tägliche Erinnerungen (`20:00`) sowie einheitlichen Tage-Vorlauf-Optionen für alle Test-Arten (`Disabled`, `1`, `2`, `3`, `4`, `5`, `7`, `10`, `14` Tage vorher mit individuellen Defaults TE: 4d, SA: 7d, WDH: 3d, PR: 3d).
+  - `src/services/notification_service.py`: Toast-Benachrichtigungen mit offiziellem Tasks-App-Logo (`assets/app_icon.png`) für neue Aufgaben, Frist-Erinnerungen und tägliche Lern-Erinnerungen.
+  - Deep-Linking & IPC: Klick auf eine Benachrichtigung stellt Tasks in den Vordergrund und öffnet direkt die betroffene Aufgabe bzw. Prüfung (`OPEN_TASK`, `OPEN_EXAM`).
+  - `src/services/notification_engine.py`: Autarker Notification-Scheduler mit Cache-Deduplizierung (`cache/notification_state.json`), Spam-Schutz beim Erststart und Catch-Up-Garantie für verpasste tägliche Erinnerungen.
+- **Automatisches Aufgaben-Synchronisationsintervall (Auto-Sync)**:
+  - `TrayConfigModal`: Neues Textual `Select`-Dropdown für das automatische Sync-Intervall (`5min`, `10min`, `30min` [Default], `1h`, `never`).
+  - `src/core/config.py`: Konfigurationsfunktionen `get_auto_sync_interval()`, `set_auto_sync_interval()` mit Alias-Normalisierung.
+  - `src/ui/tui_app.py`: Periodischer Hintergrund-Timer (`self.set_interval(20.0, self._check_auto_sync)`) in `TasksApp`.
+  - `src/core/agent_cli.py`: CLI-Befehl `tasks tray sync-interval [VAL]`.
+
+### Fixed
+- **Windows Toast Notification Icon Rendering**: Modernes Windows 10/11 XML-Binding (`ToastGeneric` mit `placement="appLogoOverride"` und `file:///` URI) integriert, sodass das offizielle Tasks Quantum-Prism Logo (`assets/app_icon.png`) nun zuverlässig links neben dem Notification-Inhalt auf Windows 10 und 11 dargestellt wird.
+
+### Removed
+- Obsolete `.bat`-Skripte: `setup.bat`, `run.bat`, `tasks.bat` sowie `scripts/*.bat` (vollständig abgelöst durch `Tasks.exe`, `build.bat` und den universellen CLI-Runner `tasks.cmd`).
+
 ## [2.2.0] - 2026-10-28
 
 ### Added

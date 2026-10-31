@@ -27,7 +27,9 @@
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
 | `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.1.0`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.0`), Themes, Logins und Schülereinstellungen. |
+| `NotificationConfigModal` | Modal | Untermenü in den Settings zur Konfiguration von nativen Windows-Benachrichtigungen für neue Aufgaben, Fälligkeitswarnungen und täglichen Prüfungs-Erinnerungen. |
+| `TrayConfigModal` | Modal | Konfigurationsdialog für Hintergrundbetrieb, Minimieren in den System Tray, Windows-Autostart und automatisches Synchronisationsintervall. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
 | `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) unten rechts mit bündig darüber gestapeltem 1-Zeilen Clear-Button (`🗑️ Clear`, Tastenkürzel `[Ctrl+L]`), vorgeschaltetem Sicherheits-Bestätigungsdialog (`ClearChatConfirmModal`) und vollständiger Entfernung der oberen Toolbar zur Rückgewinnung von Chat-Zeilen sowie direkter Gemini / OpenAI REST-Anbindung. |
 | `ClearChatConfirmModal` | Modal | Englischer Sicherheits-Bestätigungsdialog vor dem Leeren des Chat-Verlaufs (`🗑️ Clear` / `Cancel [ESC]`). |
@@ -55,6 +57,8 @@
 | `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
 | `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung (dedupliziert: bereits erklärte Aufgaben öffnen direkt den bestehenden Chat, Reset bei Clear Chat). |
 | `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
+| `Notifications` | `[9/N]` / `btn_set_notifications` | Öffnet das Untermenü `NotificationConfigModal` zur Konfiguration von Windows Toast-Benachrichtigungen (Neue Aufgaben, Fälligkeitswarnungen, tägliche Prüfungs-Erinnerungen). |
+| `System Tray & Autostart` | `[8/T]` / `btn_set_tray` | Öffnet `TrayConfigModal` für Hintergrund-Betrieb, Autostart und automatisches Sync-Intervall (`5min`, `10min`, `30min`, `1h`, `never`). |
 | `Sort Column Header` | Klick auf Spalten-Header | Interaktives 2-Wege-Sortieren der Haupttabelle nach `Platform`, `Subject`, `Due Date`, `Status` oder `Teacher` (Aufsteigend `↑` / Absteigend `↓`). Automatische Start-Sortierung mit `Due Date ↓`, sichtbare Pfeile auf allen Spalten, sequenzielle 1..N Nummerierung. Spalten `#` und `Assignment` bleiben unberührt. |
 | `Toggle status` | `[E]` / `btn_toggle_status` | Schaltet den Erledigt-Status einer Aufgabe zwischen offen und abgeschlossen um. |
 | `Hide / Delete` | `[L]` / `btn_delete_task` | Verschiebt eine Aufgabe in den lokalen Papierkorb (`deleted_tasks.json`). |
@@ -112,7 +116,7 @@
 | `tasks skill sync` | `[--target <pfad>] [--json]` | Synchronisiert den Tasks-Skill in das gespeicherte Zielverzeichnis (fragt einmalig via Windows Explorer nach, falls nicht gesetzt). |
 | `tasks skill set-dir` | `[<pfad>] [--set-dir [<pfad>]]` | Ändert das Zielverzeichnis für den Skill (öffnet bei leerem Argument den Explorer-Ordnerauswahldialog). |
 | `tasks skill status` | `[--json]` | Zeigt den aktuellen Installationsstatus und Speicherort des Skills an. |
-| `tasks tray` | `[status\|enable\|disable\|show\|quit] [--json]` | Steuert das System-Tray-Verhalten und sendet `SHOW`/`QUIT`/`STATUS` an die laufende Hintergrund-Instanz. |
+| `tasks tray` | `[status\|enable\|disable\|show\|quit\|sync-interval [VAL]] [--json]` | Steuert System-Tray, Auto-Sync-Intervall (`5min`, `10min`, `30min`, `1h`, `never`) und sendet `SHOW`/`QUIT`/`STATUS` an die Hintergrund-Instanz. |
 | `tasks autostart` | `[status\|enable\|disable] [--json]` | Verwaltet den Windows-Autostart-Eintrag unter `HKCU\...\Run`. |
 | `tasks sync` | `--deep` | Führt eine vollständige Plattform-Synchronisation im Hintergrund durch. |
 

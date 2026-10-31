@@ -8,3 +8,6 @@ Pillow>=10.0.0
 pytesseract>=0.3.10
 pystray>=0.19.5
 winotify>=1.1.0
+
+# Build & Packaging
+pyinstaller>=6.0.0

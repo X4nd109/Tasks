@@ -365,6 +365,9 @@ def main():
     parser.add_argument("--json", action="store_true", help="Output tasks as structured JSON")
     parser.add_argument("--deep", action="store_true", help="Perform Moodle deep scan across all courses")
     parser.add_argument("--cli", action="store_true", help="Start classic text CLI instead of modern TUI")
+    parser.add_argument("--open-task", dest="open_task", default=None, help="Open a task by ID in the TUI")
+    parser.add_argument("--open-exam", dest="open_exam", default=None, help="Open an exam by ID in the TUI")
+    parser.add_argument("--uri", dest="uri", default=None, help="Handle a tasks:// protocol URI")
 
     args = parser.parse_args()
 

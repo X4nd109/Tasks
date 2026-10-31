@@ -4,7 +4,18 @@ chcp 65001 >nul
 title Tasks
 
 REM -----------------------------------------------------------------
-REM Python-Interpreter finden
+REM 1. Falls vorkompilierte Tasks.exe existiert, direkt starten
+REM -----------------------------------------------------------------
+if exist "%~dp0dist\Tasks\Tasks.exe" (
+    "%~dp0dist\Tasks\Tasks.exe" %*
+    exit /b !ERRORLEVEL!
+) else if exist "%~dp0Tasks.exe" (
+    "%~dp0Tasks.exe" %*
+    exit /b !ERRORLEVEL!
+)
+
+REM -----------------------------------------------------------------
+REM 2. Python-Interpreter finden
 REM -----------------------------------------------------------------
 set "PYTHON_EXE="
 

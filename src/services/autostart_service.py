@@ -65,11 +65,19 @@ def _get_executable() -> str:
 
 def get_default_autostart_command() -> str:
     """Builds the command line that is registered for autostart."""
-    executable = _get_executable()
-
+    root = _get_project_root()
     if getattr(sys, "frozen", False):
-        return f'"{executable}" {TRAY_FLAG}'
+        exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+        tray_candidate = os.path.join(exe_dir, "TasksTray.exe")
+        if os.path.isfile(tray_candidate):
+            return f'"{tray_candidate}"'
+        return f'"{sys.executable}" {TRAY_FLAG}'
 
+    tray_candidate = os.path.join(root, "TasksTray.exe")
+    if os.path.isfile(tray_candidate):
+        return f'"{tray_candidate}"'
+
+    executable = _get_executable()
     return f'"{executable}" "{get_main_py_path()}" {TRAY_FLAG}'
 
 

@@ -42,7 +42,7 @@ class TestTrayTuiIntegration(unittest.IsolatedAsyncioTestCase):
 
             # Verify description labels are present, styled and filled
             desc_labels = list(app.screen.query(".tray_cfg_desc"))
-            self.assertEqual(len(desc_labels), 3)
+            self.assertEqual(len(desc_labels), 5)
             for desc_lbl in desc_labels:
                 rendered_text = str(desc_lbl.render())
                 self.assertTrue(len(rendered_text.strip()) > 20)

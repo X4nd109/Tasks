@@ -3,6 +3,7 @@ config.py - Konfiguration und Pfade für Tasks.
 """
 
 import contextlib
+import copy
 import json
 import os
 import re
@@ -12,13 +13,33 @@ import threading
 from typing import Optional, List
 
 # Basis-Verzeichnisse:
-CORE_DIR = os.path.dirname(os.path.abspath(__file__))
-SRC_DIR = os.path.dirname(CORE_DIR)
-WORKSPACE_DIR = os.path.dirname(SRC_DIR)
+if getattr(sys, "frozen", False):
+    _exe_dir = os.path.dirname(os.path.abspath(sys.executable))
+    # Wenn wir uns innerhalb eines Git-Repositories befinden (z. B. <repo>/dist/Tasks/Tasks.exe oder <repo>/Tasks.exe),
+    # nutzen wir direkt das Projekt-Root als WORKSPACE_DIR für gemeinsame Daten & Caches:
+    _found_dev_root = None
+    _cur = _exe_dir
+    for _ in range(3):
+        if os.path.isdir(os.path.join(_cur, ".git")):
+            _found_dev_root = _cur
+            break
+        _parent = os.path.dirname(_cur)
+        if _parent == _cur:
+            break
+        _cur = _parent
+
+    WORKSPACE_DIR = _found_dev_root if _found_dev_root else _exe_dir
+    _internal_src = os.path.join(_exe_dir, "_internal", "src")
+    SRC_DIR = _internal_src if os.path.isdir(_internal_src) else os.path.join(WORKSPACE_DIR, "src")
+    CORE_DIR = os.path.join(SRC_DIR, "core")
+else:
+    CORE_DIR = os.path.dirname(os.path.abspath(__file__))
+    SRC_DIR = os.path.dirname(CORE_DIR)
+    WORKSPACE_DIR = os.path.dirname(SRC_DIR)
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.2.0"
+APP_VERSION = "2.3.0"
 GITHUB_REPO = "X4nd109/Tasks"
 
 
@@ -1603,6 +1624,267 @@ def set_minimize_to_tray_enabled(enabled: bool) -> bool:
         except Exception:
             pass
     return success
+
+
+
+
+
+AUTO_SYNC_INTERVAL_KEY = "auto_sync_interval"
+AUTO_SYNC_INTERVALS = ["5min", "10min", "30min", "1h", "never"]
+DEFAULT_AUTO_SYNC_INTERVAL = "30min"
+
+_AUTO_SYNC_ALIASES = {
+    "5m": "5min",
+    "10m": "10min",
+    "30m": "30min",
+    "1hour": "1h",
+    "off": "never",
+    "disabled": "never",
+    "none": "never",
+    "0": "never",
+}
+
+_AUTO_SYNC_INTERVAL_SECONDS = {
+    "5min": 300,
+    "10min": 600,
+    "30min": 1800,
+    "1h": 3600,
+    "never": 0,
+}
+
+
+def normalize_auto_sync_interval(interval: str) -> str:
+    """Normalisiert eine Auto-Sync-Intervall-Angabe (z. B. ``5m`` -> ``5min``)."""
+    if not isinstance(interval, str):
+        return ""
+    value = interval.strip().lower()
+    return _AUTO_SYNC_ALIASES.get(value, value)
+
+
+def get_auto_sync_interval() -> str:
+    """Lädt das automatische Sync-Intervall aus der Konfiguration.
+
+    Liest bevorzugt ``APP_CONFIG_FILE`` und fällt auf die Workspace-
+    ``CONFIG_FILE`` zurück. Ungültige oder fehlende Werte ergeben
+    :data:`DEFAULT_AUTO_SYNC_INTERVAL` (``"30min"``).
+    """
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            raw = data.get(AUTO_SYNC_INTERVAL_KEY)
+            if isinstance(raw, str):
+                normalized = normalize_auto_sync_interval(raw)
+                if normalized in AUTO_SYNC_INTERVALS:
+                    return normalized
+    return DEFAULT_AUTO_SYNC_INTERVAL
+
+
+def set_auto_sync_interval(interval: str) -> bool:
+    """Speichert das automatische Sync-Intervall atomar in beiden Konfigurationsdateien.
+
+    Gibt ``False`` zurück, wenn die Angabe ungültig ist oder ein Schreibfehler
+    auftritt. Gültige normalisierte Werte sind in :data:`AUTO_SYNC_INTERVALS`.
+    """
+    normalized = normalize_auto_sync_interval(interval)
+    if normalized not in AUTO_SYNC_INTERVALS:
+        return False
+
+    paths = []
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if path and path not in paths:
+            paths.append(path)
+
+    if not paths:
+        return False
+
+    success = True
+    for path in paths:
+        try:
+            data = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        data = loaded
+                except Exception:
+                    data = {}
+            data[AUTO_SYNC_INTERVAL_KEY] = normalized
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        except Exception:
+            success = False
+    return success
+
+
+def get_auto_sync_interval_seconds(interval: Optional[str] = None) -> int:
+    """Gibt das Sync-Intervall in Sekunden zurück (``0`` bedeutet deaktiviert)."""
+    if interval is None:
+        interval = get_auto_sync_interval()
+    normalized = normalize_auto_sync_interval(interval)
+    return _AUTO_SYNC_INTERVAL_SECONDS.get(normalized, 0)
+
+
+# --- Windows toast notification settings -----------------------------------
+
+NOTIFICATIONS_CONFIG_KEY = "notifications"
+
+DEFAULT_NOTIFICATION_SETTINGS = {
+    "new_tasks_enabled": True,
+    "task_due_window": "2h",  # Options: "1h", "2h", "3h", "5h", "1d", "never"
+    "exam_reminders_enabled": True,
+    "exam_reminder_time": "20:00",  # "HH:MM"
+    "exam_days_ahead": {
+        "TE": 4,   # Tests: 4 days before
+        "SA": 7,   # School exams: 7 days before
+        "WDH": 3,  # Retests: 3 days before
+        "PR": 3,   # Oral exams: 3 days before
+    },
+}
+
+TASK_DUE_WINDOW_OPTIONS = ["1h", "2h", "3h", "5h", "1d", "never"]
+
+_TASK_DUE_WINDOW_SECONDS = {
+    "1h": 3600,
+    "2h": 7200,
+    "3h": 10800,
+    "5h": 18000,
+    "1d": 86400,
+    "never": 0,
+}
+
+
+def _coerce_int(value, default: int) -> int:
+    """Converts ``value`` to ``int`` and falls back to ``default`` on failure."""
+    try:
+        if isinstance(value, bool):
+            return int(value)
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def get_notification_settings() -> dict:
+    """Loads the notification settings, merged over the built-in defaults.
+
+    Reads ``APP_CONFIG_FILE`` and ``CONFIG_FILE``. The returned dictionary is
+    always complete: every default key exists and ``exam_days_ahead`` contains
+    an entry for each known exam type (``TE``, ``SA``, ``WDH``, ``PR``).
+    """
+    settings = copy.deepcopy(DEFAULT_NOTIFICATION_SETTINGS)
+
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        raw = data.get(NOTIFICATIONS_CONFIG_KEY)
+        if not isinstance(raw, dict):
+            continue
+
+        for key, value in raw.items():
+            if key == "exam_days_ahead":
+                continue
+            if key in ("new_tasks_enabled", "exam_reminders_enabled"):
+                settings[key] = bool(value)
+            elif key == "task_due_window" and isinstance(value, str):
+                normalized = value.strip().lower()
+                settings[key] = normalized if normalized in TASK_DUE_WINDOW_OPTIONS else settings[key]
+            elif key == "exam_reminder_time" and isinstance(value, str):
+                settings[key] = value.strip()
+            elif key in settings:
+                settings[key] = value
+
+        raw_days = raw.get("exam_days_ahead")
+        if isinstance(raw_days, dict):
+            for exam_type, default_days in DEFAULT_NOTIFICATION_SETTINGS["exam_days_ahead"].items():
+                if exam_type in raw_days:
+                    settings["exam_days_ahead"][exam_type] = _coerce_int(
+                        raw_days[exam_type], default_days
+                    )
+
+    # Guarantee a complete exam-type mapping, even for corrupted config files.
+    days = settings.get("exam_days_ahead")
+    if not isinstance(days, dict):
+        days = {}
+    settings["exam_days_ahead"] = {
+        exam_type: _coerce_int(days.get(exam_type, default_days), default_days)
+        for exam_type, default_days in DEFAULT_NOTIFICATION_SETTINGS["exam_days_ahead"].items()
+    }
+
+    return settings
+
+
+def set_notification_settings(settings: dict) -> bool:
+    """Persists notification ``settings`` atomically in both config files.
+
+    Returns ``True`` when the settings were written, ``False`` when the input
+    is invalid or a write error occurred.
+    """
+    if not isinstance(settings, dict):
+        return False
+
+    paths = []
+    for path in [APP_CONFIG_FILE, CONFIG_FILE]:
+        if path and path not in paths:
+            paths.append(path)
+
+    if not paths:
+        return False
+
+    success = True
+    for path in paths:
+        try:
+            data = {}
+            if os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        data = loaded
+                except Exception:
+                    data = {}
+            data[NOTIFICATIONS_CONFIG_KEY] = copy.deepcopy(settings)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+        except Exception:
+            success = False
+    return success
+
+
+def get_task_due_window_seconds(window_str: Optional[str] = None) -> int:
+    """Returns the assignment due reminder window in seconds.
+
+    ``"never"`` yields ``0``. Unknown values fall back to two hours (``7200``).
+    """
+    if window_str is None:
+        try:
+            window_str = get_notification_settings().get("task_due_window", "2h")
+        except Exception:
+            window_str = DEFAULT_NOTIFICATION_SETTINGS["task_due_window"]
+    normalized = str(window_str or "").strip().lower()
+    return _TASK_DUE_WINDOW_SECONDS.get(normalized, 7200)
+
+
+
 
 
 

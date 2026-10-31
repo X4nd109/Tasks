@@ -46,7 +46,7 @@ class TestNotificationService(unittest.TestCase):
 
         self.assertTrue(result)
         self.notification_cls.assert_called_once_with(
-            app_id="Tasks", title="Title", msg="Message"
+            app_id="Tasks", title="Title", msg="Message", icon=self.service.default_icon
         )
         self.toast.show.assert_called_once()
 
@@ -79,7 +79,7 @@ class TestNotificationService(unittest.TestCase):
         custom.send_notification("Title", "Message")
 
         self.notification_cls.assert_called_with(
-            app_id="CustomTasks", title="Title", msg="Message"
+            app_id="CustomTasks", title="Title", msg="Message", icon=custom.default_icon
         )
 
     # -- Helpers -------------------------------------------------------------

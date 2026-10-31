@@ -8,17 +8,16 @@
 
 ## 1. Quick Reference & Commands
 
-- **Run TUI (Interactive)**: `python main.py` or `.\run.bat`
-- **Run CLI (Agent / Headless)**: `.\tasks.bat <cmd>` or `python main.py <cmd>`
-  - `tasks list [-s all|open|overdue|completed] [-f <fach>] [--json]`
-  - `tasks show <id|index> [--json]` | `tasks download <id|index> [--auto-dir] [--dir <path>]`
-  - `tasks explain <id|index> [--lang de|en] [--copy-only] [--json]`
-  - `tasks books [list|open|add|remove|download] [--json]` | `tasks dirs [list|open|add|remove] [--json]`
-  - `tasks sync [--deep]` | `tasks open <fach>` | `tasks skill [sync|status|set-dir]`
-  - `tasks tray [status|enable|disable|show|quit]` | `tasks autostart [status|enable|disable]`
+- **Run TUI (Interactive)**: `.\Tasks.exe` or `python main.py`
+- **Run CLI (Agent / Headless)**: `.\tasks.cmd <cmd>` or `.\Tasks.exe <cmd>`
+  - `tasks list [-s all|open|overdue] [-f <fach>] [--json]` | `tasks show <id|index> [--json]`
+  - `tasks download <id|index> [--auto-dir]` | `tasks explain <id|index>` | `tasks sync [--deep]`
+  - `tasks books [list|open|download]` | `tasks dirs [list|open]` | `tasks open <fach>`
+  - `tasks tray [status|enable|disable]` | `tasks autostart [status|enable|disable]` | `tasks skill [sync|status|set-dir]`
 
+- **Build Standalone Binaries**: `.\build.bat` or `python scripts/build_exe.py`
 - **Tests**: `python -m unittest discover tests` or `pytest tests/`
-- **Setup & Dependencies**: `.\setup.bat`
+- **Dependencies**: `pip install -r requirements.txt`
 
 ---
 

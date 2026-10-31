@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.1.1"
+#define AppVersion "2.3.0"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"
@@ -23,10 +23,11 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
+AppSupportURL={#AppURL}/issues
+AppUpdatesURL={#AppURL}/releases
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
-; OutputDir ist absolut (via #define gesetzt von build_installer.py)
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputBaseFilename}
 SetupIconFile={#SourceDir}\assets\app_icon.ico
@@ -54,43 +55,30 @@ Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescrip
 ; Symbole explizit deklarieren (stellt sicher, dass PNG & ICO immer verpackt werden)
 Source: "{#SourceDir}\assets\app_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\assets\app_icon.png"; DestDir: "{app}\assets"; Flags: ignoreversion
-; Alle Programm-Dateien aus dem Build-Verzeichnis (rekursiv, inkl. fonts/)
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Offizieller Python 3.12 Installer (wird temporär entpackt und nach Setup gelöscht, falls nötig)
-Source: "{#InstallerDir}\python_installer.exe"; DestDir: "{tmp}"; Flags: ignoreversion deleteafterinstall; Check: not IsPythonInstalled
+; Alle kompilierten Programm-Dateien aus dist\Tasks (rekursiv, inkl. _internal/ und fonts/)
+Source: "{#SourceDir}\dist\Tasks\*"; DestDir: "{app}"; Excludes: "cache\*,data\*,config.json,*.log"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Startmenü: run.bat als primärer Starter (verwendet das richtige Python automatisch)
-Name: "{group}\{#AppName} starten"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Tasks starten"; IconFilename: "{app}\assets\app_icon.ico"
-; Startmenü: setup.bat für Ersteinrichtung / Reparatur
-Name: "{group}\{#AppName} Setup && Reparatur"; Filename: "{app}\setup.bat"; WorkingDir: "{app}"; Comment: "Python und Abhängigkeiten installieren"; IconFilename: "{app}\assets\app_icon.ico"
-; Desktop (optional)
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\run.bat"; WorkingDir: "{app}"; Comment: "Tasks starten"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
-; Deinstallation
-Name: "{group}\{#AppName} deinstallieren"; Filename: "{uninstallexe}"
+; Startmenü: Exakt EIN einziger Startmenü-Eintrag mit dem Namen "Tasks"
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks öffnen"; IconFilename: "{app}\assets\app_icon.ico"
+; Desktop-Verknüpfung
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks öffnen"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
 
 [Run]
-; 1. Python silent installieren (während des Setups, NUR falls noch nicht installiert)
-Filename: "{tmp}\python_installer.exe"; \
-  Parameters: "/quiet InstallAllUsers=0 PrependPath=1 Include_test=0 Include_pip=1 Shortcuts=0"; \
-  StatusMsg: "Installiere Python 3.12 (bitte kurz warten)..."; \
-  Flags: waituntilterminated; \
-  Check: not IsPythonInstalled
+; 1. Playwright Chromium Browser silent einrichten (für Teams-Login)
+Filename: "{app}\Tasks.exe"; \
+  Parameters: "--install-playwright"; \
+  StatusMsg: "Richte Browser-Komponenten ein (bitte kurz warten)..."; \
+  Flags: runhidden waituntilterminated
 
-; 2. Abhängigkeiten (Pip + Playwright) installieren (als Checkbox auf Fertigstellen-Seite)
-Filename: "{app}\setup.bat"; \
-  WorkingDir: "{app}"; \
-  Flags: postinstall shellexec; \
-  Description: "Bibliotheken & Playwright installieren (empfohlen)"
-
-; 3. Terminal-Befehl 'tasks' einrichten (als Checkbox auf Fertigstellen-Seite)
+; 2. Terminal-Befehl 'tasks' einrichten (als Checkbox auf Fertigstellen-Seite)
 Filename: "{app}\scripts\setup_command.bat"; \
   WorkingDir: "{app}"; \
   Flags: postinstall shellexec; \
   Description: "Globalen Terminal-Befehl 'tasks' einrichten (empfohlen)"; \
   Check: ShouldSetupTasksCommand
 
-; 4. Windows-Terminal-Profil mit Logo einrichten (als Checkbox auf Fertigstellen-Seite)
+; 3. Windows-Terminal-Profil mit Logo einrichten (als Checkbox auf Fertigstellen-Seite)
 Filename: "{app}\scripts\setup_terminal_profile.bat"; \
   Parameters: "/silent"; \
   WorkingDir: "{app}"; \
@@ -98,10 +86,10 @@ Filename: "{app}\scripts\setup_terminal_profile.bat"; \
   Description: "Windows-Terminal-Profil mit Logo einrichten (empfohlen)"; \
   Check: ShouldSetupTerminalProfile
 
-; 5. Programm starten (optional)
-Filename: "{app}\run.bat"; \
+; 4. Programm starten (optional)
+Filename: "{app}\Tasks.exe"; \
   WorkingDir: "{app}"; \
-  Flags: postinstall shellexec nowait skipifsilent unchecked; \
+  Flags: postinstall nowait skipifsilent unchecked; \
   Description: "Tasks jetzt starten"
 
 [UninstallRun]
@@ -118,7 +106,6 @@ Type: files; Name: "{app}\.first_run_completed"
 [Code]
 function ShouldSetupTasksCommand: Boolean;
 begin
-  // Überspringen, wenn Setup mit /NOTASKS=1 oder /UPDATE=1 aufgerufen wird
   Result := (ExpandConstant('{param:notasks|0}') <> '1') and (ExpandConstant('{param:update|0}') <> '1');
 end;
 
@@ -130,11 +117,25 @@ begin
              FileExists(ExpandConstant('{localappdata}\Microsoft\Windows Terminal\settings.json')));
 end;
 
-function IsPythonInstalled: Boolean;
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  AppDir: string;
 begin
-  Result := FileExists(ExpandConstant('{localappdata}\Programs\Python\Python312\python.exe')) or
-            FileExists(ExpandConstant('{localappdata}\Programs\Python\Python311\python.exe')) or
-            FileExists(ExpandConstant('{localappdata}\Programs\Python\Python310\python.exe')) or
-            FileExists('C:\Python312\python.exe') or
-            FileExists('C:\Python310\python.exe');
+  if CurStep = ssInstall then
+  begin
+    AppDir := ExpandConstant('{app}');
+    // ABSOLUTER SCHUTZ: Wenn .git existiert, NIEMALS loeschen (Development-Ordner)
+    if not DirExists(AppDir + '\.git') then
+    begin
+      DeleteFile(AppDir + '\main.py');
+      DeleteFile(AppDir + '\setup.bat');
+      DeleteFile(AppDir + '\run.bat');
+      DeleteFile(AppDir + '\tasks.bat');
+      DeleteFile(AppDir + '\requirements.txt');
+      DelTree(AppDir + '\src', True, True, True);
+      DelTree(AppDir + '\tests', True, True, True);
+      DelTree(AppDir + '\__pycache__', True, True, True);
+      DelTree(AppDir + '\assets\git-sync-tutorial', True, True, True);
+    end;
+  end;
 end;

@@ -1,11 +1,73 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-10-28  
-> **Active Milestone**: Terminal-Autoclose mit 10s-Countdown bei laufender Hintergrundinstanz & Klares Beenden-Verhalten (Completed)
+> **Last Updated**: 2026-10-31  
+> **Active Milestone**: Windows Toast Notifications & Einstellungsmenü (Neue Aufgaben, Fälligkeitswarnungen, Prüfungs-Erinnerungen) (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Nativer Windows-Prozess ("Tasks"), Standalone-Binaries & Batch-Dateien-Bereinigung (2026-10-31)**:
+  - **Problem**: Im Windows Task-Manager tauchte die Anwendung lediglich generisch als "Python" oder "Windows-Terminal" auf. Bei der Installation wurden bisher sämtliche rohe `.py`-Dateien und temporäre Batch-Skripte mitkopiert.
+  - **Lösung & Implementierung**:
+    - **Standalone-Kompilierung (PyInstaller Onedir)**:
+      - `tasks.spec` & `scripts/build_exe.py`: Generiert `dist/Tasks/Tasks.exe` (Konsole für TUI/CLI) und `dist/Tasks/TasksTray.exe` (fensterloser Hintergrundprozess).
+      - PE-Versionsressourcen (`installer/version_info.txt`, `installer/version_info_tray.txt`) verleihen beiden Executables den Namen "Tasks", Firmenangabe "Alexander Endl" und Repo-Link `https://github.com/X4nd109/Tasks`.
+    - **Bereinigung überflüssiger `.bat`-Dateien & Dev Root Sharing**:
+      - Gelöscht: `setup.bat` (durch Standalone-Installation überflüssig), `tasks.bat` (redundantes Duplikat zu `tasks.cmd`), `run.bat` (Startskript der alten Python-Installation) und alle `scripts/*.bat`.
+      - Als einziges Build-Skript verbleibt `build.bat` zum schnellen lokalen Kompilieren.
+      - `tasks.cmd` startet bevorzugt direkt die kompilierte `Tasks.exe` und dient als schlanker Terminal-Runner.
+      - Intelligente Dev-Root-Erkennung in `src/core/config.py`: Wenn `Tasks.exe` aus dem Git-Repository gestartet wird, nutzt sie direkt die Daten (`data/`, `cache/`, `config.json`) des Projekt-Roots. Keine doppelten Cache-/Daten-Ordner mehr in `dist/Tasks`.
+      - `Tasks.exe` Launcher direkt im Projekt-Root (`scripts/RootLauncher.cs`), sodass Entwickler Tasks per Doppelklick oder Terminal direkt aus dem Root starten können.
+    - **Inno Setup Installer (`Tasks_Setup.exe`)**:
+      - Verpackt ausschließlich kompilierte Binaries (`dist/Tasks/*`), Assets und `tasks.cmd` (Dateigröße ~77.2 MB).
+      - Genau ein einziger Startmenü-Eintrag ("Tasks").
+      - Automatische Bereinigung alter `.py`- und `.bat`-Dateien bei Updates mit striktem Schutz des Entwicklungs-Repositories (`if not DirExists(AppDir + '\.git')`).
+
+- [x] **Windows Toast Notifications & Neues Benachrichtigungsmenü (`NotificationConfigModal`) (2026-10-31)**:
+  - **Problem**: Nach Hintergrund-Syncs oder vor Fristabläufen und Prüfungen gab es keine nativen Windows-Benachrichtigungen; der Nutzer musste die TUI manuell öffnen, um Fälligkeiten zu prüfen.
+  - **Lösung & Implementierung**:
+    - **Neue Aufgaben (New Assignments)**:
+      - Konsolidierte englische Toast-Benachrichtigung (1 Aufgabe: Fach & Titel; mehrere Aufgaben: Gesamtzahl).
+      - Klick auf den Toast öffnet/stellt Tasks im Vordergrund wieder her (`tasks://main`).
+    - **Fälligkeitswarnungen (Due Reminders)**:
+      - Einstellbares Vorlauffenster (`1h`, `2h` [Default], `3h`, `5h`, `1d`, `never`).
+      - Klick auf den Toast öffnet direkt die betroffene Aufgabe in `TaskDetailModal` (`tasks://task/<id>`).
+    - **Tägliche Prüfungs-Erinnerungen (Exam Reminders)**:
+      - Täglicher Toast zur Lern-Erinnerung um konfigurierbare Uhrzeit (Standard: `20:00` Uhr) mit Catch-Up-Garantie bei Standby.
+      - Vereinheitlichte Auswahlliste für alle Test-Arten (Tests, Schularbeiten, Wiederholungsprüfungen, mündliche Prüfungen) mit identischen Optionen: Disabled, 1, 2, 3, 4, 5, 7, 10, 14 Tage vorher (individuelle Defaults: SA: 7d, TE: 4d, WDH: 3d, PR: 3d) sowie Haupt-Schalter.
+      - Klick auf den Toast öffnet direkt die betroffene Prüfung in `ExamDetailModal` (`tasks://exam/<id>`).
+    - **Tasks Logo & Windows Protocol Deep-Linking**:
+      - `NotificationService` bindet automatisch das offizielle Tasks-App-Logo (`assets/app_icon.png`) in alle Windows Toasts ein.
+      - Nutzt modernes Windows 10/11 `ToastGeneric` Template mit `placement="appLogoOverride"` und `file:///` URI-Schema, wodurch das Logo prominent und gestochen scharf auf der linken Seite des Toasts angezeigt wird.
+      - `ensure_tasks_protocol_registered()` registriert das Schema `tasks://` in `HKCU\Software\Classes\tasks` inkl. `DefaultIcon` sowie die AppUserModelId in `HKCU\Software\Classes\AppUserModelId\Tasks`.
+      - `main.py --uri` verarbeitet URIs und sendet `OPEN_TASK:<id>` / `OPEN_EXAM:<id>` über den IPC-Server an die laufende Instanz.
+    - **TUI Settings Integration (`NotificationConfigModal`)**:
+      - Neuer Menüpunkt `🔔 Notifications [9/N]` in `SettingsModal`.
+      - Übersichtlicher Konfigurationsdialog mit Toggles, Input (`HH:MM`) und Select-Dropdowns.
+    - **Testsuite**:
+      - 16 Unittests in `tests/test_notifications.py` und alle Tests der Gesamtsuite zu 100% bestanden.
+
+- [x] **Automatisches Aufgaben-Synchronisationsintervall (Auto-Sync: 5min, 10min, 30min, 1h, never) (2026-10-31)**:
+  - **Problem**: Bei minimierter Hintergrundinstanz im System Tray oder bei geöffneter TUI musste die Synchronisation bisher immer manuell angestoßen werden.
+  - **Lösung & Implementierung**:
+    - **TUI Settings Modal (`TrayConfigModal`)**:
+      - Neues `Select`-Widget `#sel_auto_sync` mit Optionen `5 Minutes (5min)`, `10 Minutes (10min)`, `30 Minutes (30min) [Default]`, `1 Hour (1h)` und `Never (Disabled - save resources)`.
+      - Wird persistent beim Klick auf `💾 Save Settings` in den Konfigurationsdateien gespeichert.
+    - **Konfiguration (`src/core/config.py`)**:
+      - `get_auto_sync_interval()`, `set_auto_sync_interval()` mit intelligenter Alias-Normalisierung (`5m`, `10m`, `30m`, `1hour`, `off`, `disabled`, `none`, `0`) und `get_auto_sync_interval_seconds()`.
+    - **Foreground TUI Engine (`TasksApp` in `src/ui/tui_app.py`)**:
+      - Periodischer Timer (`self.set_interval(20.0, self._check_auto_sync)`), der bei abgelaufener Zeitspanne geräuschlos `self.action_sync_tasks()` anstößt.
+      - Aktualisiert nach jedem Sync den Task-Zähler des Tray-Icons (`self._tray_service.update_status(open_cnt)`).
+      - Sofortige Neuinitialisierung des Zeitstempels bei Einstellungsänderung im Modal.
+    - **Headless Background Process (`_run_tray_background` in `main.py`)**:
+      - Verdrahteter `on_sync`-Callback für `TrayService` ("Sync Now").
+      - Hintergrundschleife prüft das Intervall und synchronisiert Aufgaben auch im Standalone-Tray-Modus autark.
+    - **CLI-Integration (`src/core/agent_cli.py`)**:
+      - `tasks tray sync-interval [VALUE]` zum Auslesen und Festlegen des Intervalls (inkl. `--json`).
+      - Erweiterte Statusausgabe `tasks tray status` mit `Auto-Sync Interval: <val>`.
+    - **Testsuite**:
+      - 7 Unittests in `tests/test_auto_sync.py` und alle 530 Tests der Gesamtsuite zu 100% bestanden.
 
 - [x] **System Tray & Autostart Settings Text-Formatting & Zeilenbreite (2026-10-28)**:
   - **Problem**: Im Modal `TrayConfigModal` ("System Tray & Autostart Settings") wurden Texte zuvor künstlich nach wenigen Wörtern umgebrochen, wodurch die rechte Hälfte des Dialogs leer blieb.
@@ -792,8 +854,8 @@
 - **Previous Achievements (2026-10-22 — Release v1.2.0: AI Explain & Desktop App Linking)**:
   - AI Explain mit Provider-Vorlagen und Desktop App Linking.
 - **Entry Points**:
-  - Desktop / Interactive: `run.bat` oder `python main.py`
-  - Agent / Script: `tasks.bat <subcommand>` oder `python main.py <subcommand>`
+  - Interactive TUI: `Tasks.exe` oder `python main.py`
+  - Agent / CLI: `tasks <subcommand>` (via `tasks.cmd`) oder `Tasks.exe <subcommand>`
 - **Test Verification**:
   - Run all tests with `python -m unittest discover tests`.
 
@@ -801,25 +863,28 @@
 
 ## 2. In Progress / Immediate Next Steps
 
-- [ ] **Release-Tagging & Distribution (v2.2.0 / v2.1.2)**: Die Änderungen unter `## [Unreleased]` (AI Chat Clear-Button & Confirm Modal sowie AI Agent Skill flexibles Zielverzeichnis & Auto-Sync) für ein nächstes Release bündeln.
+- [x] **Release-Tagging & Distribution (v2.3.0)**: Vollständige Bündelung von nativen Windows-Prozessen (`Tasks.exe`, `TasksTray.exe`), Windows Toast Notifications mit Logo, Auto-Sync Intervall, Bereinigung alter `.bat`-Skripte und 77.2 MB Standalone Inno Setup Installer.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob `[ESC]` im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session**:
-  - **Flexibles AI Agent Skill-Zielverzeichnis**:
-    - `src/core/config.py`: `load_skill_target_dir()`, `save_skill_target_dir()`, `is_skill_synced()` zur persistenten Speicherung des Skill-Zielverzeichnisses in `tasks_config.json`.
-    - `src/core/agent_cli.py`: Neuer Befehl `tasks skill set-dir [PATH]` und Flag `--set-dir [PATH]`.
-    - Native Explorer-Ordnerauswahl (`pick_directory`) mit vorangehender englischer Eingabeaufforderung und Warten auf `[ENTER]`.
-    - Saubere Cancel-Behandlung ohne Fehler oder Datenverlust (`Operation cancelled. No folder selected.`).
-    - 1:1 Kopieren der Skill-Dateien (`SKILL.md` etc.) direkt in den gewählten Zielordner.
-  - **Automatischer Re-Sync bei Updates**:
-    - `src/core/task_manager.py`: Bei `is_update=True` wird der Skill geräuschlos im Hintergrund via `sync_skill_to_dir` aktualisiert, sofern er bereits zuvor synchronisiert wurde.
-  - **Umfassende Verifikation**:
-    - Alle 446 automatisierten Unittests (`python -m unittest discover tests`) erfolgreich bestanden.
+- **Erreicht in dieser Session (Release v2.3.0)**:
+  - **Nativer Windows-Prozess ("Tasks") & PyInstaller Standalone-Binaries**:
+    - `Tasks.exe` (Konsole) & `TasksTray.exe` (Fensterlos) via PyInstaller Onedir gebaut.
+    - Echte PE-Versionsressourcen mit Name "Tasks", Hersteller "Alexander Endl" und Verlinkung auf `https://github.com/X4nd109/Tasks`.
+    - Dev-Root Sharing: Bei Ausführung im Git-Repo greift `Tasks.exe` direkt auf die echten Daten (`data/`, `cache/`, `config.json`) des Projekt-Roots zu.
+    - Root `Tasks.exe` Launcher für Entwickler via C# und `csc.exe` kompiliert.
+  - **Batch-Dateien Bereinigung**:
+    - Alle veralteten `.bat`-Skripte (`setup.bat`, `run.bat`, `tasks.bat`, `scripts/*.bat`) gelöscht; `build.bat` und `tasks.cmd` verbleiben.
+  - **Windows Toast Notifications & Settings**:
+    - Neues Einstellungsmenü `🔔 Notifications` für neue Aufgaben, Fälligkeitsfristen und tägliche Prüfungs-Erinnerungen.
+    - Windows 10/11 `ToastGeneric`-Binding mit Quantum-Prism-Logo (`assets/app_icon.png`).
+  - **Auto-Sync Intervall**:
+    - Einstellbares Intervall (`5min`, `10min`, `30min` [Default], `1h`, `never`) in TUI, Tray und CLI.
+  - **Installer (`Tasks_Setup.exe`)**:
+    - 77.2 MB Standalone-Installer mit Inno Setup 6, genau 1 Startmenü-Eintrag ("Tasks"), Playwright-Setup und Clean-Update-Logik.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Codebase und Dokumentation befinden sich in einem sauberen, vollständig getesteten Zustand.
-  - Das flexible Skill-System funktioniert nahtlos für Antigravity, Claude Code, Codex und andere Agenten-Tools.
-  - Nächster Schritt: Bündelung der unreleased Änderungen für das nächste Release.
+  - Codebase und Dokumentation sind auf Stand v2.3.0.
+  - Alle 546 Tests laufen zu 100% fehlerfrei durch.

@@ -249,7 +249,9 @@ del /f /q "{installer_path}" 2>nul
 del /f /q "{pending_file}" 2>nul
 
 :: 5. Anwendung wieder starten
-if exist "{target_app_dir}\\run.bat" (
+if exist "{target_app_dir}\\Tasks.exe" (
+    start "" "{target_app_dir}\\Tasks.exe"
+) else if exist "{target_app_dir}\\run.bat" (
     start "" "{target_app_dir}\\run.bat"
 )
 exit

@@ -62,11 +62,6 @@ ISCC_PATHS = [
 ]
 
 INCLUDE_FILES = [
-    "main.py",
-    "requirements.txt",
-    "run.bat",
-    "setup.bat",
-    "tasks.bat",
     "tasks.cmd",
 ]
 
@@ -220,7 +215,7 @@ def build_inno_installer(version: str, output_name: str, build_dir: Path, iscc: 
     defines = (
         f'#define AppVersion "{version}"\n'
         f'#define OutputBaseFilename "{output_name}"\n'
-        f'#define SourceDir "{build_dir}"\n'
+        f'#define SourceDir "{PROJECT_ROOT}"\n'
         f'#define OutputDir "{dist_dir}"\n'
         f'#define InstallerDir "{INSTALLER_DIR}"\n'
     )
@@ -264,8 +259,8 @@ def main():
     )
     parser.add_argument(
         "--version",
-        default="2.1.0",
-        help="Release version string (e.g. '2.1.0'). Defaults to 2.1.0.",
+        default="2.3.0",
+        help="Release version string (e.g. '2.3.0'). Defaults to 2.3.0.",
     )
     parser.add_argument(
         "--output-name",
@@ -306,9 +301,13 @@ def main():
         sys.exit(1)
     print(f"  * Inno Setup found: {iscc}")
 
-    py_installer_path = INSTALLER_DIR / "python_installer.exe"
-    if not args.no_python_download:
-        ensure_python_installer(py_installer_path)
+    # Verify or compile PyInstaller binaries in dist/Tasks/
+    tasks_exe = PROJECT_ROOT / "dist" / "Tasks" / "Tasks.exe"
+    tray_exe = PROJECT_ROOT / "dist" / "Tasks" / "TasksTray.exe"
+    if not (tasks_exe.exists() and tray_exe.exists()):
+        print("  * Binaries missing in dist/Tasks/, running scripts/build_exe.py ...")
+        build_script = PROJECT_ROOT / "scripts" / "build_exe.py"
+        subprocess.check_call([sys.executable, str(build_script)])
 
     build_dir = PROJECT_ROOT / f".build_{output_name}"
     if build_dir.exists():
@@ -316,10 +315,7 @@ def main():
     build_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        print("\n  [1/2] Copying clean project files...")
-        copy_project_files(build_dir)
-
-        print(f"\n  [2/2] Compiling {output_name}.exe with Inno Setup...")
+        print(f"\n  Compiling {output_name}.exe with Inno Setup...")
         output_exe = build_inno_installer(version, output_name, build_dir, iscc)
 
         print("\n" + "=" * 54)

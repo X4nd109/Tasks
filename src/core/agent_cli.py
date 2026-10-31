@@ -1213,15 +1213,62 @@ def handle_autostart_command(sub_args: List[str]) -> int:
 def handle_tray_command(sub_args: List[str]) -> int:
     """Steuert und überwacht das System-Tray- und Hintergrundverhalten."""
     parser = argparse.ArgumentParser(prog="tasks tray", add_help=False)
-    parser.add_argument("action", nargs="?", default="status", choices=["status", "enable", "on", "disable", "off", "show", "quit"], help="Action to perform")
+    parser.add_argument(
+        "action",
+        nargs="?",
+        default="status",
+        choices=["status", "enable", "on", "disable", "off", "show", "quit", "sync-interval"],
+        help="Action to perform",
+    )
+    parser.add_argument("value", nargs="?", default="", help="Auto-sync interval (e.g. 10min, 1h, never)")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args, _ = parser.parse_known_args(sub_args)
 
-    from config import is_minimize_to_tray_enabled, set_minimize_to_tray_enabled
+    from config import (
+        get_auto_sync_interval,
+        get_auto_sync_interval_seconds,
+        is_minimize_to_tray_enabled,
+        set_auto_sync_interval,
+        set_minimize_to_tray_enabled,
+    )
     from single_instance import send_instance_command
 
     action = (args.action or "status").lower()
-    if action in ("enable", "on"):
+    if action == "sync-interval":
+        value = (getattr(args, "value", "") or "").strip()
+        if value:
+            ok = set_auto_sync_interval(value)
+            if ok:
+                normalized = get_auto_sync_interval()
+                sec = get_auto_sync_interval_seconds(normalized)
+                if args.json:
+                    print(json.dumps({
+                        "success": True,
+                        "auto_sync_interval": normalized,
+                        "seconds": sec,
+                    }, ensure_ascii=False))
+                else:
+                    print(f"Auto-sync interval set to: {normalized}")
+                return 0
+            if args.json:
+                print(json.dumps({
+                    "error": "Invalid interval. Allowed values: 5min, 10min, 30min, 1h, never"
+                }, ensure_ascii=False))
+            else:
+                print("Error: Invalid interval. Allowed: 5min, 10min, 30min, 1h, never")
+            return 1
+
+        current = get_auto_sync_interval()
+        sec = get_auto_sync_interval_seconds(current)
+        if args.json:
+            print(json.dumps({
+                "auto_sync_interval": current,
+                "seconds": sec,
+            }, ensure_ascii=False))
+        else:
+            print(f"Current auto-sync interval: {current}")
+        return 0
+    elif action in ("enable", "on"):
         ok = set_minimize_to_tray_enabled(True)
         enabled = is_minimize_to_tray_enabled()
         if args.json:
@@ -1262,13 +1309,22 @@ def handle_tray_command(sub_args: List[str]) -> int:
     else:
         # status
         enabled = is_minimize_to_tray_enabled()
+        auto_sync_interval = get_auto_sync_interval()
+        auto_sync_seconds = get_auto_sync_interval_seconds(auto_sync_interval)
         res = send_instance_command("STATUS")
         running = res is not None
         if args.json:
-            print(json.dumps({"enabled": enabled, "running": running, "response": res}, ensure_ascii=False))
+            print(json.dumps({
+                "enabled": enabled,
+                "running": running,
+                "response": res,
+                "auto_sync_interval": auto_sync_interval,
+                "auto_sync_interval_seconds": auto_sync_seconds,
+            }, ensure_ascii=False))
         else:
             print(f"Minimize to Tray Setting: {'ENABLED' if enabled else 'DISABLED'}")
             print(f"Background Process State: {'RUNNING in tray' if running else 'NOT RUNNING'}")
+            print(f"Auto-Sync Interval: {auto_sync_interval}")
         return 0
 
 

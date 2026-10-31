@@ -664,6 +664,9 @@ from config import (
     close_all_active_browser_contexts,
     set_shutting_down,
     is_shutting_down,
+    get_notification_settings,
+    set_notification_settings,
+    TASK_DUE_WINDOW_OPTIONS,
 )
 from models import (
     Task,
@@ -673,6 +676,13 @@ from models import (
     UntisExam,
 )
 from task_manager import TaskManager
+try:
+    from notification_engine import NotificationEngine
+except ImportError:
+    try:
+        from src.services.notification_engine import NotificationEngine
+    except ImportError:  # pragma: no cover - defensive
+        NotificationEngine = None  # type: ignore[assignment]
 from untis_service import (
     load_untis_cache,
     sync_untis_data,
@@ -686,6 +696,7 @@ from untis_service import (
     save_custom_exam,
     delete_custom_exam,
     lookup_untis_lesson_details,
+    load_custom_exams,
 )
 
 
@@ -3979,6 +3990,8 @@ class SettingsModal(ModalScreen[Optional[str]]):
         Binding("a", "choose_ai_explain", "AI Explain", show=False),
         Binding("8", "choose_tray", "Tray & Autostart", show=False),
         Binding("t", "choose_tray", "Tray & Autostart", show=False),
+        Binding("9", "choose_notifications", "Notifications", show=False),
+        Binding("n", "choose_notifications", "Notifications", show=False),
         Binding("escape", "cancel", "Cancel"),
     ]
 
@@ -3997,7 +4010,8 @@ class SettingsModal(ModalScreen[Optional[str]]):
                 yield Button("⌨️ Hotkeys", id="btn_set_hotkeys", classes="settings_btn", variant="default", tooltip="Hotkeys [5/6]")
                 yield Button("🤖 AI Explain", id="btn_set_ai_explain", classes="settings_btn", variant="primary", tooltip="AI Explain [7/A]")
             with Horizontal(classes="settings_row"):
-                yield Button("🖥️ System Tray & Autostart", id="btn_set_tray", classes="settings_btn settings_btn_full", variant="default", tooltip="Tray & Autostart [8/T]")
+                yield Button("🖥️ System Tray & Autostart", id="btn_set_tray", classes="settings_btn", variant="default", tooltip="Tray & Autostart [8/T]")
+                yield Button("🔔 Notifications", id="btn_set_notifications", classes="settings_btn", variant="primary", tooltip="Notifications [9/N]")
             with Horizontal(id="settings_cancel_row"):
                 yield Button("↩️ Close [ESC]", id="btn_set_cancel", variant="default")
 
@@ -4018,6 +4032,8 @@ class SettingsModal(ModalScreen[Optional[str]]):
             self.dismiss("ai_config_menu")
         elif bid == "btn_set_tray":
             self.dismiss("tray_config")
+        elif bid == "btn_set_notifications":
+            self.dismiss("notifications_config")
         elif bid == "btn_set_cancel":
             self.dismiss(None)
 
@@ -4048,11 +4064,345 @@ class SettingsModal(ModalScreen[Optional[str]]):
     def action_choose_tray(self) -> None:
         self.dismiss("tray_config")
 
+    def action_choose_notifications(self) -> None:
+        self.dismiss("notifications_config")
+
     def action_cancel(self) -> None:
         self.dismiss(None)
 
     def key_escape(self) -> None:
         self.dismiss(None)
+
+
+class NotificationConfigModal(ModalScreen[bool]):
+    """Dialog for configuring Windows toast notifications."""
+
+    DEFAULT_CSS = """
+    NotificationConfigModal {
+        align: center middle;
+    }
+    #notif_config_dialog {
+        width: 76;
+        max-height: 90%;
+        background: #1e1e2e;
+        border: thick #b4befe;
+        padding: 1 2;
+    }
+    #notif_cfg_title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #b4befe;
+        margin-bottom: 1;
+    }
+    .notif_section {
+        width: 100%;
+        color: #89b4fa;
+        text-style: bold;
+        margin-top: 1;
+    }
+    .notif_desc {
+        width: 100%;
+        height: auto;
+        color: #a6adc8;
+        margin-bottom: 1;
+    }
+    .notif_field_label {
+        width: 1fr;
+        height: 3;
+        content-align: left middle;
+        color: #cdd6f4;
+    }
+    #notif_config_dialog Select {
+        height: 3;
+        margin: 0;
+    }
+    #notif_due_row,
+    #notif_time_row {
+        width: 100%;
+        height: 3;
+        margin-bottom: 0;
+    }
+    #sel_notif_due_window {
+        width: 34;
+    }
+    #inp_notif_exam_time {
+        width: 12;
+    }
+    .notif_days_row {
+        width: 100%;
+        height: auto;
+        margin-bottom: 0;
+    }
+    .notif_days_col {
+        width: 1fr;
+        height: auto;
+    }
+    .notif_days_col Label {
+        color: #cdd6f4;
+        height: 1;
+    }
+    #notif_btn_row {
+        width: 100%;
+        height: 3;
+        margin-top: 1;
+        align: center middle;
+    }
+    #notif_btn_row Button {
+        margin: 0 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Back"),
+    ]
+
+    DUE_WINDOW_OPTIONS = [
+        ("1 Hour Before (1h)", "1h"),
+        ("2 Hours Before (2h) [Default]", "2h"),
+        ("3 Hours Before (3h)", "3h"),
+        ("5 Hours Before (5h)", "5h"),
+        ("1 Day Before (1d)", "1d"),
+        ("Disabled (never)", "never"),
+    ]
+
+    TE_DAY_OPTIONS = [
+        ("Disabled", 0),
+        ("1 day before", 1),
+        ("2 days before", 2),
+        ("3 days before", 3),
+        ("4 days before [Default]", 4),
+        ("5 days before", 5),
+        ("7 days before", 7),
+        ("10 days before", 10),
+        ("14 days before", 14),
+    ]
+
+    SA_DAY_OPTIONS = [
+        ("Disabled", 0),
+        ("1 day before", 1),
+        ("2 days before", 2),
+        ("3 days before", 3),
+        ("4 days before", 4),
+        ("5 days before", 5),
+        ("7 days before [Default]", 7),
+        ("10 days before", 10),
+        ("14 days before", 14),
+    ]
+
+    WDH_DAY_OPTIONS = [
+        ("Disabled", 0),
+        ("1 day before", 1),
+        ("2 days before", 2),
+        ("3 days before [Default]", 3),
+        ("4 days before", 4),
+        ("5 days before", 5),
+        ("7 days before", 7),
+        ("10 days before", 10),
+        ("14 days before", 14),
+    ]
+
+    PR_DAY_OPTIONS = [
+        ("Disabled", 0),
+        ("1 day before", 1),
+        ("2 days before", 2),
+        ("3 days before [Default]", 3),
+        ("4 days before", 4),
+        ("5 days before", 5),
+        ("7 days before", 7),
+        ("10 days before", 10),
+        ("14 days before", 14),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        try:
+            self.settings = get_notification_settings()
+        except Exception:
+            self.settings = {
+                "new_tasks_enabled": True,
+                "task_due_window": "2h",
+                "exam_reminders_enabled": True,
+                "exam_reminder_time": "20:00",
+                "exam_days_ahead": {"TE": 4, "SA": 7, "WDH": 3, "PR": 3},
+            }
+        self.new_enabled = bool(self.settings.get("new_tasks_enabled", True))
+        self.exam_enabled = bool(self.settings.get("exam_reminders_enabled", True))
+
+    @staticmethod
+    def _select_value(value, options, default):
+        """Returns ``value`` when it is one of the option values, else ``default``."""
+        allowed = [option_value for _label, option_value in options]
+        return value if value in allowed else default
+
+    def _days_value(self, exam_type: str, default: int) -> int:
+        days = self.settings.get("exam_days_ahead", {})
+        if not isinstance(days, dict):
+            days = {}
+        try:
+            return int(days.get(exam_type, default))
+        except (TypeError, ValueError):
+            return default
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="notif_config_dialog"):
+            yield Label("🔔 Notification Settings", id="notif_cfg_title")
+
+            yield Label("New Assignments", classes="notif_section")
+            yield Button(
+                "🔔 New Assignment Notifications",
+                id="btn_notif_new_toggle",
+                variant="success" if self.new_enabled else "default",
+            )
+            yield Label(
+                "  Shows a toast when new assignments are found during sync.",
+                classes="notif_desc",
+            )
+
+            yield Label("Assignment Due Warnings", classes="notif_section")
+            with Horizontal(id="notif_due_row"):
+                yield Label("⏰ Assignment Due Reminder Window", classes="notif_field_label")
+                yield Select(
+                    options=self.DUE_WINDOW_OPTIONS,
+                    value=self._select_value(
+                        str(self.settings.get("task_due_window", "2h")).strip().lower(),
+                        self.DUE_WINDOW_OPTIONS,
+                        "2h",
+                    ),
+                    allow_blank=False,
+                    id="sel_notif_due_window",
+                )
+            yield Label(
+                "  Clicking the toast opens the assignment's details.",
+                classes="notif_desc",
+            )
+
+            yield Label("Exam & Test Reminders", classes="notif_section")
+            yield Button(
+                "📝 Exam Reminders Master Switch",
+                id="btn_notif_exam_toggle",
+                variant="success" if self.exam_enabled else "default",
+            )
+            yield Label(
+                "  Reminds you once per day about upcoming tests and exams.",
+                classes="notif_desc",
+            )
+            with Horizontal(id="notif_time_row"):
+                yield Label(
+                    "🕒 Daily Reminder Time (HH:MM):",
+                    classes="notif_field_label",
+                )
+                yield Input(
+                    value=str(self.settings.get("exam_reminder_time", "20:00") or "20:00"),
+                    placeholder="20:00",
+                    max_length=5,
+                    id="inp_notif_exam_time",
+                )
+
+            with Horizontal(classes="notif_days_row"):
+                with Vertical(classes="notif_days_col"):
+                    yield Label("📘 Tests (TE)")
+                    yield Select(
+                        options=self.TE_DAY_OPTIONS,
+                        value=self._select_value(self._days_value("TE", 4), self.TE_DAY_OPTIONS, 4),
+                        allow_blank=False,
+                        id="sel_days_te",
+                    )
+                with Vertical(classes="notif_days_col"):
+                    yield Label("📕 School Exams / SA")
+                    yield Select(
+                        options=self.SA_DAY_OPTIONS,
+                        value=self._select_value(self._days_value("SA", 7), self.SA_DAY_OPTIONS, 7),
+                        allow_blank=False,
+                        id="sel_days_sa",
+                    )
+
+            with Horizontal(classes="notif_days_row"):
+                with Vertical(classes="notif_days_col"):
+                    yield Label("🟩 Retests / WDH")
+                    yield Select(
+                        options=self.WDH_DAY_OPTIONS,
+                        value=self._select_value(self._days_value("WDH", 3), self.WDH_DAY_OPTIONS, 3),
+                        allow_blank=False,
+                        id="sel_days_wdh",
+                    )
+                with Vertical(classes="notif_days_col"):
+                    yield Label("📙 Oral Exams / PR")
+                    yield Select(
+                        options=self.PR_DAY_OPTIONS,
+                        value=self._select_value(self._days_value("PR", 3), self.PR_DAY_OPTIONS, 3),
+                        allow_blank=False,
+                        id="sel_days_pr",
+                    )
+
+            with Horizontal(id="notif_btn_row"):
+                yield Button("💾 Save Settings", id="btn_notif_save", variant="success")
+                yield Button("↩️ Back", id="btn_notif_back", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id
+        if bid == "btn_notif_new_toggle":
+            self.new_enabled = not self.new_enabled
+            event.button.variant = "success" if self.new_enabled else "default"
+        elif bid == "btn_notif_exam_toggle":
+            self.exam_enabled = not self.exam_enabled
+            event.button.variant = "success" if self.exam_enabled else "default"
+        elif bid == "btn_notif_save":
+            self._save()
+        elif bid == "btn_notif_back":
+            self.dismiss(False)
+
+    def _select_int(self, widget_id: str, default: int) -> int:
+        try:
+            value = self.query_one(f"#{widget_id}", Select).value
+        except Exception:
+            return default
+        if value is None or value == Select.BLANK:
+            return default
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _save(self) -> None:
+        try:
+            time_value = self.query_one("#inp_notif_exam_time", Input).value.strip()
+        except Exception:
+            time_value = "20:00"
+        if not re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", time_value):
+            time_value = "20:00"
+        else:
+            hour, minute = time_value.split(":", 1)
+            time_value = f"{int(hour):02d}:{minute}"
+
+        try:
+            due_value = self.query_one("#sel_notif_due_window", Select).value
+        except Exception:
+            due_value = "2h"
+        if due_value is None or due_value == Select.BLANK:
+            due_value = "2h"
+
+        settings = {
+            "new_tasks_enabled": bool(self.new_enabled),
+            "task_due_window": str(due_value),
+            "exam_reminders_enabled": bool(self.exam_enabled),
+            "exam_reminder_time": time_value,
+            "exam_days_ahead": {
+                "TE": self._select_int("sel_days_te", 4),
+                "SA": self._select_int("sel_days_sa", 7),
+                "WDH": self._select_int("sel_days_wdh", 3),
+                "PR": self._select_int("sel_days_pr", 3),
+            },
+        }
+
+        try:
+            set_notification_settings(settings)
+        except Exception:
+            pass
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
 
 
 class TrayConfigModal(ModalScreen[bool]):
@@ -4086,6 +4436,16 @@ class TrayConfigModal(ModalScreen[bool]):
         width: 100%;
         margin-top: 1;
         margin-bottom: 0;
+        text-style: bold;
+    }
+    #sel_auto_sync {
+        width: 100%;
+        margin-top: 1;
+        margin-bottom: 0;
+    }
+    #lbl_auto_sync_title {
+        margin-top: 1;
+        color: #cdd6f4;
         text-style: bold;
     }
     #tray_cfg_btn_row {
@@ -4127,6 +4487,19 @@ class TrayConfigModal(ModalScreen[bool]):
             except Exception:
                 pass
 
+        self.auto_sync_val = "30min"
+        try:
+            from config import get_auto_sync_interval
+            self.auto_sync_val = get_auto_sync_interval()
+        except Exception:
+            try:
+                from src.core.config import get_auto_sync_interval
+                self.auto_sync_val = get_auto_sync_interval()
+            except Exception:
+                pass
+        if self.auto_sync_val not in ("5min", "10min", "30min", "1h", "never"):
+            self.auto_sync_val = "30min"
+
     def compose(self) -> ComposeResult:
         with Vertical(id="tray_config_dialog"):
             yield Label("🖥️ System Tray & Autostart Settings", id="tray_cfg_title")
@@ -4154,6 +4527,24 @@ class TrayConfigModal(ModalScreen[bool]):
             )
             yield Label(
                 "  Launches Tasks silently in the system tray when Windows boots.",
+                classes="tray_cfg_desc",
+            )
+
+            yield Label("🔄 Automatic Sync Interval", classes="tray_cfg_desc", id="lbl_auto_sync_title")
+            yield Select(
+                options=[
+                    ("5 Minutes (5min)", "5min"),
+                    ("10 Minutes (10min)", "10min"),
+                    ("30 Minutes (30min) [Default]", "30min"),
+                    ("1 Hour (1h)", "1h"),
+                    ("Never (Disabled - save resources)", "never"),
+                ],
+                value=self.auto_sync_val,
+                allow_blank=False,
+                id="sel_auto_sync",
+            )
+            yield Label(
+                "  Periodically synchronizes assignments in the background.",
                 classes="tray_cfg_desc",
             )
 
@@ -4190,6 +4581,17 @@ class TrayConfigModal(ModalScreen[bool]):
                     set_autostart(self.is_auto)
                 except Exception:
                     pass
+            try:
+                sel_sync = self.query_one("#sel_auto_sync", Select).value
+                if sel_sync is not None and sel_sync != Select.BLANK:
+                    try:
+                        from config import set_auto_sync_interval
+                        set_auto_sync_interval(str(sel_sync))
+                    except Exception:
+                        from src.core.config import set_auto_sync_interval
+                        set_auto_sync_interval(str(sel_sync))
+            except Exception:
+                pass
             self.dismiss(True)
         elif bid == "btn_tray_cfg_back":
             self.dismiss(False)
@@ -9539,11 +9941,26 @@ class TasksApp(App):
             markup=markup,
         )
 
-    def __init__(self, mgr: Optional[TaskManager] = None, sync_on_startup: Optional[bool] = None, start_hidden: bool = False):
+    def __init__(
+        self,
+        mgr: Optional[TaskManager] = None,
+        sync_on_startup: Optional[bool] = None,
+        start_hidden: bool = False,
+        initial_task_id: Optional[str] = None,
+        initial_exam_id: Optional[str] = None,
+    ):
         super().__init__()
         self.mgr = mgr or TaskManager(autostart_prefetch=True)
         self.sync_on_startup = sync_on_startup
         self.start_hidden = start_hidden
+        self.initial_task_id = initial_task_id
+        self.initial_exam_id = initial_exam_id
+        self._notification_engine = None
+        try:
+            if NotificationEngine is not None:
+                self._notification_engine = NotificationEngine()
+        except Exception:
+            self._notification_engine = None
         self.is_hidden_in_tray = False
         self._tray_service = None
         self._single_instance_server = None
@@ -9562,6 +9979,7 @@ class TasksApp(App):
         self._console_ctrl_cb: Optional[Callable] = None
         self._conhost_close_disabled: bool = False
         self._last_sync_table_refresh: float = 0.0
+        self._last_auto_sync_time: float = time.time()
         self.sort_column: Optional[str] = "due_date"
         self.sort_direction: str = "desc"
         self._task_fixed_ids_map: Dict[int, Task] = {}
@@ -9605,6 +10023,9 @@ class TasksApp(App):
         # Gecachte Aufgaben sofort anzeigen
         self.refresh_table()
 
+        # Prüfe regelmäßig, ob ein automatischer Hintergrund-Sync fällig ist
+        self.set_interval(20.0, self._check_auto_sync)
+
         # Beim Start automatisch immer wie beim Klick auf den Sync-Button synchronisieren
         should_sync = self.sync_on_startup if self.sync_on_startup is not None else (not self.is_headless)
         if should_sync:
@@ -9622,6 +10043,32 @@ class TasksApp(App):
         if sys.platform == "win32" and not self.is_headless:
             self._init_tray_and_ipc()
 
+        # Register the tasks:// URL protocol in the background (never blocks start-up).
+        try:
+            import threading as _threading
+
+            def _register_protocol():
+                try:
+                    try:
+                        from notification_service import ensure_tasks_protocol_registered
+                    except ImportError:
+                        from src.services.notification_service import ensure_tasks_protocol_registered
+                    ensure_tasks_protocol_registered()
+                except Exception:
+                    pass
+
+            _threading.Thread(
+                target=_register_protocol, daemon=True, name="TasksProtocolRegistration"
+            ).start()
+        except Exception:
+            pass
+
+        # Deep links from Windows toasts / the tasks:// protocol.
+        if self.initial_task_id:
+            self.call_after_refresh(self._open_task_by_id, self.initial_task_id)
+        if self.initial_exam_id:
+            self.call_after_refresh(self._open_exam_by_id, self.initial_exam_id)
+
 
         # Starte Hintergrund-Thread für Maus-Zurück-Taste (Seitentaste XBUTTON1 / "Hinten")
         self._terminal_hwnd = get_terminal_window_hwnd() or _CACHED_TERMINAL_HWND
@@ -9630,6 +10077,103 @@ class TasksApp(App):
 
         # Sicherstellen, dass das Terminal-Layout beim Start sauber synchronisiert ist
         self.call_after_refresh(self._sync_initial_viewport)
+
+    def _check_auto_sync(self) -> None:
+        """Starts a timed background sync and runs notification checks."""
+        # Toast reminders (due assignments + exams) are checked on every tick.
+        self._run_notification_checks()
+
+        if getattr(self, "_is_syncing", False):
+            return
+        try:
+            from config import is_shutting_down
+            if is_shutting_down():
+                return
+        except Exception:
+            pass
+
+        try:
+            from config import get_auto_sync_interval_seconds
+            interval_sec = get_auto_sync_interval_seconds()
+        except Exception:
+            try:
+                from src.core.config import get_auto_sync_interval_seconds
+                interval_sec = get_auto_sync_interval_seconds()
+            except Exception:
+                interval_sec = 1800
+
+        if interval_sec <= 0:
+            return
+
+        now = time.time()
+        if now - getattr(self, "_last_auto_sync_time", 0.0) >= interval_sec:
+            self._last_auto_sync_time = now
+            self.action_sync_tasks()
+
+    def _run_notification_checks(self) -> None:
+        """Runs due-assignment and exam reminder checks (never raises)."""
+        engine = getattr(self, "_notification_engine", None)
+        if engine is None:
+            return
+        try:
+            tasks = getattr(self.mgr, "tasks", []) or []
+            engine.check_task_due_reminders(tasks)
+        except Exception:
+            pass
+        try:
+            engine.check_exam_reminders(self._get_all_exams())
+        except Exception:
+            pass
+
+    def _get_all_exams(self) -> List[UntisExam]:
+        """Returns cached WebUntis exams merged with manually created exams."""
+        exams: List[UntisExam] = []
+        seen_ids = set()
+        try:
+            for exam in load_untis_exams_cache():
+                exam_id = str(getattr(exam, "id", ""))
+                if exam_id and exam_id not in seen_ids:
+                    seen_ids.add(exam_id)
+                    exams.append(exam)
+        except Exception:
+            pass
+        try:
+            for exam in load_custom_exams():
+                exam_id = str(getattr(exam, "id", ""))
+                if exam_id and exam_id not in seen_ids:
+                    seen_ids.add(exam_id)
+                    exams.append(exam)
+        except Exception:
+            pass
+        return exams
+
+    def _open_task_by_id(self, task_id: Optional[str]) -> None:
+        """Opens the task detail modal for ``task_id`` (used by toasts / deep links)."""
+        if not task_id:
+            return
+        target = str(task_id)
+        candidates = list(getattr(self.mgr, "tasks", []) or [])
+        task = next((t for t in candidates if str(getattr(t, "id", "")) == target), None)
+        if task is None:
+            task = next(
+                (t for t in getattr(self, "current_tasks", []) or []
+                 if str(getattr(t, "id", "")) == target),
+                None,
+            )
+        if task is not None:
+            self.push_screen(TaskDetailModal(task, self.mgr), self._on_detail_closed)
+
+    def _open_exam_by_id(self, exam_id: Optional[str]) -> None:
+        """Opens the exam detail modal for ``exam_id`` (used by toasts / deep links)."""
+        if not exam_id:
+            return
+        target = str(exam_id)
+        exam = next(
+            (e for e in self._get_all_exams() if str(getattr(e, "id", "")) == target),
+            None,
+        )
+        if exam is not None:
+            self.push_screen(ExamDetailModal(exam))
 
     def _set_win32_console_icon(self) -> None:
         """Sets the window icon for classic conhost console windows via WM_SETICON."""
@@ -9692,9 +10236,20 @@ class TasksApp(App):
 
     def _handle_ipc_command(self, cmd: str) -> str:
         """Verarbeitet eingehende Single-Instance-Befehle von sekundären CLI-Aufrufen."""
-        cmd_upper = (cmd or "").strip().upper()
+        raw = (cmd or "").strip()
+        cmd_upper = raw.upper()
         if cmd_upper == "SHOW":
             return self._ipc_show()
+        elif cmd_upper.startswith("OPEN_TASK:"):
+            task_id = raw.split(":", 1)[1].strip()
+            self.restore_from_tray()
+            self.call_from_thread(self._open_task_by_id, task_id)
+            return "OK:OPEN_TASK"
+        elif cmd_upper.startswith("OPEN_EXAM:"):
+            exam_id = raw.split(":", 1)[1].strip()
+            self.restore_from_tray()
+            self.call_from_thread(self._open_exam_by_id, exam_id)
+            return "OK:OPEN_EXAM"
         elif cmd_upper == "QUIT":
             self.call_from_thread(self.action_real_quit)
             return "OK:QUITTING"
@@ -10155,6 +10710,22 @@ class TasksApp(App):
         except Exception:
             pass
 
+        if getattr(self, "_tray_service", None) is not None:
+            try:
+                all_tasks = getattr(self.mgr, "tasks", []) or []
+                open_cnt = 0
+                for t in all_tasks:
+                    if getattr(t, "deleted", False):
+                        continue
+                    done = getattr(t, "completed", None)
+                    if not isinstance(done, bool):
+                        done = bool(getattr(t, "is_completed", False))
+                    if not done:
+                        open_cnt += 1
+                self._tray_service.update_status(open_cnt)
+            except Exception:
+                pass
+
     def on_data_table_header_selected(self, event: DataTable.HeaderSelected) -> None:
         """Handles clicking on a sortable column header to sort ascending/descending."""
         if event.data_table.id != "tasks_table":
@@ -10315,6 +10886,7 @@ class TasksApp(App):
             elif action == "tray_config":
                 def on_tray_done(saved: bool) -> None:
                     if saved:
+                        self._last_auto_sync_time = time.time()
                         self.notify("System tray and autostart settings saved.", severity="information")
                         try:
                             from config import is_minimize_to_tray_enabled
@@ -10338,6 +10910,11 @@ class TasksApp(App):
                             pass
                     self.action_open_settings()
                 self.push_screen(TrayConfigModal(), on_tray_done)
+            elif action == "notifications_config":
+                def on_notifications_done(saved: bool) -> None:
+                    if saved:
+                        self.notify("Notification settings saved.", severity="information")
+                self.push_screen(NotificationConfigModal(), on_notifications_done)
 
 
         self.push_screen(SettingsModal(), on_setting_chosen)
@@ -10455,6 +11032,12 @@ class TasksApp(App):
                 except Exception:
                     pass
                 self.refresh_table()
+                try:
+                    engine = getattr(self, "_notification_engine", None)
+                    if engine is not None:
+                        engine.check_new_tasks(getattr(self.mgr, "tasks", []))
+                except Exception:
+                    pass
                 if not getattr(self, "is_headless", False):
                     self._check_login_status_after_sync()
 
@@ -11108,7 +11691,11 @@ class TasksApp(App):
 
 
 
-def run_tui(start_hidden: bool = False):
+def run_tui(
+    start_hidden: bool = False,
+    initial_task_id: Optional[str] = None,
+    initial_exam_id: Optional[str] = None,
+):
     """Startet die moderne Textual-TUI-Anwendung."""
     if not start_hidden and not getattr(sys, "_launching_tui_printed", False):
         sys._launching_tui_printed = True
@@ -11120,7 +11707,11 @@ def run_tui(start_hidden: bool = False):
             pass
 
     ensure_terminal_window_size(target_cols=123, min_height_px=680)
-    app = TasksApp(start_hidden=start_hidden)
+    app = TasksApp(
+        start_hidden=start_hidden,
+        initial_task_id=initial_task_id,
+        initial_exam_id=initial_exam_id,
+    )
 
     try:
         app.run()
