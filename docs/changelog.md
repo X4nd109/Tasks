@@ -9,6 +9,43 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-10-31
+
+### Added
+- **Verlinkten Fachordner direkt aus der Test-Detailansicht öffnen (`ExamDetailModal`)**:
+  - Neuer Button `📁 Open Folder [F]` (Tastenkürzel `F`, Variante `primary` blau) in der Detailansicht von WebUntis- und Custom-Tests neben dem Browser-/Delete-Button.
+  - Ermittelt über `DirectoryService.find_matching_directory_for_course` automatisch den verknüpften lokalen Ordner für das Schulfach (`subject` / `name`) und öffnet ihn im Windows Explorer.
+  - Zeigt eine informative Benachrichtigung beim Öffnen oder eine Toast-Warnung (`No linked folder found for '<subject>'.`), falls noch kein Verzeichnis verknüpft ist.
+  - Dialogbreite im CSS auf 88 Zeichen optimiert, um alle 4 Buttons (`Browser [O]`, `Open Folder [F]`, `Save Notes [Ctrl+S]`, `Back [ESC]`) sauber in einer Reihe darzustellen.
+  - Umfassende automatisierte Tests in `tests/test_untis_exams.py` für Klick- und Hotkey-Steuerung inkl. Fallbacks.
+
+### Changed
+- **Sofortiges Schließen des sekundären Terminals beim Wiederherstellen aus dem Hintergrund (`main.py`)**:
+  - Wenn Tasks bereits als Hintergrundinstanz (System Tray) läuft und der Benutzer im Terminal `tasks` ausführt, wird die laufende Instanz sofort in den Vordergrund geholt (`SHOW`).
+  - Der bisherige 10-Sekunden-Countdown mit Abbruch-Option (`[ENTER]`) und Konsolenausgaben wurde entfernt.
+  - Das Terminal schließt sich nun unmittelbar und geräuschlos via `_close_current_terminal_window()` und `sys.exit(0)`.
+  - Obsoletes Polling über `msvcrt` in `main.py` entfernt und Tests in `tests/test_terminal_autoclose.py` auf das neue Verhalten aktualisiert.
+- **Inno Setup Installer: Englische Lokalisierung & Neugestaltung der Abschlussseite (`installer/tasks.iss`)**:
+  - **Vollständige englische Lokalisierung**: Der gesamte Installations-Wizard nutzt nun das offizielle englische Sprachpaket (`compiler:Default.isl`). Alle Texte, Buttons, Task-Beschreibungen ("Additional icons:", "Create a desktop shortcut", "Open Tasks") und Statusmeldungen sind einheitlich auf Englisch.
+  - **Neue Finish-Page-Optionen**: Die bisherige Auswahl ("Globaler Terminal Befehl" und "Tasks Starten") wurde durch genau die drei gewünschten Checkboxen ersetzt:
+    1. `Add 'tasks' command to PATH` (aktiviert PATH-Erweiterung)
+    2. `Configure Windows Terminal profile` (richtet das Windows Terminal Profil ein)
+    3. `Add Tasks to Start Menu` (erstellt das Startmenü-Shortcut)
+  - **"Tasks starten" entfernt**: Die Option zum direkten Starten von Tasks nach dem Setup wurde vollständig von der Abschlussseite entfernt.
+  - **Vollständig standardmäßig aktiviert**: Alle drei Optionen sind per Default vorausgewählt (angehakt).
+  - **Saubere Deinstallation**: Dynamisch erstellte Startmenü-Verknüpfungen (`{autoprograms}\Tasks.lnk`) werden bei der Deinstallation zuverlässig über `[UninstallDelete]` und `CurUninstallStepChanged` entfernt.
+
+### Fixed
+- **Robuster PowerShell Catppuccin Update-Runner & Windows Terminal Handshake**:
+  - `src/services/update_service.py`: `update_runner.ps1` wird mit `encoding="utf-8-sig"` (UTF-8 mit BOM) geschrieben, damit Windows PowerShell 5.1 Unicode-Rahmenzeichen (`│`, `╭`, `╰`) nicht fälschlich als ANSI-Anführungszeichen interpretiert (beseitigt sofortigen Parser-Absturz).
+  - Fehlersicheres Logging: Automatisches Protokollieren aller Update-Schritte und Exception-Details in `%TEMP%\Tasks_Update\update.log`.
+  - Fail-Safe Fensterhaltung: PowerShell wird mit `-NoExit` gestartet; schließt sich bei Erfolg via `exit 0`, bleibt bei Fehlern jedoch für Diagnosezwecke offen.
+  - `src/ui/tui_app.py`: Sauberes Schließen mit Exit-Code `0` statt `42`, wodurch Windows Terminal den Haupt-Tab geräuschlos schließt und keine verwaiste Absturzmeldung mehr anzeigt; Sync-Flag vor App-Exit gereinigt, um unerwünschte `"Sync not Complete"`-Meldungen zu unterbinden.
+- **Vollständige Deinstallations-Bereinigung (`installer/tasks.iss`)**:
+  - `tasks://` URL-Protokoll (`HKCU\Software\Classes\tasks`) und AppUserModelId (`HKCU\Software\Classes\AppUserModelId\Tasks`) werden nun bei der Deinstallation via `RegDeleteKeyIncludingSubkeys` restlos aus der Registry entfernt.
+  - Windows-Terminal-Profil-Bereinigung (`[UninstallRun]`) iteriert jetzt über alle installierten Terminal-Editionen (Stable, Preview, Unpackaged) via `ForEach-Object` statt nur über die erste gefundene Instanz.
+  - Bereinigung von Relikten außerhalb von `{app}`: Altes Startmenü-Unterverzeichnis (`{autoprograms}\Tasks`) und Fallback-Cache (`%LOCALAPPDATA%\Tasks`) werden bei der Deinstallation zuverlässig entfernt.
+
 
 ## [2.3.2] - 2026-10-31
 

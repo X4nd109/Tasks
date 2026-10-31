@@ -3904,8 +3904,14 @@ class UpdateReminderModal(ModalScreen[None]):
             target_version=lat_v,
         )
         if launched:
-            # Kurzer visueller Übergang vor dem Schließen
-            self.set_timer(1.2, lambda: self.app.exit(return_code=42))
+            # Sync-Status bereinigen, damit kein "Sync not Complete" beim Beenden ausgegeben wird
+            try:
+                self.app._sync_not_complete_printed = True
+                self.app._is_syncing = False
+            except Exception:
+                pass
+            # Kurzer visueller Übergang vor dem Schließen mit Exit-Code 0 (für sauberes Terminal-Schließen)
+            self.set_timer(1.2, lambda: self.app.exit(return_code=0))
         else:
             self._show_error("Update runner could not be started. Please run the installer manually.")
 
@@ -7958,7 +7964,7 @@ class ExamDetailModal(ModalScreen[bool]):
         align: center middle;
     }
     #exam_detail_dialog {
-        width: 82;
+        width: 88;
         max-width: 95%;
         height: auto;
         max-height: 88%;
@@ -8007,6 +8013,7 @@ class ExamDetailModal(ModalScreen[bool]):
 
     BINDINGS = [
         Binding("o", "open_browser", "Browser"),
+        Binding("f", "open_folder", "Open Folder"),
         Binding("d", "delete_exam", "Delete Exam"),
         Binding("escape", "cancel", "Back"),
         Binding("ctrl+s", "save_topics", "Save Notes"),
@@ -8063,12 +8070,15 @@ class ExamDetailModal(ModalScreen[bool]):
                     yield Button("🗑️ Delete [D]", id="btn_exam_delete", variant="error")
                 else:
                     yield Button("🌐 Browser [O]", id="btn_exam_browser", variant="primary")
+                yield Button("📁 Open Folder [F]", id="btn_open_exam_folder", variant="primary")
                 yield Button("💾 Save Notes [Ctrl+S]", id="btn_save_exam_topics", variant="success")
                 yield Button("↩️ Back [ESC]", id="btn_cancel_exam_detail", variant="default")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn_exam_browser":
             self.action_open_browser()
+        elif event.button.id == "btn_open_exam_folder":
+            self.action_open_folder()
         elif event.button.id == "btn_exam_delete":
             self.action_delete_exam()
         elif event.button.id == "btn_save_exam_topics":
@@ -8089,6 +8099,38 @@ class ExamDetailModal(ModalScreen[bool]):
             self.app.notify(f"Opening '{self.exam.subject}' test in browser...", severity="information")
         else:
             self.app.notify("No WebUntis URL available for this test.", severity="warning")
+
+    def action_open_folder(self) -> None:
+        try:
+            from services.directory_service import DirectoryService
+        except ImportError:
+            from directory_service import DirectoryService
+
+        matched = DirectoryService.find_matching_directory_for_course(
+            self.exam.subject, self.exam.name
+        )
+        if not matched:
+            self.app.notify(
+                f"No linked folder found for '{self.exam.subject}'.",
+                title="📁 Open Folder",
+                severity="warning",
+            )
+            return
+
+        ok, msg = DirectoryService.open_directory(matched)
+        if ok:
+            folder_name = matched.get("title") or os.path.basename(matched.get("path", ""))
+            self.app.notify(
+                f"Opening folder '{folder_name}'...",
+                title="📁 Open Folder",
+                severity="information",
+            )
+        else:
+            self.app.notify(
+                f"Failed to open folder: {msg}",
+                title="📁 Open Folder",
+                severity="error",
+            )
 
     def action_delete_exam(self) -> None:
         is_custom = getattr(self.exam, "is_custom", False) or str(self.exam.id).startswith("custom_")

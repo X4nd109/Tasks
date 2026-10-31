@@ -25,9 +25,9 @@
 | `FilterMenuModal` (`[F]`) | Modal | Kompakter, scrollbarer Filter-Dialog für Status, Fach, Zeitfenster und Plattform mit Statusanzeige direkt auf den Buttons. |
 | `SubjectFilterModal` | Modal | Listen-Auswahl zur Einschränkung der Tabelle auf ein spezifisches Schulfach. |
 | `ExcuseLetterModal` (`[U]`) | Modal | Fehlstunden-Übersicht mit Stundenplan-Abgleich und 1-Klick-PDF-Export für die Schule. |
-| `ExamDetailModal` | Modal | Zeigt Prüfungsdetails und ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`). |
+| `ExamDetailModal` | Modal | Zeigt Prüfungsdetails, ermöglicht das Bearbeiten persönlicher Stoff-Notizen (`exam_notes.json`) und bietet 1-Klick-Zugriff auf den verknüpften Fachordner (`📁 Open Folder [F]`). |
 | `AddExamModal` | Modal | Formular zum Eintragen manueller Prüfungstermine mit nativer Wochentagserkennung. |
-| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.2`), Themes, Logins und Schülereinstellungen. |
+| `SettingsModal` (`[O]`) | Modal | Scrollbarer Konfigurationsdialog mit Versionsanzeige in der oberen rechten Ecke (`v2.3.3`), Themes, Logins und Schülereinstellungen. |
 | `NotificationConfigModal` | Modal | Untermenü in den Settings zur Konfiguration von nativen Windows-Benachrichtigungen für neue Aufgaben, Fälligkeitswarnungen und täglichen Prüfungs-Erinnerungen. |
 | `TrayConfigModal` | Modal | Konfigurationsdialog für Hintergrundbetrieb, Minimieren in den System Tray, Windows-Autostart und automatisches Synchronisationsintervall. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
@@ -54,6 +54,7 @@
 | :--- | :--- | :--- |
 | `Open in browser` | `[O]` / `btn_open_browser` | Öffnet die offizielle Abgabeseite der Aufgabe direkt im Standard-Webbrowser. |
 | `Download files` | `[D]` / `btn_det_download` | Öffnet das englischsprachige `DownloadLocationModal` zur Zielwahl (Auto-Dir [1], Explorer [2], Downloads [3]). |
+| `Open Folder` | `[F]` / `btn_open_exam_folder` | Öffnet in `ExamDetailModal` den im System verknüpften lokalen Ordner für das Schulfach des Tests direkt im Windows Explorer. |
 | `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
 | `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung (dedupliziert: bereits erklärte Aufgaben öffnen direkt den bestehenden Chat, Reset bei Clear Chat). |
 | `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
@@ -161,9 +162,10 @@ Projektweit für alle Dialog- und Formular-Eingabefelder (`ChatInputArea`), einz
 | Feature / Steuerung | Typ | Kurzbeschreibung |
 | :--- | :--- | :--- |
 | `Quantum Prism App-Icon` | Asset | 3D-Vektor-App-Icon im Fluent-Squircle-Design; dual bereitgestellt als `app_icon.ico` (Desktop/Startmenü) und `app_icon.png` (Windows Terminal Profil). |
-| `Inno Setup Shortcut-Icons` | Installer | Weist dem Installer und allen Startmenü- und Desktop-Verknüpfungen das App-Icon zu. |
-| `Windows-Terminal Profil-Option` | Installer | Optionale Checkbox auf der Fertigstellen-Seite zur Registrierung des Tasks-Profils mit Logo via Inline-PowerShell. |
-| `Globaler Terminal-Befehl 'tasks'` | Installer | Optionale Checkbox zur Registrierung des Installationsverzeichnisses im Benutzer-PATH via `tasks.cmd`. |
-| `Rückstandslose Deinstallation` | Uninstaller | Bereinigt alle Runtime-Caches, Daten, config.json, Windows-Terminal-Profile und den Autostart-Registry-Key. |
+| `Inno Setup Wizard (English)` | Installer | Vollständig englischsprachiger Installations-Assistent (`compiler:Default.isl`) mit Playwright-Browser-Setup und Silent-Modus. |
+| `Add 'tasks' command to PATH` | Installer | Optionale Checkbox auf der Abschlussseite zur Registrierung des Installationsverzeichnisses im Benutzer-PATH (standardmäßig aktiv). |
+| `Configure Windows Terminal profile` | Installer | Optionale Checkbox auf der Abschlussseite zur automatischen Registrierung des Tasks-Profils mit Icon (standardmäßig aktiv). |
+| `Add Tasks to Start Menu` | Installer | Optionale Checkbox auf der Abschlussseite zur Erstellung einer Startmenü-Verknüpfung via PowerShell `WScript.Shell` (standardmäßig aktiv). |
+| `Rückstandslose Deinstallation` | Uninstaller | Bereinigt alle Runtime-Caches, Daten, `config.json`, das URL-Protokoll (`tasks://`), Windows-Terminal-Profile, Startmenü-Einträge und den Autostart-Registry-Key. |
 
 

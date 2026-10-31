@@ -10,14 +10,6 @@ import warnings
 # Suppress PyMuPDF legacy fitz module deprecation warning
 warnings.filterwarnings("ignore", category=FutureWarning, module="fitz")
 
-# Non-blocking keyboard polling for the auto-close countdown (Windows only).
-if sys.platform == "win32":
-    try:
-        import msvcrt
-    except Exception:  # pragma: no cover - msvcrt always exists on Windows
-        msvcrt = None
-else:
-    msvcrt = None
 
 # Projekt-Root und Quellverzeichnisse im PYTHONPATH registrieren
 if getattr(sys, "frozen", False):
@@ -368,47 +360,8 @@ def _close_current_terminal_window() -> None:
         pass
 
 
-def _handle_existing_instance_autoclose(timeout_seconds: int = 10) -> None:
-    """Restores the background instance and closes this terminal after a countdown.
-
-    Only the [ENTER] key (``\\r`` / ``\\n``) cancels the countdown; every other
-    keystroke is ignored while the countdown keeps ticking.
-    """
-    print("Restoring window...", flush=True)
-    print("Window succesfully restored.", flush=True)
-
-    poll_interval = 0.05
-    start = time.monotonic()
-    last_shown = None
-
-    while True:
-        elapsed = time.monotonic() - start
-        remaining = int(timeout_seconds) - int(elapsed)
-        if remaining <= 0:
-            break
-
-        if remaining != last_shown:
-            sys.stdout.write(
-                f"\rThis terminal will close in {remaining}s. Press [ENTER] to cancel... "
-            )
-            sys.stdout.flush()
-            last_shown = remaining
-
-        if msvcrt is not None:
-            try:
-                if msvcrt.kbhit():
-                    ch = msvcrt.getwch()
-                    if ch in ("\r", "\n"):
-                        sys.stdout.write("\nClose cancelled. Terminal remains open.\n")
-                        sys.stdout.flush()
-                        return
-            except Exception:
-                pass
-
-        time.sleep(poll_interval)
-
-    sys.stdout.write("\nClosing terminal...\n")
-    sys.stdout.flush()
+def _handle_existing_instance_autoclose() -> None:
+    """Closes this terminal immediately and silently after signaling the background instance."""
     _close_current_terminal_window()
     sys.exit(0)
 

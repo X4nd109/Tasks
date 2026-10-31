@@ -566,6 +566,27 @@ class TestUntisExamsTUI(unittest.IsolatedAsyncioTestCase):
                     mock_open.assert_called_once()
                     self.assertIn("timetable", mock_open.call_args[0][0])
 
+                # Prüfe Open Folder-Button und Klick / Shortcut
+                btn_folder = detail_modal.query_one("#btn_open_exam_folder")
+                self.assertIn("Open Folder", str(btn_folder.label))
+
+                # Fall 1: Verknüpfter Ordner existiert -> open_directory wird aufgerufen
+                with patch("services.directory_service.DirectoryService.find_matching_directory_for_course", return_value={"id": "dir1", "title": "AMEC", "path": "C:\\AMEC"}), \
+                     patch("services.directory_service.DirectoryService.open_directory", return_value=(True, "OK")) as mock_open_dir:
+                    await pilot.click("#btn_open_exam_folder")
+                    await pilot.pause()
+                    mock_open_dir.assert_called_once()
+
+                # Fall 2: Kein verknüpfter Ordner -> Warning Toast via Taste 'f'
+                with patch("services.directory_service.DirectoryService.find_matching_directory_for_course", return_value=None):
+                    with patch.object(app, "notify") as mock_notify:
+                        await pilot.press("f")
+                        await pilot.pause()
+                        mock_notify.assert_called()
+                        args, kwargs = mock_notify.call_args
+                        self.assertIn("No linked folder found", args[0])
+                        self.assertEqual(kwargs.get("severity"), "warning")
+
                 # 4. Stoff eingeben & speichern
                 inp = detail_modal.query_one("#inp_exam_topics")
                 inp.text = "Analysis Kapitel 1 & 2"

@@ -252,6 +252,15 @@ $targetVer     = '__TARGET_VERSION__'
 $tempDir       = '__TEMP_DIR__'
 $pendingFile   = Join-Path $tempDir "pending_update.txt"
 $appliedFile   = Join-Path $tempDir "update_just_applied.txt"
+$logFile       = Join-Path $tempDir "update.log"
+
+function Log-Message([string]$msg) {
+    try {
+        $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $plain = $msg -replace "`e\[[0-9;]*m", ""
+        Add-Content -LiteralPath $logFile -Value "[$timestamp] $plain" -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch {}
+}
 
 function Show-Header {
     Clear-Host
@@ -270,10 +279,15 @@ function Show-Header {
 }
 
 try {
+    Log-Message "=== Tasks Update gestartet: v$currentVer -> v$targetVer ==="
+    Log-Message "Zielverzeichnis: $targetAppDir"
+    Log-Message "Installer: $installerPath"
+
     Show-Header
 
     # [1/5] Warten auf Beendigung von Tasks
     Write-Host "$cBlue  [1/5]$cReset Warten auf Beendigung von Tasks..."
+    Log-Message "[1/5] Warten auf Beendigung von Tasks..."
     $waitCount = 0
     while ($waitCount -lt 15) {
         $procs = Get-Process -Name Tasks, TasksTray -ErrorAction SilentlyContinue
@@ -289,10 +303,12 @@ try {
         Start-Sleep -Milliseconds 500
     }
     Write-Host "$cGreen        [✓] Tasks erfolgreich beendet.$cReset"
+    Log-Message "[1/5] Tasks erfolgreich beendet."
     Write-Host ""
 
     # [2/5] Installationspaket überprüfen
     Write-Host "$cBlue  [2/5]$cReset Installationspaket überprüfen..."
+    Log-Message "[2/5] Installationspaket überprüfen..."
     if (-not (Test-Path -LiteralPath $installerPath)) {
         throw "Installationsdatei wurde nicht gefunden: $installerPath"
     }
@@ -302,10 +318,12 @@ try {
     }
     $sizeMb = [math]::Round($fileSize / 1MB, 1)
     Write-Host "$cGreen        [✓] Installationspaket verifiziert ($sizeMb MB).$cReset"
+    Log-Message "[2/5] Installationspaket verifiziert ($sizeMb MB)."
     Write-Host ""
 
     # [3/5] Ausführung des Inno Setup Installers
     Write-Host "$cBlue  [3/5]$cReset Update-Dateien werden installiert..."
+    Log-Message "[3/5] Inno Setup Installer wird gestartet..."
     $instArgs = @(
         "`"/DIR=$targetAppDir`"",
         "/VERYSILENT",
@@ -326,6 +344,7 @@ try {
         $i++
     }
     Write-Host "`r$cGreen        [✓] Installation abgeschlossen.                         $cReset"
+    Log-Message "[3/5] Inno Setup beendet mit ExitCode $($proc.ExitCode)."
     Write-Host ""
 
     if ($proc.ExitCode -ne 0) {
@@ -334,6 +353,7 @@ try {
 
     # [4/5] Installation verifizieren
     Write-Host "$cBlue  [4/5]$cReset Installation überprüfen..."
+    Log-Message "[4/5] Installation überprüfen..."
     $exePath = Join-Path $targetAppDir "Tasks.exe"
     $cmdPath = Join-Path $targetAppDir "tasks.cmd"
     if (-not (Test-Path -LiteralPath $exePath) -and -not (Test-Path -LiteralPath $cmdPath)) {
@@ -341,10 +361,12 @@ try {
     }
     Set-Content -Path $appliedFile -Value "1" -Encoding UTF8 -ErrorAction SilentlyContinue
     Write-Host "$cGreen        [✓] Programmdateien erfolgreich verifiziert.$cReset"
+    Log-Message "[4/5] Programmdateien erfolgreich verifiziert."
     Write-Host ""
 
     # [5/5] Bereinigung und Neustart
     Write-Host "$cBlue  [5/5]$cReset Temporäre Dateien bereinigen und Tasks neu starten..."
+    Log-Message "[5/5] Bereinigung und Neustart..."
     Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $pendingFile -Force -ErrorAction SilentlyContinue
     Write-Host "$cGreen        [✓] Bereinigung abgeschlossen.$cReset"
@@ -365,11 +387,14 @@ try {
     exit 0
 
 } catch {
+    $errDetails = $_.Exception.ToString()
+    Log-Message "UPDATE FEHLGESCHLAGEN: $errDetails"
     Write-Host ""
     Write-Host "$cRed  ╭────────────────────────────────────────────────────────╮$cReset"
     Write-Host "$cRed  │$cBold                   UPDATE FEHLGESCHLAGEN                  $cReset$cRed│$cReset"
     Write-Host "$cRed  ╰────────────────────────────────────────────────────────╯$cReset"
     Write-Host "$cRed  Fehlerdetails: $($_.Exception.Message)$cReset"
+    Write-Host "$cDim  Detailliertes Log: $logFile$cReset"
     Write-Host ""
     Write-Host "$cSub  Das Fenster bleibt zur Fehleranalyse geöffnet.$cReset"
     Write-Host "$cSub  Drücken Sie die Eingabetaste zum Beenden...$cReset"
@@ -424,7 +449,7 @@ def launch_update_and_restart(
     )
     ps_script = os.path.join(temp_dir, "update_runner.ps1")
     try:
-        with open(ps_script, "w", encoding="utf-8") as f:
+        with open(ps_script, "w", encoding="utf-8-sig") as f:
             f.write(ps_content)
     except Exception as e:
         logger.error("Fehler beim Schreiben von update_runner.ps1: %s", e)
@@ -472,6 +497,7 @@ exit
         subprocess.Popen(
             [
                 "powershell.exe",
+                "-NoExit",
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",

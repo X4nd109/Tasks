@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.3.2"
+#define AppVersion "2.3.3"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"
@@ -48,10 +48,10 @@ CloseApplications=yes
 CloseApplicationsFilter=Tasks.exe,TasksTray.exe
 
 [Languages]
-Name: "german"; MessagesFile: "compiler:Languages\German.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Desktop-Verknüpfung erstellen"; GroupDescription: "Zusätzliche Symbole:"
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Files]
 ; Symbole explizit deklarieren (stellt sicher, dass PNG & ICO immer verpackt werden)
@@ -61,39 +61,38 @@ Source: "{#SourceDir}\assets\app_icon.png"; DestDir: "{app}\assets"; Flags: igno
 Source: "{#SourceDir}\dist\Tasks\*"; DestDir: "{app}"; Excludes: "cache\*,data\*,config.json,*.log"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Startmenü: Exakt EIN einziger Startmenü-Eintrag mit dem Namen "Tasks"
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks öffnen"; IconFilename: "{app}\assets\app_icon.ico"
-; Desktop-Verknüpfung
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks öffnen"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
-
+; Desktop shortcut (optional task)
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Open Tasks"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
 [Run]
-; 1. Playwright Chromium Browser silent einrichten (für Teams-Login)
+; 1. Setup Playwright Chromium Browser silently (for Teams login)
 Filename: "{app}\Tasks.exe"; \
   Parameters: "--install-playwright"; \
-  StatusMsg: "Richte Browser-Komponenten ein (bitte kurz warten)..."; \
+  StatusMsg: "Setting up browser components (please wait)..."; \
   Flags: runhidden waituntilterminated
 
-; 2. Terminal-Befehl 'tasks' einrichten (als Checkbox auf Fertigstellen-Seite)
+; 2. Add 'tasks' command to PATH
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $p = [Environment]::GetEnvironmentVariable('Path', 'User'); if (-not $p) {{ $p = '' }}; $parts = $p.Split(';') | Where-Object {{ $_ -ne '' }}; if ($parts -notcontains $app) {{ [Environment]::SetEnvironmentVariable('Path', (($parts + $app) -join ';'), 'User') }}"""; \
   WorkingDir: "{app}"; \
   Flags: runhidden postinstall; \
-  Description: "Globalen Terminal-Befehl 'tasks' einrichten (empfohlen)"; \
+  Description: "Add 'tasks' command to PATH"; \
   Check: ShouldSetupTasksCommand
 
-; 3. Windows-Terminal-Profil mit Logo einrichten/migrieren (automatisch bei Installation & Update)
+; 3. Configure Windows Terminal profile
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $file = $candidates | Where-Object {{ Test-Path $_ }} | Select-Object -First 1; if ($file) {{ try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; $icon = Join-Path $app 'assets\app_icon.png'; if (-not (Test-Path $icon)) {{ $icon = Join-Path $app 'assets\app_icon.ico' }}; $entry = [ordered]@{{ guid = $guid; name = 'Tasks'; commandline = (Join-Path $app 'Tasks.exe'); startingDirectory = $app; icon = $icon; tabTitle = 'Tasks'; hidden = $false }}; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$app = '{app}'; $guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $candidates | Where-Object {{ Test-Path $_ }} | ForEach-Object {{ $file = $_; try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; $icon = Join-Path $app 'assets\app_icon.png'; if (-not (Test-Path $icon)) {{ $icon = Join-Path $app 'assets\app_icon.ico' }}; $entry = [ordered]@{{ guid = $guid; name = 'Tasks'; commandline = (Join-Path $app 'Tasks.exe'); startingDirectory = $app; icon = $icon; tabTitle = 'Tasks'; hidden = $false }}; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) + [PSCustomObject]$entry }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
   WorkingDir: "{app}"; \
-  StatusMsg: "Richte Windows-Terminal-Profil ein..."; \
-  Flags: runhidden; \
+  Flags: runhidden postinstall; \
+  Description: "Configure Windows Terminal profile"; \
   Check: ShouldSetupTerminalProfile
 
-; 4. Programm starten (optional)
-Filename: "{app}\Tasks.exe"; \
+; 4. Add Tasks to Start Menu
+Filename: "powershell.exe"; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$ws = New-Object -ComObject WScript.Shell; $target = '{autoprograms}\{#AppName}.lnk'; $s = $ws.CreateShortcut($target); $s.TargetPath = '{app}\Tasks.exe'; $s.WorkingDirectory = '{app}'; $s.IconLocation = '{app}\assets\app_icon.ico,0'; $s.Description = 'Open Tasks'; $s.Save()"""; \
   WorkingDir: "{app}"; \
-  Flags: postinstall nowait skipifsilent unchecked; \
-  Description: "Tasks jetzt starten"
+  Flags: runhidden postinstall; \
+  Description: "Add Tasks to Start Menu"; \
+  Check: ShouldSetupStartMenu
 
 [UninstallRun]
 ; Vor dem Löschen der Dateien: Terminal-Befehl 'tasks' aus dem User-PATH entfernen
@@ -103,10 +102,12 @@ Filename: "powershell.exe"; \
 
 ; Vor dem Löschen der Dateien: Windows-Terminal-Profil entfernen
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $file = $candidates | Where-Object {{ Test-Path $_ }} | Select-Object -First 1; if ($file) {{ try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; if ($data.profiles.list) {{ $data.profiles.list = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) }} elseif ($data.profiles -is [System.Array]) {{ $data.profiles = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}) }}; $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} catch {{}} }}"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$guid = '{{b4e2a1c3-7f8d-4a2e-9b1f-3c5d6e7a8b9c}'; $candidates = @((Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\LocalState\settings.json'), (Join-Path $env:LOCALAPPDATA 'Microsoft\Windows Terminal\settings.json')); $candidates | Where-Object {{ Test-Path $_ }} | ForEach-Object {{ $file = $_; try {{ $data = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json; $changed = $false; if ($data.profiles.list) {{ $filtered = @($data.profiles.list | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}); if ($filtered.Count -ne $data.profiles.list.Count) {{ $data.profiles.list = $filtered; $changed = $true; }} }} elseif ($data.profiles -is [System.Array]) {{ $filtered = @($data.profiles | Where-Object {{ $_.guid -ne $guid -and $_.name -ne 'Tasks' -and $_.name -ne 'Aufgaben-Detector' }}); if ($filtered.Count -ne $data.profiles.Count) {{ $data.profiles = $filtered; $changed = $true; }} }}; if ($changed) {{ $json = $data | ConvertTo-Json -Depth 32; [System.IO.File]::WriteAllText($file, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false)) }} }} catch {{}} }}"""; \
   Flags: runhidden; RunOnceId: "RemoveTerminalProfile"
 
 [UninstallDelete]
+; Clean up Start Menu shortcut if created
+Type: files; Name: "{autoprograms}\{#AppName}.lnk"
 ; Vollständige Bereinigung aller Runtime-Verzeichnisse und temporären Dateien
 Type: filesandordirs; Name: "{app}\cache"
 Type: filesandordirs; Name: "{app}\data"
@@ -121,13 +122,19 @@ Type: files; Name: "{app}\*.log"
 [Code]
 function ShouldSetupTasksCommand: Boolean;
 begin
-  Result := (ExpandConstant('{param:notasks|0}') <> '1') and (ExpandConstant('{param:update|0}') <> '1');
+  Result := (ExpandConstant('{param:notasks|0}') <> '1');
+end;
+
+function ShouldSetupStartMenu: Boolean;
+begin
+  Result := (ExpandConstant('{param:nostartmenu|0}') <> '1');
 end;
 
 function ShouldSetupTerminalProfile: Boolean;
 begin
   Result := (ExpandConstant('{param:noterminal|0}') <> '1') and
             (DirExists(ExpandConstant('{localappdata}\Packages\Microsoft.WindowsTerminal_8wekyb3d8bbwe')) or
+             DirExists(ExpandConstant('{localappdata}\Packages\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe')) or
              FileExists(ExpandConstant('{localappdata}\Microsoft\Windows Terminal\settings.json')));
 end;
 
@@ -154,6 +161,8 @@ begin
       DelTree(AppDir + '\assets\icons', True, True, True);
       DeleteFile(AppDir + '\assets\default_courses.json');
       // Alten Startmenü-Unterordner aus Versionen <= 2.2.0 bereinigen
+    // Startmenü-Verknüpfung und alte Unterordner restlos entfernen
+    DeleteFile(ExpandConstant('{autoprograms}\{#AppName}.lnk'));
       DelTree(ExpandConstant('{autoprograms}\Tasks'), True, True, True);
     end;
   end;
@@ -162,11 +171,15 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   AppDir: string;
+  FallbackDir: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
     // Autostart Registry-Eintrag entfernen
     RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Tasks');
+    // tasks:// URL-Protokoll & Toast-AppUserModelId entfernen
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\tasks');
+    RegDeleteKeyIncludingSubkeys(HKEY_CURRENT_USER, 'Software\Classes\AppUserModelId\Tasks');
   end;
   if CurUninstallStep = usPostUninstall then
   begin
@@ -175,6 +188,16 @@ begin
     if not DirExists(AppDir + '\.git') then
     begin
       DelTree(AppDir, True, True, True);
+    end;
+    // Alten Startmenü-Unterordner aus Versionen <= 2.2.0 restlos entfernen
+    // Startmenü-Verknüpfung und alte Unterordner restlos entfernen
+    DeleteFile(ExpandConstant('{autoprograms}\{#AppName}.lnk'));
+    DelTree(ExpandConstant('{autoprograms}\Tasks'), True, True, True);
+    // Fallback AppData-Ordner (%LOCALAPPDATA%\Tasks) restlos entfernen, falls separat
+    FallbackDir := ExpandConstant('{localappdata}\{#AppName}');
+    if (FallbackDir <> '') and (AppDir <> FallbackDir) and not DirExists(FallbackDir + '\.git') then
+    begin
+      DelTree(FallbackDir, True, True, True);
     end;
   end;
 end;

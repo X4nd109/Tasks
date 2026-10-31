@@ -284,6 +284,7 @@ class TestUpdateService(unittest.TestCase):
     def test_powershell_script_syntax_with_parser(self):
         """Validiert das generierte PowerShell-Skript gegen den offiziellen PowerShell-Parser, auch bei Pfaden mit Sonderzeichen."""
         import subprocess
+        import os
         from src.services.update_service import generate_powershell_updater_script
 
         # Teste Pfad mit Leerzeichen, einfachen Anführungszeichen und Dollarzeichen
@@ -306,6 +307,26 @@ class TestUpdateService(unittest.TestCase):
                 capture_output=True,
             )
             self.assertEqual(res.returncode, 0, f"PowerShell-Syntaxfehler: {res.stderr.decode('utf-8', errors='replace')}")
+
+            # Teste zudem echte Datei-Erkennung mit UTF-8 BOM via ParseFile
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".ps1", delete=False, mode="w", encoding="utf-8-sig") as tmp:
+                tmp.write(script)
+                tmp_p = tmp.name
+            try:
+                ps_file_cmd = (
+                    f"$t = $null; $errs = $null; "
+                    f"[System.Management.Automation.Language.Parser]::ParseFile('{tmp_p}', [ref]$t, [ref]$errs) > $null; "
+                    f"if ($errs -and $errs.Count -gt 0) {{ exit $errs.Count }} else {{ exit 0 }}"
+                )
+                file_res = subprocess.run(
+                    ["powershell.exe", "-NoProfile", "-Command", ps_file_cmd],
+                    capture_output=True,
+                )
+                self.assertEqual(file_res.returncode, 0, "PowerShell ParseFile fehlgeschlagen (BOM / ANSI-Encoding Problem)")
+            finally:
+                if os.path.exists(tmp_p):
+                    os.remove(tmp_p)
         except FileNotFoundError:
             pass
 
@@ -324,13 +345,18 @@ class TestUpdateService(unittest.TestCase):
 
             ps_file = os.path.join(get_update_temp_dir(), "update_runner.ps1")
             self.assertTrue(os.path.exists(ps_file))
-            with open(ps_file, "r", encoding="utf-8") as f:
+            with open(ps_file, "rb") as f:
+                header = f.read(3)
+            self.assertEqual(header, b"\xef\xbb\xbf", "update_runner.ps1 must have UTF-8 BOM for PowerShell 5.1 compatibility")
+            with open(ps_file, "r", encoding="utf-8-sig") as f:
                 ps_text = f.read()
             self.assertIn("Tasks Update Manager", ps_text)
+            self.assertIn("update.log", ps_text)
 
             mock_popen.assert_called_once()
             cmd_args = mock_popen.call_args[0][0]
             self.assertEqual(cmd_args[0], "powershell.exe")
+            self.assertIn("-NoExit", cmd_args)
             self.assertIn("-ExecutionPolicy", cmd_args)
             self.assertIn("Bypass", cmd_args)
             self.assertEqual(cmd_args[-1], ps_file)

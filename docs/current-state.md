@@ -1,11 +1,53 @@
 # Current Project State & Session Handoff — Tasks
 
 > **Last Updated**: 2026-10-31  
-> **Active Milestone**: Windows Terminal Profil Reparatur & Auto-Migration (Completed)
+> **Active Milestone**: Release v2.3.3 — Verlinkten Fachordner aus Test-Detailansicht öffnen & Installer Polish (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Verlinkten Fachordner direkt aus der Test-Detailansicht öffnen (`ExamDetailModal`) (2026-10-31)**:
+  - **Problem**: In der Detailansicht von Tests gab es keine Möglichkeit, mit einem Tastendruck oder Klick direkt in den verknüpften Ordner des jeweiligen Schulfachs im Windows Explorer zu springen.
+  - **Lösung & Implementierung**:
+    - `src/ui/tui_app.py`:
+      - `ExamDetailModal` um den Button `#btn_open_exam_folder` (`📁 Open Folder [F]`, `variant="primary"`) und das Binding `Binding("f", "open_folder", "Open Folder")` erweitert.
+      - Methode `action_open_folder()` ermittelt über `DirectoryService.find_matching_directory_for_course(self.exam.subject, self.exam.name)` das verknüpfte Verzeichnis und öffnet es via `DirectoryService.open_directory()`.
+      - Fallback: Wenn noch kein Ordner für das Fach hinterlegt ist, wird ein Toast-Hinweis (`No linked folder found for '<subject>'.`) angezeigt.
+      - Dialogbreite im Modal-CSS von `82` auf `88` angepasst, damit alle 4 Aktionsbuttons sauber nebeneinander dargestellt werden.
+    - `tests/test_untis_exams.py`: Neue Testfälle für das Rendern des Buttons, das Öffnen per Klick und die Taste `f` (inkl. Fallback bei nicht verknüpftem Fach) integriert; alle 18 Tests 100% bestanden.
+    - `docs/features.md` und `docs/changelog.md` aktualisiert.
+
+- [x] **Sofortiges Schließen des sekundären Terminals bei Vordergrund-Aktivierung (2026-10-31)**:
+  - **Problem**: Wenn Tasks im Hintergrund (System Tray) läuft und in einem neuen Terminal 	asks ausgeführt wurde, wurde Tasks in den Vordergrund geholt, aber das aufrufende Terminal wartete mit einem 10-Sekunden-Countdown („This terminal will close in 10s. Press [ENTER] to cancel...“), bevor es sich schloss.
+  - **Lösung & Implementierung**:
+    - main.py: Countdown, Tastenabfrage (msvcrt) und Konsolenausgaben in _handle_existing_instance_autoclose() vollständig entfernt.
+    - Das sekundäre Terminal schließt sich nun sofort und komplett geräuschlos via _close_current_terminal_window() und sys.exit(0).
+    - 	ests/test_terminal_autoclose.py: Unit-Tests auf sofortiges Schließen und absolute Geräuschlosigkeit (leere stdout) aktualisiert (100% bestanden).
+
+- [x] **Inno Setup Installer: Englische Lokalisierung & 3 Finish-Page-Optionen (2026-10-31)**:
+  - **Problem**: Der Setup-Wizard war auf Deutsch, bot am Ende nur zwei Optionen ("Globalen Terminal Befehl" und "Tasks Starten"), und Benutzer konnten die Verknüpfungen (Terminal-Profil, Startmenü) auf der Abschlussseite nicht selektiv konfigurieren.
+  - **Lösung & Implementierung**:
+    - `installer/tasks.iss`:
+      - `[Languages]` umgestellt auf `Name: "english"; MessagesFile: "compiler:Default.isl"`.
+      - Alle Texte (z. B. Task-Beschreibungen, Icon-Namen, Playwright-Download-Status) einheitlich auf Englisch übersetzt.
+      - Neugestaltung der `wpFinished`-Abschlussseite in `[Run]` mit 3 standardmäßig aktivierten Checkboxen:
+        1. `Add 'tasks' command to PATH`
+        2. `Configure Windows Terminal profile`
+        3. `Add Tasks to Start Menu`
+      - "Tasks Starten" ("Launch Tasks") vollständig von der Finish-Page entfernt.
+      - Startmenü-Verknüpfung wird bei Aktivierung dynamisch über PowerShell `WScript.Shell` angelegt; saubere Deinstallation über `[UninstallDelete]` und `CurUninstallStepChanged` gewährleistet.
+    - Setup erfolgreich kompiliert (`installer/dist/Tasks_Setup.exe`, 77.2 MB).
+
+- [x] **PowerShell 5.1 Update-Runner Parser-Fix & Windows Terminal Handshake (2026-10-31)**:
+  - **Problem**: Bei Klick auf Update im Reminder-Modal öffnete sich kurz ein zweites Terminalfenster mit roter Fehlermeldung und schloss sich augenblicklich; im Haupt-Terminal erschien `[Verarbeitung des Prozesses mit Code 42 beendet]`.
+  - **Ursache**:
+    - Windows PowerShell 5.1 liest `.ps1`-Dateien standardmäßig im Windows-1252 ANSI-Zeichensatz, wenn kein UTF-8 BOM vorhanden ist. Dadurch wurden UTF-8 Box-Rahmen (`│`) als `”` (Anführungszeichen) interpretiert, was einen fatalen Parser-Syntaxfehler in Zeile 138 verursachte.
+    - Windows Terminal wertet Exit-Codes ungleich 0 (`42`) als Fehler und hält den Tab mit Fehlermeldung offen (`closeOnExit: graceful`).
+  - **Lösung & Implementierung**:
+    - `src/services/update_service.py`: `update_runner.ps1` wird mit `encoding="utf-8-sig"` geschrieben (garantiert 0 Parser-Fehler in PowerShell 5.1); `-NoExit` verhindert Schließen bei Shell-Fehlern; persistentes Logging aller Schritte in `%TEMP%\Tasks_Update\update.log`.
+    - `src/ui/tui_app.py`: Sauberes Beenden mit Exit-Code `0` (schließt den Windows Terminal Tab geräuschlos); Sync-Flag bereinigt, um `"Sync not Complete"` zu verhindern.
+    - 21 Unit-Tests in `tests/test_update_service.py` und Volltest (561 Tests) 100% bestanden; Installer neu gebaut (`Tasks_Setup.exe`, 77.2 MB).
 
 - [x] **Windows Terminal Profil Reparatur & Auto-Migration (2026-10-31)**:
   - **Problem**: Nach der Umstellung auf Standalone-Binaries schloss sich das Windows-Terminal-Profil sofort wieder, da noch das veraltete 
@@ -51,7 +93,7 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
       - Verpackt ausschließlich kompilierte Binaries (`dist/Tasks/*`), Assets, `skills/tasks/SKILL.md` und `tasks.cmd` (Dateigröße ~77.2 MB).
       - Automatische Bereinigung alter `.py`-, `scripts/`- und `.bat`-Dateien bei Updates mit striktem Schutz des Entwicklungs-Repositories (`if not DirExists(AppDir + '\.git')`).
       - Autarke Einrichtung von User-`PATH` und Windows-Terminal-Profil (mit App-Logo und direktem Aufruf von `Tasks.exe`) via Inline-PowerShell, ganz ohne Hilfs-Batchdateien.
-      - **Vollständige Deinstallation**: Entfernt bei Uninstall restlos alle Runtime-Dateien (`cache/`, `data/`, `config.json`, `skills/`, `assets/`, `*.log`), reinigt den User-`PATH`, deregistriert das Windows-Terminal-Profil, löscht den Autostart-Registry-Key (`HKCU\...\Run\Tasks`) und entfernt das Anwendungsverzeichnis sauber vom System.
+      - **Vollständige Deinstallation**: Entfernt bei Uninstall restlos alle Runtime-Dateien (`cache/`, `data/`, `config.json`, `skills/`, `assets/`, `*.log`), reinigt den User-`PATH`, deregistriert das Windows-Terminal-Profil (aller Editionen), entfernt die `tasks://`-Protokoll- & AppUserModelId-Registry-Einträge, löscht den Autostart-Registry-Key (`HKCU\...\Run\Tasks`) sowie eventuelle externe Relikte (`{autoprograms}\Tasks`, `%LOCALAPPDATA%\Tasks`) und entfernt das Anwendungsverzeichnis sauber vom System.
 
 - [x] **Windows Toast Notifications & Neues Benachrichtigungsmenü (`NotificationConfigModal`) (2026-10-31)**:
   - **Problem**: Nach Hintergrund-Syncs oder vor Fristabläufen und Prüfungen gab es keine nativen Windows-Benachrichtigungen; der Nutzer musste die TUI manuell öffnen, um Fälligkeiten zu prüfen.
@@ -749,22 +791,25 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
 
 ## 2. In Progress / Immediate Next Steps
 
-- [x] **Release-Tagging & Distribution (v2.3.2)**: Bereitstellung der Windows-Terminal-Profil Reparatur, Auto-Migration und Installer-Hardening.
+- [x] **Sofortiges Schließen des sekundären Terminals**: 10s-Countdown und Ausgaben entfernt, sofortiges und geräuschlos Schließen bei Wiederherstellung aus dem System-Tray.
+- [x] **Updater-Runner PowerShell 5.1 Syntax-Fix & UTF-8 BOM Hardening**: Parsing-Crash durch Unicode-Rahmenzeichen und Tab-Blockade mit Exit-Code 42 behoben.
+- [x] **Inno Setup Installer: Englische Lokalisierung (`compiler:Default.isl`)**: Vollständig auf Englisch umgestellt.
+- [x] **Installer Finish-Page Neugestaltung**: Genau 3 Checkboxen (`PATH`, `Terminal Profile`, `Start Menu`), "Tasks Starten" entfernt, alle Checkboxen standardmäßig aktiv.
+- [x] **Uninstaller Cleanup**: Restlose Entfernung dynamischer Startmenü-Shortcuts, Registry-Protokolle (`tasks://`) und AppUserModelId.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
+- [ ] **Vorbereitung Release v2.3.3 / Tagging**: Versionierung hochstufen und Release-Paket schnüren.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session (Release v2.3.2)**:
-  - **Windows Terminal Profil Reparatur & Auto-Migration**:
-    - Problem gelöst, bei dem sich das Windows Terminal Profil wegen des veralteten 
-un.bat-Aufrufs sofort wieder schloss.
-    - 	erminal_profile_service.py erstellt: Erkennt MSIX- und Unpackaged-Settings und migriert veraltete 
-un.bat- oder Aufgaben-Detector-Einträge atomar auf Tasks.exe.
-    - Hintergrund-Auto-Repair in 	ui_app.py bei jedem Start der Anwendung.
-    - installer/tasks.iss angepasst: Hält das Windows-Terminal-Profil auch bei silenten Updates immer synchron.
-    - Lokales Profil sofort repariert.
+- **Erreicht in dieser Session (Sofortiges Terminal-Schließen & Installer-Hardening)**:
+  - **Sofortiges Schließen des sekundären Terminals bei Vordergrund-Aktivierung**:
+    - Der frühere 10-Sekunden-Countdown mit Abbruch-Option ([ENTER]) und Konsolenausgaben in main.py wurde vollständig entfernt.
+    - Wenn 	asks in einem Terminal ausgeführt wird während die Anwendung im Hintergrund läuft, wird das Hauptfenster nach vorne geholt (SHOW) und das aufrufende Terminal schließt sich unmittelbar und völlig geräuschlos via _close_current_terminal_window() und sys.exit(0).
+    - Unit-Tests in 	ests/test_terminal_autoclose.py auf sofortiges Schließen und 0 Stdout-Ausgabe aktualisiert.
+  - **PowerShell 5.1 Catppuccin Update-Runner**: update_runner.ps1 wird mit UTF-8 BOM (utf-8-sig) generiert; -NoExit und persistentes Logging in %TEMP%\\Tasks_Update\\update.log garantieren volle Nachvollziehbarkeit.
+  - **TUI Exit-Code Handshake**: TUI beendet sich beim Update mit Code 0 statt 42; Windows Terminal schließt den Haupt-Tab geräuschlos.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Codebase und Dokumentation sind auf Stand v2.3.2.
-  - Alle Tests laufen zu 100% fehlerfrei durch.
+  - Codebase, Tests, Installer und Dokumentation sind synchron und produktionsbereit.
+  - Alle Änderungen sind in `docs/changelog.md`, `docs/current-state.md` und `docs/features.md` eingepflegt.
