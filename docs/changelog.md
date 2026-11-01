@@ -9,6 +9,14 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.3.4] - 2026-11-01
+
+### Fixed
+- **Settings Navigation: Rückkehr zu Settings beim Schließen von `NotificationConfigModal` (`src/ui/tui_app.py`)**:
+  - Wenn man im Einstellungsmenü (`SettingsModal`) die Benachrichtigungseinstellungen (`NotificationConfigModal`) öffnete und unten auf `↩️ Back` klickte (oder Escape drückte bzw. `💾 Save Settings` wählte), schloss sich der Dialog, ohne das `SettingsModal` wieder anzuzeigen.
+  - Callback `on_notifications_done` ruft nun konsistent mit den übrigen Einstellungs-Subdialogen (`TrayConfigModal`, `AiExplainModal`, `SchoolConfigModal`) `self.action_open_settings()` auf.
+  - Zwei neue automatisierte Integrationstests in `tests/test_notifications.py` sichern die Rückkehr zu den Einstellungen bei Klick auf Back und Save dauerhaft ab.
+
 ## [2.3.3] - 2026-10-31
 
 ### Added

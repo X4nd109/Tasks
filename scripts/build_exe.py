@@ -42,8 +42,17 @@ def build() -> int:
     dist_dir = os.path.join(PROJECT_ROOT, "dist", "Tasks")
     if os.path.exists(dist_dir):
         print("[*] Cleaning existing dist/Tasks directory...")
+        import stat
+
+        def _handle_readonly(func, path, exc_info):
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                func(path)
+            except Exception:
+                pass
+
         for _ in range(5):
-            shutil.rmtree(dist_dir, ignore_errors=True)
+            shutil.rmtree(dist_dir, onerror=_handle_readonly)
             if not os.path.exists(dist_dir):
                 break
             import time

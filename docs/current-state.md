@@ -1,11 +1,18 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-10-31  
-> **Active Milestone**: Release v2.3.3 — Verlinkten Fachordner aus Test-Detailansicht öffnen & Installer Polish (Completed)
+> **Last Updated**: 2026-11-01  
+> **Active Milestone**: Release v2.3.4 — Settings Notification Navigation Fix & Polish (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Settings Navigation: Rückkehr zu Settings beim Schließen von `NotificationConfigModal` (2026-11-01)**:
+  - **Problem**: Klickte man in den Einstellungen (`SettingsModal`) auf `🔔 Notifications` und danach im Dialog auf `↩️ Back` (oder Escape bzw. `💾 Save Settings`), schloss sich der Dialog vollständig, anstatt wie bei den übrigen Einstellungsdialogen (`TrayConfigModal`, `AiExplainModal`, `SchoolConfigModal`) wieder zurück zum `SettingsModal` zu führen.
+  - **Lösung & Implementierung**:
+    - `src/ui/tui_app.py`: In `action_open_settings()` wurde der Callback `on_notifications_done(saved: bool)` um `self.action_open_settings()` ergänzt.
+    - `tests/test_notifications.py`: Neue automatisierte Integrationstests `test_notification_config_modal_back_returns_to_settings` und `test_notification_config_modal_save_returns_to_settings` hinzugefügt (100% bestanden).
+    - Dokumentation in `docs/changelog.md` und `docs/current-state.md` nachgeführt.
 
 - [x] **Verlinkten Fachordner direkt aus der Test-Detailansicht öffnen (`ExamDetailModal`) (2026-10-31)**:
   - **Problem**: In der Detailansicht von Tests gab es keine Möglichkeit, mit einem Tastendruck oder Klick direkt in den verknüpften Ordner des jeweiligen Schulfachs im Windows Explorer zu springen.

@@ -11002,6 +11002,7 @@ class TasksApp(App):
                 def on_notifications_done(saved: bool) -> None:
                     if saved:
                         self.notify("Notification settings saved.", severity="information")
+                    self.action_open_settings()
                 self.push_screen(NotificationConfigModal(), on_notifications_done)
 
 

@@ -440,6 +440,48 @@ class TestNotificationConfigModal(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(saved["exam_reminder_time"], "19:30")
         self.assertEqual(saved["exam_days_ahead"]["TE"], 5)
 
+    async def test_notification_config_modal_back_returns_to_settings(self):
+        """Verify that clicking Back in NotificationConfigModal returns to SettingsModal."""
+        app = TasksApp(MagicMock(), sync_on_startup=False)
+        async with app.run_test(size=(120, 45)) as pilot:
+            # 1. Open settings
+            app.action_open_settings()
+            await pilot.pause()
+            self.assertIsInstance(app.screen, SettingsModal)
+
+            # 2. Click Notifications
+            await pilot.click("#btn_set_notifications")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, NotificationConfigModal)
+
+            # 3. Click Back button
+            await pilot.click("#btn_notif_back")
+            await pilot.pause()
+
+            # 4. Must be back in SettingsModal
+            self.assertIsInstance(app.screen, SettingsModal)
+
+    async def test_notification_config_modal_save_returns_to_settings(self):
+        """Verify that clicking Save in NotificationConfigModal returns to SettingsModal."""
+        app = TasksApp(MagicMock(), sync_on_startup=False)
+        async with app.run_test(size=(120, 45)) as pilot:
+            # 1. Open settings
+            app.action_open_settings()
+            await pilot.pause()
+            self.assertIsInstance(app.screen, SettingsModal)
+
+            # 2. Click Notifications
+            await pilot.click("#btn_set_notifications")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, NotificationConfigModal)
+
+            # 3. Click Save button
+            await pilot.click("#btn_notif_save")
+            await pilot.pause()
+
+            # 4. Must be back in SettingsModal
+            self.assertIsInstance(app.screen, SettingsModal)
+
 
 if __name__ == "__main__":
     unittest.main()
