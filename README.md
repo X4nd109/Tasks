@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-0078D6.svg)](https://microsoft.com/windows)
 [![Python: 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://python.org)
-[![Tests: 409 passing](https://img.shields.io/badge/Tests-409%20passing-brightgreen.svg)](tests/)
+[![Tests: 584+ passing](https://img.shields.io/badge/Tests-584%2B%20passing-brightgreen.svg)](tests/)
 
 Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all school assignments from **Moodle** and **Microsoft Teams**, timetable absences and exam schedules from **WebUntis**, as well as schoolbooks and **Digi4School** in one unified view.
 
@@ -25,46 +25,57 @@ Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all sch
    - Automatically opens the target folder in Windows File Explorer upon completion.
    - 1-Click navigation directly to the official Moodle or Teams submission portal in your browser (`[O]`).
 
-3. **Native In-App AI Assistant & Explain Screen (`AiChatScreen`):**
+3. **Native In-App AI Assistant & Agent Integration (`AiChatScreen`):**
    - **🤖 Interactive Full-Screen AI Assistant (`[I]`):** Dedicated chat interface with browser-style tabs for all active assignments. Automatically remembers your last opened task.
-   - **Deep Context & Auto-Attachment Text Extraction:** Automatically extracts text from attached PDFs (via PyMuPDF / `fitz`), Markdown files, and source code (`.py`, `.c`, `.java`, etc.) into the AI system prompt. The assistant understands the exact requirements and questions without user re-explanation.
+   - **Deep Context & Auto-Attachment Text Extraction:** Automatically extracts text from attached PDFs (via PyMuPDF / `fitz`), Markdown files, and source code (`.py`, `.c`, `.java`, etc.) into the AI system prompt.
    - **Rich Markdown & Syntax Highlighting:** Assistant responses render with native Markdown, syntax-highlighted code fences (`MarkdownFence`), and inline code blocks across both standard and OLED themes.
-   - **Fluid Input Experience:** Direct Enter-to-send, `Shift+Enter` multi-line expansion (up to 3 rows with auto-scrollbar), and an animated 3-dot thinking indicator (`Thinking.` $\rightarrow$ `Thinking..` $\rightarrow$ `Thinking...`).
-   - **🤖 Seamless Ai Explain (`[A]`):** In any assignment detail modal, click `[A]` to immediately transition into the AI assistant with that task active and step-by-step guidance.
+   - **Fluid Input Experience:** Direct Enter-to-send, `Shift+Enter` multi-line expansion (up to 3 rows with auto-scrollbar), and an animated thinking indicator.
+   - **🤖 Seamless Ai Explain (`[A]`):** In any assignment detail modal, click `[A]` to transition directly into the AI assistant with that task active and step-by-step guidance.
    - **AI Configuration Hub (`Settings` -> `[7]` / `[A]`):** Configure Google Gemini Free-Tier (`gemini-2.0-flash`) or OpenAI-compatible models, auto-fetch available models, test connection, and switch languages (DE/EN).
 
-4. **WebUntis Absence Tracking & Timetable Reconciliation:**
+4. **🤖 AI Agent Hub & Universal Skill Management (`[Alt+A]` / `🤖 Agent`):**
+   - **Agent Hub Modal (`AgentHubModal`):** Central management interface connecting Tasks with autonomous coding agents (Google Antigravity, Claude Code, Cursor, Windsurf, custom harnesses).
+   - **Universal 3-Step Setup Wizard (`AgentSkillSetupModal`):** Interactive setup with native Windows Explorer folder selection, automatic `tasks` directory normalization, and keyless on-demand download of `SKILL.md` directly from GitHub (no tokens, credentials, or `gh` CLI required).
+   - **Skill State Management (`AgentSkillStatusModal`):** Live path display, auto-update status (`ENABLED`), relocation (`📦 Move Skill`) with automatic cleanup of old directories, and unlinking (`🗑️ Remove Skill`) with confirmation.
+   - **Self-Healing Integrity Check (`verify_skill_integrity`):** Automatically detects if the skill folder or `SKILL.md` was manually deleted on disk at startup or before updates, clears the configuration, and alerts the user with a warning toast (`Agent Skill was unexpectedly removed`).
+
+5. **WebUntis Absence Tracking & Timetable Reconciliation:**
    - Split absence view accessible via `[U]` or by clicking `[📅 Absences]`.
    - Reconciles raw absence intervals with the exact timetable of the respective day.
    - Handles split workshop/lab classes (e.g. `1x` vs `1y`) as well as cancelled lessons (*Entfall*) and substitutions.
    - **Automated Excuse Generator:** Generates official PDF excuse letters for school submission (HTL Spengergasse).
 
-5. **WebUntis Exam & Test Planner:**
+6. **WebUntis Exam & Test Planner:**
    - Dedicated exam overview via `[E]` showing date, subject, period, exam type, and classroom.
    - Live countdown timer for upcoming exams and major tests.
    - Record custom preparation notes and revision topics stored locally.
+   - 1-Click access to linked subject folders (`📁 Open Folder [F]`).
 
-6. **Quick-Jump & Schoolbooks Palette (`Backspace` / `/`):**
+7. **Quick-Jump & Schoolbooks Palette (`Backspace` / `/`):**
    - CommandPalette for instant opening of Moodle course pages in your browser.
-   - **Schoolbooks Tab:** Press `Tab` to switch seamlessly between *Courses* and *Schoolbooks*.
+   - **Schoolbooks Tab:** Press `Tab` to switch seamlessly between *Courses*, *Schoolbooks*, and *Directories*.
    - Link local PDF textbooks (`/link`) or online digital books (`/url`).
    - 1-Click opening in your OS default PDF viewer or browser.
 
-7. **Digi4School Book Grabber (`/download`):**
+8. **Digi4School Book Grabber (`/download`):**
    - Built-in Digi4School book grabber integrated directly into the search palette.
-   - Quick download via access code: `/download <access_code>` (or through the interactive `/` command menu).
-   - Downloads all high-resolution pages and compiles a fully searchable **OCR sandwich PDF** with table of contents (bookmarks), clickable hyperlinks, and synchronized page numbering.
+   - Quick download via access code: `/download <access_code>`.
+   - Downloads high-resolution pages and compiles a fully searchable **OCR sandwich PDF** with table of contents (bookmarks), clickable hyperlinks, and synchronized page numbering.
    - Saved directly to your Windows Downloads folder with a 1-click button to reveal the file.
 
-8. **Headless Agent CLI (`tasks`):**
+9. **Headless Agent CLI (`tasks`):**
    - Token-efficient CLI dispatcher designed for AI coding agents (Antigravity), terminal enthusiasts, and automated scripts.
-   - Subcommands include `tasks list`, `tasks show <id>`, `tasks download <id>`, `tasks books`, `tasks sync`, and `tasks open <subject>`.
+   - Subcommands include `tasks list`, `tasks show <id>`, `tasks download <id>`, `tasks books`, `tasks sync`, `tasks skill`, and `tasks update`.
    - `--json` flag for machine-readable integrations.
 
-9. **Zero-Knowledge & Local-First Security:**
-   - All credentials, session tokens, browser cookies, and caches remain strictly on your local machine.
-   - No plaintext passwords, no telemetry, no cloud dependency.
-   - Fully open source under the **MIT License**.
+10. **Self-Repair & Update Manager (`update.bat` & `tasks update`):**
+    - Standalone launcher script in the application root allowing users to repair or reinstall Tasks over the current installation, even if `Tasks.exe` is missing or damaged.
+    - Clean ANSI-cleared PowerShell update runner with 5-second auto-close.
+
+11. **Zero-Knowledge & Local-First Security:**
+    - All credentials, session tokens, browser cookies, and caches remain strictly on your local machine.
+    - No plaintext passwords, no telemetry, no cloud dependency.
+    - Fully open source under the **MIT License**.
 
 ---
 
@@ -143,7 +154,7 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 | `1` - `9` | View details for task 1 to 9 |
 | `A` | Add a manual custom task |
 | `E` | Open WebUntis Exams & Tests calendar |
-| `Backspace` / `/` | Open Quick-Jump Palette (Courses & Schoolbooks) |
+| `Backspace` / `/` | Open Quick-Jump Palette (Courses, Schoolbooks, Directories) |
 | `F` | Open Filter Menu (Status, Subject, Timeframe) |
 | `R` | Synchronize assignments from Moodle & Teams |
 | `U` | Open WebUntis Absences & Excuse PDF Generator |
@@ -152,6 +163,15 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 | `O` | Open Settings (Themes, Untis group, Excuse profile, AI config) |
 | `T` / `Ctrl+P` | Switch color theme (22 curated themes with instant preview) |
 | `Q` | Quit Tasks |
+
+### In-App AI Chat Screen (`AiChatScreen`)
+| Key | Action |
+|---|---|
+| `Alt+A` | 🤖 Open AI Agent Integration Hub (`AgentHubModal`) |
+| `Ctrl+L` | 🗑️ Clear conversation history for active assignment |
+| `Enter` | Send message to AI assistant |
+| `Shift+Enter` | Multi-line input expansion (up to 3 lines) |
+| `Esc` | Return to Main Task Dashboard |
 
 ### Assignment Details Modal
 | Key | Action |
@@ -164,13 +184,16 @@ Customize profile details for the excuse generator and WebUntis in `config.json`
 | `W` | Restore deleted assignment |
 | `Esc` / `Z` | Close details modal |
 
-### Schoolbooks Palette Commands (`Backspace` -> `Tab`)
-| Command | Action |
-|---|---|
-| `/link` | Link local PDF textbook via native file dialog |
-| `/url <URL>` | Link online textbook or digital e-book |
-| `/download <Code>` | Download Digi4School book & compile OCR PDF |
-| `/unlink` | Remove linked schoolbook |
+### Schoolbooks & Search Palette (`Backspace` -> `Tab`)
+| Command | Mode | Action |
+|---|---|---|
+| `<query>` | Courses | Instant search and 1-click browser navigation |
+| `/link` | Books | Link local PDF textbook via native file dialog |
+| `/url <URL>` | Books | Link online textbook or digital e-book |
+| `/download <Code>` | Books | Download Digi4School book & compile OCR PDF |
+| `/unlink` | Books | Remove linked schoolbook |
+| `/link` | Directories | Link local course directory |
+| `/unlink` | Directories | Remove linked course directory |
 
 ---
 
@@ -197,6 +220,12 @@ tasks download 1
 tasks download 1 --auto-dir
 tasks download <task_id> --dir "C:\School\SWP"
 
+# AI Agent Skill management
+tasks skill status
+tasks skill sync
+tasks skill move "C:\Users\xandi\.gemini\config\skills\tasks"
+tasks skill remove
+
 # Manage & open schoolbooks
 tasks books list
 tasks books open 1
@@ -205,6 +234,10 @@ tasks books download 26s7dbu5qxvw
 
 # Open Moodle course in browser
 tasks open SWP
+
+# Check for updates or force reinstall/repair
+tasks update
+tasks update --force
 
 # Trigger background sync
 tasks sync
@@ -230,18 +263,22 @@ Tasks/
 │   ├── architecture.md         # Architecture, Data Flow & Caching
 │   ├── conventions.md          # Code Conventions, Testing & Localization
 │   ├── current-state.md        # Session Handoff & Active Milestones
-│   └── decisions.md            # Architecture Decision Records (ADRs)
+│   ├── decisions.md            # Architecture Decision Records (ADRs)
+│   ├── features.md             # Button & Feature Catalog
+│   └── changelog.md            # Versioning & Release History
 ├── installer/                  # Inno Setup 6 Packaging Pipeline
 │   ├── build_installer.py      # Builds Tasks_Setup.exe
 │   └── tasks.iss               # Inno Setup script template
 ├── scripts/                    # Windows helper scripts
+│   ├── build_exe.py            # Standalone PyInstaller compilation
 │   ├── setup_command.bat       # Adds global 'tasks' command to User PATH
-│   └── remove_command.bat      # Removes 'tasks' command from User PATH
+│   ├── remove_command.bat      # Removes 'tasks' command from User PATH
+│   └── update_launcher.ps1     # Standalone update launcher
 ├── src/                        # Application source code
 │   ├── core/                   # Core business logic & storage
-│   │   ├── agent_cli.py        # Token-efficient headless CLI
+│   │   ├── agent_cli.py        # Token-efficient headless CLI & skill dispatcher
 │   │   ├── auth.py             # Authentication & session storage
-│   │   ├── config.py           # Dynamic path resolution, themes & config
+│   │   ├── config.py           # Dynamic path resolution, integrity checks & config
 │   │   ├── models.py           # Data models (Task, UntisExam, Lesson)
 │   │   └── task_manager.py     # Aggregation, sorting & caching
 │   ├── services/               # Platform adapters & generators
@@ -254,11 +291,12 @@ Tasks/
 │   │   ├── moodle_service.py   # Moodle HTTP scraper & API
 │   │   ├── schoolbook_service.py # Schoolbook registry & launcher
 │   │   ├── teams_service.py    # Microsoft Teams Playwright automation
-│   │   └── untis_service.py    # WebUntis JSON-RPC & timetable matcher
+│   │   ├── untis_service.py    # WebUntis JSON-RPC & timetable matcher
+│   │   └── update_service.py   # Update checks, PowerShell runner & auto-close
 │   └── ui/                     # Terminal User Interface (Textual)
 │       ├── tui_app.py          # Interactive TUI (screens, modals, palettes)
 │       └── ui.py               # Rich terminal formatting helpers
-├── tests/                      # Automated unit & integration test suite (381 tests)
+├── tests/                      # Automated unit & integration test suite (584+ tests)
 ├── AGENTS.md                   # Lean master index (< 3 KB) for Antigravity agents
 ├── config.example.json         # Example user configuration template
 ├── LICENSE                     # MIT License
@@ -266,7 +304,8 @@ Tasks/
 ├── requirements.txt            # Python dependencies
 ├── run.bat                     # 1-Click interactive launcher for Windows
 ├── setup.bat                   # Automated installation & repair script
-└── tasks.bat / .cmd            # Windows wrapper for 'tasks' terminal command
+├── update.bat                  # Standalone repair & update launcher
+└── tasks.cmd                   # Windows wrapper for 'tasks' terminal command
 ```
 
 ---
@@ -283,7 +322,7 @@ Tasks provides an automated packaging workflow using Inno Setup 6 and GitHub Act
    * Automatically downloads the official Python 3.12 installer on demand.
    * Produces the universal `installer/dist/Tasks_Setup.exe`.
 
-Every Git tag push (e.g. `git tag v1.0.0 && git push origin v1.0.0`) triggers the GitHub Actions workflow (`.github/workflows/release.yml`), compiling the installer on a Windows virtual runner and attaching the output binary to the GitHub Release.
+Every Git tag push (e.g. `git tag v2.4.0 && git push origin v2.4.0`) triggers the GitHub Actions workflow (`.github/workflows/release.yml`), compiling the installer on a Windows virtual runner and attaching the output binary to the GitHub Release.
 
 ---
 
