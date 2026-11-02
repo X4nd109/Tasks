@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.3.5"
+#define AppVersion "2.4.0"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"
@@ -58,7 +58,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "{#SourceDir}\assets\app_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\assets\app_icon.png"; DestDir: "{app}\assets"; Flags: ignoreversion
 ; Alle kompilierten Programm-Dateien aus dist\Tasks (rekursiv, inkl. _internal/ und fonts/)
-Source: "{#SourceDir}\dist\Tasks\*"; DestDir: "{app}"; Excludes: "cache\*,data\*,config.json,*.log"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\dist\Tasks\*"; DestDir: "{app}"; Excludes: "cache\*,data\*,config.json,*.log,skills\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 ; Desktop shortcut (optional task)
@@ -156,6 +156,7 @@ begin
       DelTree(AppDir + '\src', True, True, True);
       DelTree(AppDir + '\tests', True, True, True);
       DelTree(AppDir + '\scripts', True, True, True);
+      DelTree(AppDir + '\skills', True, True, True);
       DelTree(AppDir + '\__pycache__', True, True, True);
       DelTree(AppDir + '\assets\git-sync-tutorial', True, True, True);
       DelTree(AppDir + '\assets\icons', True, True, True);

@@ -451,3 +451,35 @@ This document records high-impact architectural choices, library selections, and
 - **Consequences**:
   - Positive: High-contrast, transparent, and aesthetically pleasing update experience matching the Tasks design; zero risk of file lock collisions during overwrite; notification spam protection.
   - Negative: Requires PowerShell 5.1+ (standard on Windows 10/11); legacy pply_update.cmd preserved as fallback.
+
+---
+
+## ADR-025: Standalone Reinstall/Repair Architecture, ANSI Screen Cleansing & Development Runtime Decoupling
+
+- **Date**: 2026-11-02
+- **Status**: Accepted
+- **Context**:
+  1. If Tasks files became corrupted or broken, users had no mechanism to repair or reinstall the current release over the existing directory without manually finding and running an installer.
+  2. In Step [3/5] of the PowerShell update runner, variable string lengths of the progress spinner caused text artifacts (`[✓] Installation abgeschlossen. onenten...nten...`) due to carriage return overwriting without line erasure.
+  3. The update runner was localized in German rather than English, and remained stuck at the PowerShell prompt after completion due to `-NoExit`.
+  4. The project root contained compiled `.exe` and `.cmd` files (`Tasks.exe`, `tasks.cmd`), causing local development testing to inadvertently invoke stale compiled binaries rather than live code in `main.py`.
+- **Decision**:
+  1. **Standalone Repair & Over-Install (`update.bat` & `scripts/update_launcher.ps1`)**:
+     - Provide `update.bat` in the application root, calling `scripts/update_launcher.ps1` (with UTF-8 BOM).
+     - Works 100% standalone even if Python runtime or `Tasks.exe` is corrupt or missing.
+     - Automatically queries GitHub REST API for the latest setup package, downloads it to `%TEMP%\Tasks_Update`, and launches the Catppuccin update runner.
+     - Add `tasks update [--force] [--json]` CLI command in `src/core/agent_cli.py`.
+  2. **ANSI Line Cleansing**:
+     - Prepend `$e[2K` (ANSI clear entire line) to progress frames and completion status lines in `update_runner.ps1`, eliminating all residual ghost text.
+  3. **English Localization & 5s Auto-Close**:
+     - Translate all headers, steps, status boxes, error diagnostics, and logs in the update runner into English.
+     - Restart `Tasks.exe` immediately in the background upon completion.
+     - Display a 5-second countdown timer (`Closing window in Xs... (press any key to exit immediately)`), safely wrapped in try/catch to handle non-interactive redirected pipes without throwing `InvalidOperationException`.
+     - Remove `-NoExit` from `launch_update_and_restart(...)` so the window automatically terminates on completion, while keeping `Read-Host` on error for troubleshooting.
+  4. **Development Runtime Decoupling**:
+     - Delete `tasks.cmd`, `Tasks.exe`, and `TasksTray.exe` from the project repository root.
+     - Remove step 4 (`csc.exe` RootLauncher compilation) from `scripts/build_exe.py` so builds only write to `dist/Tasks/`.
+     - Standardize development commands strictly on `python main.py <cmd>`.
+- **Consequences**:
+  - Positive: Complete one-click repair capability; zero terminal ghost artifacts; clean auto-close; foolproof development testing strictly executing live Python code.
+  - Negative: End-user binary testing requires explicit invocation of `dist\Tasks\Tasks.exe`.

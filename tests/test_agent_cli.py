@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 
@@ -264,6 +265,118 @@ class TestAgentCLI(unittest.TestCase):
                 data = json.loads(mock_stdout.getvalue())
                 self.assertTrue(data.get("installed"))
                 self.assertTrue(data.get("in_sync"))
+
+
+    def test_is_agent_cli_command_update(self):
+        """Testet die Erkennung von 'tasks update' und 'tasks reinstall'."""
+        self.assertTrue(is_agent_cli_command(["update"]))
+        self.assertTrue(is_agent_cli_command(["reinstall"]))
+        self.assertTrue(is_agent_cli_command(["--update"]))
+        self.assertTrue(is_agent_cli_command(["-reinstall"]))
+
+    @patch("sys.stdout", new_callable=io.StringIO)
+    def test_run_agent_cli_update_help(self, mock_stdout):
+        """Testet 'tasks update --help'."""
+        code = run_agent_cli(["update", "--help"])
+        self.assertEqual(code, 0)
+        out = mock_stdout.getvalue()
+        self.assertIn("Usage: tasks update", out)
+        self.assertIn("--force", out)
+        self.assertIn("--json", out)
+
+    @patch("sys.stdout", new_callable=io.StringIO)
+    @patch("src.services.update_service.check_for_updates")
+    def test_run_agent_cli_update_up_to_date_json(self, mock_check, mock_stdout):
+        """Testet 'tasks update --json' wenn kein Update vorliegt."""
+        mock_check.return_value = None
+        code = run_agent_cli(["update", "--json"])
+        self.assertEqual(code, 0)
+        data = json.loads(mock_stdout.getvalue())
+        self.assertFalse(data.get("update_available"))
+        self.assertIn("already up to date", data.get("message", ""))
+
+    @patch("sys.stdout", new_callable=io.StringIO)
+    @patch("src.services.update_service.launch_update_and_restart")
+    @patch("src.services.update_service.download_update_installer")
+    @patch("src.services.update_service.check_for_updates")
+    def test_run_agent_cli_update_force_flow(self, mock_check, mock_dl, mock_launch, mock_stdout):
+        """Testet den vollen Durchlauf von 'tasks update --force'."""
+        mock_check.return_value = {
+            "current_version": "2.3.5",
+            "latest_version": "2.3.5",
+            "installer_url": "https://example.com/Tasks_Setup.exe",
+            "installer_name": "Tasks_Setup.exe",
+            "installer_size": 10485760,
+        }
+        mock_dl.return_value = True
+        mock_launch.return_value = True
+
+        code = run_agent_cli(["update", "--force"])
+        self.assertEqual(code, 0)
+        out = mock_stdout.getvalue()
+        self.assertIn("Reinstalling v2.3.5", out)
+        self.assertIn("Launching Tasks Update Manager", out)
+        mock_dl.assert_called_once()
+        mock_launch.assert_called_once()
+
+
+
+    def test_normalize_skill_target_dir(self):
+        """Verifies that normalize_skill_target_dir preserves paths containing 'tasks'
+        and appends 'tasks' only when missing."""
+        from agent_cli import normalize_skill_target_dir
+
+        # Path lacking tasks
+        p1 = normalize_skill_target_dir("C:/my/skills")
+        self.assertTrue(p1.endswith("tasks"))
+
+        # Paths containing tasks in various forms
+        p2 = normalize_skill_target_dir("C:/my/Tasks App")
+        self.assertTrue(p2.endswith("Tasks App"))
+
+        p3 = normalize_skill_target_dir("C:/my/app_tasks")
+        self.assertTrue(p3.endswith("app_tasks"))
+
+        p4 = normalize_skill_target_dir("C:/my/TASKS - App")
+        self.assertTrue(p4.endswith("TASKS - App"))
+
+    def test_unlink_skill_and_cli_remove(self):
+        """Tests unlinking/removing a configured skill both via function and CLI."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            skill_dir = os.path.join(tmpdir, "tasks")
+            os.makedirs(skill_dir, exist_ok=True)
+            skill_file = os.path.join(skill_dir, "SKILL.md")
+            with open(skill_file, "w", encoding="utf-8") as f:
+                f.write("# Tasks Skill")
+
+            with patch("config.load_skill_target_dir", return_value=skill_dir),                  patch("config.clear_skill_target_dir") as mock_clear:
+                with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+                    code = run_agent_cli(["skill", "remove", "--json"])
+                    self.assertEqual(code, 0)
+                    data = json.loads(mock_stdout.getvalue())
+                    self.assertTrue(data.get("success"))
+                    mock_clear.assert_called_once()
+                    self.assertFalse(os.path.exists(skill_file))
+
+    def test_move_skill_target_dir_and_cli_move(self):
+        """Tests moving an installed skill to a new directory via CLI."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            old_dir = os.path.join(tmpdir, "old_tasks")
+            new_dir = os.path.join(tmpdir, "new_location", "tasks")
+            os.makedirs(old_dir, exist_ok=True)
+            old_file = os.path.join(old_dir, "SKILL.md")
+            with open(old_file, "w", encoding="utf-8") as f:
+                f.write("# Old Skill")
+
+            with patch("config.load_skill_target_dir", return_value=old_dir),                  patch("config.save_skill_target_dir") as mock_save,                  patch("agent_cli.sync_skill_to_dir", return_value=True):
+                with patch("sys.stdout", new_callable=io.StringIO) as mock_stdout:
+                    code = run_agent_cli(["skill", "move", new_dir, "--json"])
+                    self.assertEqual(code, 0)
+                    data = json.loads(mock_stdout.getvalue())
+                    self.assertTrue(data.get("success"))
+                    mock_save.assert_called_once_with(os.path.normpath(os.path.abspath(new_dir)))
+                    # Old file removed
+                    self.assertFalse(os.path.exists(old_file))
 
 
 if __name__ == "__main__":

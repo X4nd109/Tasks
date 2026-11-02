@@ -32,6 +32,10 @@
 | `TrayConfigModal` | Modal | Konfigurationsdialog für Hintergrundbetrieb, Minimieren in den System Tray, Windows-Autostart und automatisches Synchronisationsintervall. |
 | `DownloadLocationModal` | Modal | Englischer Auswahldialog für das Download-Ziel mit Hotkeys `[1]` (Auto-Dir Kursordner), `[2]` (Manuell via Windows Explorer), `[3]` (Standard Downloads-Ordner) und `[ESC]` (Abbrechen). |
 | `AiChatScreen` (`[I]`) | Screen | Vollwertiges In-App AI-Chat-Interface mit Browser-Style Tab-Leiste für alle offenen Aufgaben, dynamischer Tab-Expansion, Unterhaltungsverlauf, PyMuPDF-Textextraktion aus Anhängen, konstanter 3-Zeilen-Schreibleiste mit Zeilensprung (Mitte -> Oben/Mitte -> Oben/Mitte/Unten -> Bottom-Scroll), 3-Zeilen Back-Button (`↩️ Back`) unten rechts mit bündig darüber gestapeltem 1-Zeilen Clear-Button (`🗑️ Clear`, Tastenkürzel `[Ctrl+L]`), vorgeschaltetem Sicherheits-Bestätigungsdialog (`ClearChatConfirmModal`) und vollständiger Entfernung der oberen Toolbar zur Rückgewinnung von Chat-Zeilen sowie direkter Gemini / OpenAI REST-Anbindung. |
+| `AgentHubModal` | Modal | Zentrales englischsprachiges Zwischenmenü für AI Agents mit Optionen `🛠️ Setup Guide` (öffnet `AgentSkillSetupModal`) und `📊 Skill State` (dynamisch ausgegraut, wenn kein Skill installiert ist). |
+| `AgentSkillStatusModal` | Modal | Status- und Verwaltungsdialog für den AI Agent Skill mit Anzeige des Zielpfads, Auto-Update-Status und Aktionen zum Verschieben (`📦 Move Skill`) oder Löschen (`🗑️ Remove Skill`). |
+| `ConfirmSkillRemovalModal` | Modal | Sicherheits-Bestätigungsdialog vor dem Löschen der `SKILL.md` und Deaktivieren der automatischen Updates. |
+| `AgentSkillSetupModal` | Modal | 3-stufiger interaktiver Einrichtungs-Assistent auf Englisch zur Konfiguration und zum schlüssellosen On-Demand-Download des Tasks Agent Skills direkt von GitHub. |
 | `ClearChatConfirmModal` | Modal | Englischer Sicherheits-Bestätigungsdialog vor dem Leeren des Chat-Verlaufs (`🗑️ Clear` / `Cancel [ESC]`). |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
 | `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases (auch via Windows Toast & `tasks://update`), In-App-Download mit Fortschrittsbalken und Start des isolierten Catppuccin-PowerShell-Update-Runners (`update_runner.ps1`). |
@@ -55,7 +59,11 @@
 | `Open in browser` | `[O]` / `btn_open_browser` | Öffnet die offizielle Abgabeseite der Aufgabe direkt im Standard-Webbrowser. |
 | `Download files` | `[D]` / `btn_det_download` | Öffnet das englischsprachige `DownloadLocationModal` zur Zielwahl (Auto-Dir [1], Explorer [2], Downloads [3]). |
 | `Open Folder` | `[F]` / `btn_open_exam_folder` | Öffnet in `ExamDetailModal` den im System verknüpften lokalen Ordner für das Schulfach des Tests direkt im Windows Explorer. |
-| `Ai Assistant` | `[I]` / `btn_main_ai` | Öffnet das native In-App AI-Chat-Interface (`AiChatScreen`) mit allen offenen Aufgaben als Browser-Tabs. |
+| 🤖 Agent | [Alt+A] / tn_ai_agent_skill | Öffnet im AiChatScreen das zentrale Hub-Menü (AgentHubModal) zur Verwaltung und Einrichtung des AI Agent Skills. |
+| Setup Guide | tn_hub_setup | Öffnet im AgentHubModal den 3-stufigen Setup-Wizard (AgentSkillSetupModal). |
+| Skill State | tn_hub_state | Öffnet im AgentHubModal das Status- und Verwaltungsmodal (AgentSkillStatusModal); dynamisch ausgegraut (disabled), wenn noch kein Skill installiert ist. |
+| Move Skill | tn_status_move | Öffnet in AgentSkillStatusModal den Ordnerdialog und verschiebt die SKILL.md mitsamt Auto-Update-Pfad an das neue Ziel. |
+| Remove Skill | tn_status_remove | Öffnet die Bestätigung (ConfirmSkillRemovalModal), löscht SKILL.md von der Festplatte und entfernt den Pfad aus den automatischen Updates. |
 | `Ai Explain` | `[A]` / `btn_det_ai_explain` | Schließt die Aufgaben-Details, wechselt direkt in den In-App AI-Chat auf den Tab dieser Aufgabe und startet automatisch die Schritt-für-Schritt-Erklärung (dedupliziert: bereits erklärte Aufgaben öffnen direkt den bestehenden Chat, Reset bei Clear Chat). |
 | `AI Configuration` | `[7/A]` / `btn_set_ai_explain` | Öffnet in den Settings den Konfigurationsdialog (`AiConfigModal`) für KI-Provider, API-Key, Modell, Base-URL und Verbindungstest. |
 | `Notifications` | `[9/N]` / `btn_set_notifications` | Öffnet das Untermenü `NotificationConfigModal` zur Konfiguration von Windows Toast-Benachrichtigungen (Neue Aufgaben, Fälligkeitswarnungen, tägliche Prüfungs-Erinnerungen). |
@@ -120,6 +128,8 @@
 | `tasks tray` | `[status\|enable\|disable\|show\|quit\|sync-interval [VAL]] [--json]` | Steuert System-Tray, Auto-Sync-Intervall (`5min`, `10min`, `30min`, `1h`, `never`) und sendet `SHOW`/`QUIT`/`STATUS` an die Hintergrund-Instanz. |
 | `tasks autostart` | `[status\|enable\|disable] [--json]` | Verwaltet den Windows-Autostart-Eintrag unter `HKCU\...\Run`. |
 | `tasks sync` | `--deep` | Führt eine vollständige Plattform-Synchronisation im Hintergrund durch. |
+| `tasks update` | `[--force\|--reinstall] [--json]` | Prüft auf neuere GitHub-Releases oder stößt bei `--force` eine sofortige Neuinstallation/Reparatur über den Update Manager an. |
+| `update.bat` | — | Eigenständige Batch-Datei im Programmordner zur Reparatur und Drüber-Installation auch bei beschädigter `Tasks.exe`. |
 
 ---
 

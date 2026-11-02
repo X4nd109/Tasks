@@ -64,6 +64,12 @@ def check_for_updates(
     Gibt bei einem neueren Release ein Dict mit Details zurück,
     andernfalls (keine neuere Version, Offline, Timeout, Rate-Limit) None.
     """
+    try:
+        from config import verify_skill_integrity
+        verify_skill_integrity()
+    except Exception:
+        pass
+
     api_url = f"https://api.github.com/repos/{repo}/releases/latest"
     req = urllib.request.Request(
         api_url,
@@ -279,15 +285,15 @@ function Show-Header {
 }
 
 try {
-    Log-Message "=== Tasks Update gestartet: v$currentVer -> v$targetVer ==="
-    Log-Message "Zielverzeichnis: $targetAppDir"
+    Log-Message "=== Tasks Update started: v$currentVer -> v$targetVer ==="
+    Log-Message "Target directory: $targetAppDir"
     Log-Message "Installer: $installerPath"
 
     Show-Header
 
-    # [1/5] Warten auf Beendigung von Tasks
-    Write-Host "$cBlue  [1/5]$cReset Warten auf Beendigung von Tasks..."
-    Log-Message "[1/5] Warten auf Beendigung von Tasks..."
+    # [1/5] Waiting for Tasks to close
+    Write-Host "$cBlue  [1/5]$cReset Waiting for Tasks to close..."
+    Log-Message "[1/5] Waiting for Tasks to close..."
     $waitCount = 0
     while ($waitCount -lt 15) {
         $procs = Get-Process -Name Tasks, TasksTray -ErrorAction SilentlyContinue
@@ -302,28 +308,28 @@ try {
         $remaining | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 500
     }
-    Write-Host "$cGreen        [✓] Tasks erfolgreich beendet.$cReset"
-    Log-Message "[1/5] Tasks erfolgreich beendet."
+    Write-Host "$cGreen        [✓] Tasks closed successfully.$cReset"
+    Log-Message "[1/5] Tasks closed successfully."
     Write-Host ""
 
-    # [2/5] Installationspaket überprüfen
-    Write-Host "$cBlue  [2/5]$cReset Installationspaket überprüfen..."
-    Log-Message "[2/5] Installationspaket überprüfen..."
+    # [2/5] Verify installation package
+    Write-Host "$cBlue  [2/5]$cReset Verifying installation package..."
+    Log-Message "[2/5] Verifying installation package..."
     if (-not (Test-Path -LiteralPath $installerPath)) {
-        throw "Installationsdatei wurde nicht gefunden: $installerPath"
+        throw "Installation file not found: $installerPath"
     }
     $fileSize = (Get-Item -LiteralPath $installerPath).Length
     if ($fileSize -lt 1048576) {
-        throw "Installationsdatei ist unvollständig ($fileSize Bytes)."
+        throw "Installation file looks incomplete ($fileSize Bytes)."
     }
     $sizeMb = [math]::Round($fileSize / 1MB, 1)
-    Write-Host "$cGreen        [✓] Installationspaket verifiziert ($sizeMb MB).$cReset"
-    Log-Message "[2/5] Installationspaket verifiziert ($sizeMb MB)."
+    Write-Host "$cGreen        [✓] Installation package verified ($sizeMb MB).$cReset"
+    Log-Message "[2/5] Installation package verified ($sizeMb MB)."
     Write-Host ""
 
-    # [3/5] Ausführung des Inno Setup Installers
-    Write-Host "$cBlue  [3/5]$cReset Update-Dateien werden installiert..."
-    Log-Message "[3/5] Inno Setup Installer wird gestartet..."
+    # [3/5] Installing update files
+    Write-Host "$cBlue  [3/5]$cReset Installing update files..."
+    Log-Message "[3/5] Inno Setup installer starting..."
     $instArgs = @(
         "`"/DIR=$targetAppDir`"",
         "/VERYSILENT",
@@ -339,65 +345,85 @@ try {
     while (-not $proc.HasExited) {
         $char = $spinner[$i % $spinner.Length]
         $bar = "━" * (($i % 24) + 1)
-        Write-Host -NoNewline "`r$cYellow        $char [ $bar ] Extrahiere und aktualisiere Komponenten...$cReset"
+        Write-Host -NoNewline "`r$e[2K$cYellow        $char [ $bar ] Extracting and updating components...$cReset"
         Start-Sleep -Milliseconds 120
         $i++
     }
-    Write-Host "`r$cGreen        [✓] Installation abgeschlossen.                         $cReset"
-    Log-Message "[3/5] Inno Setup beendet mit ExitCode $($proc.ExitCode)."
+    Write-Host "`r$e[2K$cGreen        [✓] Installation completed.$cReset"
+    Log-Message "[3/5] Inno Setup finished with exit code $($proc.ExitCode)."
     Write-Host ""
 
     if ($proc.ExitCode -ne 0) {
-        throw "Inno Setup Installer wurde mit Fehlercode $($proc.ExitCode) beendet."
+        throw "Inno Setup installer exited with error code $($proc.ExitCode)."
     }
 
-    # [4/5] Installation verifizieren
-    Write-Host "$cBlue  [4/5]$cReset Installation überprüfen..."
-    Log-Message "[4/5] Installation überprüfen..."
+    # [4/5] Verify installation
+    Write-Host "$cBlue  [4/5]$cReset Verifying installation..."
+    Log-Message "[4/5] Verifying installation..."
     $exePath = Join-Path $targetAppDir "Tasks.exe"
     $cmdPath = Join-Path $targetAppDir "tasks.cmd"
-    if (-not (Test-Path -LiteralPath $exePath) -and -not (Test-Path -LiteralPath $cmdPath)) {
-        throw "Zielanwendung konnte nach der Installation nicht gefunden werden ($targetAppDir)."
+    $runBat  = Join-Path $targetAppDir "run.bat"
+    if (-not (Test-Path -LiteralPath $exePath) -and -not (Test-Path -LiteralPath $cmdPath) -and -not (Test-Path -LiteralPath $runBat)) {
+        throw "Target application could not be found after installation ($targetAppDir)."
     }
     Set-Content -Path $appliedFile -Value "1" -Encoding UTF8 -ErrorAction SilentlyContinue
-    Write-Host "$cGreen        [✓] Programmdateien erfolgreich verifiziert.$cReset"
-    Log-Message "[4/5] Programmdateien erfolgreich verifiziert."
+    Write-Host "$cGreen        [✓] Program files verified successfully.$cReset"
+    Log-Message "[4/5] Program files verified successfully."
     Write-Host ""
 
-    # [5/5] Bereinigung und Neustart
-    Write-Host "$cBlue  [5/5]$cReset Temporäre Dateien bereinigen und Tasks neu starten..."
-    Log-Message "[5/5] Bereinigung und Neustart..."
+    # [5/5] Cleanup and restart
+    Write-Host "$cBlue  [5/5]$cReset Cleaning up temporary files and restarting Tasks..."
+    Log-Message "[5/5] Cleaning up and restarting..."
     Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $pendingFile -Force -ErrorAction SilentlyContinue
-    Write-Host "$cGreen        [✓] Bereinigung abgeschlossen.$cReset"
+    Write-Host "$cGreen        [✓] Cleanup completed.$cReset"
     Write-Host ""
 
     Write-Host "$cLav  ╭────────────────────────────────────────────────────────╮$cReset"
-    Write-Host "$cLav  │$cBold$cGreen        ✨ Update erfolgreich installiert!              $cReset$cLav│$cReset"
-    Write-Host "$cLav  │$cSub           Tasks wird automatisch neu gestartet...        $cReset$cLav│$cReset"
+    Write-Host "$cLav  │$cBold$cGreen        ✨ Update installed successfully!          $cReset$cLav│$cReset"
+    Write-Host "$cLav  │$cSub           Tasks will restart automatically...        $cReset$cLav│$cReset"
     Write-Host "$cLav  ╰────────────────────────────────────────────────────────╯$cReset"
     Write-Host ""
 
+    # Restart Tasks immediately
     Start-Sleep -Seconds 1
     if (Test-Path -LiteralPath $exePath) {
         Start-Process -FilePath $exePath -WorkingDirectory $targetAppDir
     } elseif (Test-Path -LiteralPath $cmdPath) {
         Start-Process -FilePath $cmdPath -WorkingDirectory $targetAppDir
+    } elseif (Test-Path -LiteralPath $runBat) {
+        Start-Process -FilePath $runBat -WorkingDirectory $targetAppDir
     }
+
+    # 5-second auto-close countdown (press any key to exit immediately)
+    for ($sec = 5; $sec -gt 0; $sec--) {
+        Write-Host -NoNewline "`r$e[2K$cSub        Closing window in ${sec}s... (press any key to exit immediately)$cReset"
+        for ($k = 0; $k -lt 10; $k++) {
+            try {
+                if ([Console]::KeyAvailable) {
+                    $null = [Console]::ReadKey($true)
+                    $sec = 0
+                    break
+                }
+            } catch {}
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    Write-Host ""
     exit 0
 
 } catch {
     $errDetails = $_.Exception.ToString()
-    Log-Message "UPDATE FEHLGESCHLAGEN: $errDetails"
+    Log-Message "UPDATE FAILED: $errDetails"
     Write-Host ""
     Write-Host "$cRed  ╭────────────────────────────────────────────────────────╮$cReset"
-    Write-Host "$cRed  │$cBold                   UPDATE FEHLGESCHLAGEN                  $cReset$cRed│$cReset"
+    Write-Host "$cRed  │$cBold                   UPDATE FAILED                  $cReset$cRed│$cReset"
     Write-Host "$cRed  ╰────────────────────────────────────────────────────────╯$cReset"
-    Write-Host "$cRed  Fehlerdetails: $($_.Exception.Message)$cReset"
-    Write-Host "$cDim  Detailliertes Log: $logFile$cReset"
+    Write-Host "$cRed  Error details: $($_.Exception.Message)$cReset"
+    Write-Host "$cDim  Detailed log: $logFile$cReset"
     Write-Host ""
-    Write-Host "$cSub  Das Fenster bleibt zur Fehleranalyse geöffnet.$cReset"
-    Write-Host "$cSub  Drücken Sie die Eingabetaste zum Beenden...$cReset"
+    Write-Host "$cSub  This window will remain open for troubleshooting.$cReset"
+    Write-Host "$cSub  Press Enter to close...$cReset"
     Read-Host
     exit 1
 }
@@ -425,6 +451,12 @@ def launch_update_and_restart(
     3. Startet update_runner.ps1 in einem neuen Konsolenfenster.
     4. Schreibt weiterhin apply_update.cmd für Abwärtskompatibilität.
     """
+    try:
+        from config import verify_skill_integrity
+        verify_skill_integrity()
+    except Exception:
+        pass
+
     target_app_dir = app_dir or WORKSPACE_DIR
     temp_dir = get_update_temp_dir()
     pending_file = os.path.join(temp_dir, "pending_update.txt")
@@ -497,7 +529,6 @@ exit
         subprocess.Popen(
             [
                 "powershell.exe",
-                "-NoExit",
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",

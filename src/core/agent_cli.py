@@ -516,6 +516,8 @@ def normalize_argv(argv: List[str]) -> List[str]:
             "--courses": "courses", "-courses": "courses",
             "--skill": "skill", "-skill": "skill",
             "--skills": "skill", "-skills": "skill",
+            "--update": "update", "-update": "update",
+            "--reinstall": "reinstall", "-reinstall": "reinstall",
         }
 
         if i == 0 and lower in flag_to_cmd:
@@ -546,6 +548,7 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "books", "book", "schulbuch", "schulbücher",
         "dirs", "dir", "directories", "folder", "folders", "ordner",
         "skill", "skills",
+        "update", "reinstall",
         "autostart", "tray"
     }
 
@@ -566,6 +569,7 @@ def is_agent_cli_command(argv: List[str]) -> bool:
         "-dirs", "--dirs", "-dir", "--dir", "-folder", "--folder",
         "-skill", "--skill", "-skills", "--skills",
         "-set-dir", "--set-dir",
+        "-update", "--update", "-reinstall", "--reinstall",
         "-autostart", "--autostart", "-tray", "--tray"
     ]
 
@@ -1174,6 +1178,12 @@ def run_agent_cli(argv: List[str]) -> int:
     if command == "tray":
         return handle_tray_command(sub_args)
 
+    # ─────────────────────────────────────────────────────────────────
+    # 15. UPDATE & REINSTALL
+    # ─────────────────────────────────────────────────────────────────
+    if command in ["update", "reinstall"]:
+        return handle_update_command(sub_args)
+
     # Unbekannter Befehl
     print(f"Unknown command: '{command}'. Use 'tasks guide' or 'tasks --help' for available commands.")
     return 1
@@ -1326,6 +1336,82 @@ def handle_tray_command(sub_args: List[str]) -> int:
             print(f"Background Process State: {'RUNNING in tray' if running else 'NOT RUNNING'}")
             print(f"Auto-Sync Interval: {auto_sync_interval}")
         return 0
+
+
+def handle_update_command(sub_args: List[str]) -> int:
+    """Checks for, downloads, and launches updates or reinstallations via CLI."""
+    try:
+        from config import verify_skill_integrity
+        verify_skill_integrity()
+    except Exception:
+        pass
+
+    if any(a in ["--help", "-help", "-h"] for a in sub_args):
+        print("Usage: tasks update [--force] [--json]")
+        print("  --force   Force reinstall or repair over current installation.")
+        print("  --json    Output results in JSON format.")
+        return 0
+
+    parser = argparse.ArgumentParser(prog="tasks update", add_help=False)
+    parser.add_argument("--force", action="store_true", help="Force reinstall")
+    parser.add_argument("--json", action="store_true", help="JSON output")
+    args, _ = parser.parse_known_args(sub_args)
+
+    import tempfile
+    from src.services.update_service import check_for_updates, download_update_installer, launch_update_and_restart
+
+    info = check_for_updates()
+    if not args.force and not info:
+        msg = "Tasks is already up to date."
+        if args.json:
+            print(json.dumps({"update_available": False, "message": msg}, ensure_ascii=False, indent=2))
+        else:
+            print(msg)
+        return 0
+
+    if not info:
+        msg = "Could not retrieve release info from GitHub."
+        if args.json:
+            print(json.dumps({"success": False, "error": msg}, ensure_ascii=False, indent=2))
+        else:
+            print(f"Error: {msg}")
+        return 1
+
+    cur_ver = info.get("current_version", "")
+    lat_ver = info.get("latest_version", "")
+    url = info.get("installer_url", "")
+    name = info.get("installer_name", "Tasks_Setup.exe")
+
+    target_dir = os.path.join(tempfile.gettempdir(), "Tasks_Update")
+    target_installer = os.path.join(target_dir, name)
+
+    if args.force:
+        if not args.json:
+            print(f"Reinstalling v{cur_ver} over current installation...")
+    else:
+        if not args.json:
+            print(f"Updating from v{cur_ver} to v{lat_ver}...")
+
+    ok = download_update_installer(url, target_installer)
+    if not ok:
+        if args.json:
+            print(json.dumps({"success": False, "error": "Download failed"}, ensure_ascii=False))
+        else:
+            print("Error: Download failed.")
+        return 1
+
+    if not args.json:
+        print("Launching Tasks Update Manager...")
+
+    launched = launch_update_and_restart(target_installer)
+    if args.json:
+        print(json.dumps({
+            "success": launched,
+            "current_version": cur_ver,
+            "target_version": lat_ver if not args.force else cur_ver,
+            "launched": launched,
+        }, ensure_ascii=False, indent=2))
+    return 0 if launched else 1
 
 
 
@@ -1714,6 +1800,8 @@ SKILL_SELECT_DIR_MESSAGE = (
 SKILL_CANCELLED_MESSAGE = "Operation cancelled. No folder selected."
 
 SKILL_SET_DIR_ACTIONS = {"set-dir", "setdir", "set_dir", "config-dir", "configdir", "target-dir", "targetdir"}
+SKILL_REMOVE_ACTIONS = {"remove", "unlink", "delete", "rm", "uninstall"}
+SKILL_MOVE_ACTIONS = {"move", "mv", "relocate"}
 
 # Override-Hook: standardmäßig None, wird zur Laufzeit aus `win_dialogs` aufgelöst.
 pick_directory = None
@@ -1743,6 +1831,45 @@ def resolve_skill_source_file(source_file: Optional[str] = None) -> Optional[str
     return None
 
 
+SKILL_GITHUB_RAW_URL = "https://raw.githubusercontent.com/X4nd109/Tasks/main/skills/tasks/SKILL.md"
+
+
+def download_skill_from_github(target_dir: str, timeout: float = 10.0, raw_url: str = SKILL_GITHUB_RAW_URL) -> Tuple[bool, str]:
+    """Downloads `SKILL.md` directly from the public GitHub repository without requiring authentication.
+
+    Returns (success, path_or_error_message).
+    """
+    if not target_dir or not isinstance(target_dir, str):
+        return False, "Target directory not specified."
+    clean_target = os.path.abspath(os.path.expanduser(target_dir.strip()))
+    if not clean_target:
+        return False, "Invalid target directory."
+
+    import urllib.request
+    import urllib.error
+
+    req = urllib.request.Request(
+        raw_url,
+        headers={"User-Agent": "Tasks-App/SkillDownloader"}
+    )
+    try:
+        os.makedirs(clean_target, exist_ok=True)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return False, f"HTTP Error {resp.status}"
+            content = resp.read()
+        target_file = os.path.join(clean_target, "SKILL.md")
+        with open(target_file, "wb") as f:
+            f.write(content)
+        return True, target_file
+    except urllib.error.URLError as e:
+        logger.debug("Network error downloading skill: %s", e)
+        return False, f"Network error: {e}"
+    except Exception as e:
+        logger.debug("Failed to download skill: %s", e)
+        return False, str(e)
+
+
 def sync_skill_to_dir(target_dir: str, source_file: Optional[str] = None) -> bool:
     """Kopiert `SKILL.md` und alle Begleitdateien aus `skills/tasks/` direkt nach `target_dir`.
 
@@ -1756,8 +1883,12 @@ def sync_skill_to_dir(target_dir: str, source_file: Optional[str] = None) -> boo
 
     src_skill_file = resolve_skill_source_file(source_file)
     if not src_skill_file:
-        logger.debug("Skill source file not found (source_file=%s)", source_file)
-        return False
+        if source_file is not None:
+            logger.debug("Skill source file not found (source_file=%s)", source_file)
+            return False
+        logger.info("Local skill source not found, downloading from GitHub: %s", SKILL_GITHUB_RAW_URL)
+        ok, _ = download_skill_from_github(clean_target)
+        return ok
 
     src_dir = os.path.dirname(src_skill_file)
     if os.path.normcase(os.path.abspath(clean_target)) == os.path.normcase(os.path.abspath(src_dir)):
@@ -1838,22 +1969,166 @@ def _skill_files_in_sync(source_skill_file: str, target_dir: str) -> bool:
         return False
 
 
+def normalize_skill_target_dir(raw_path: str) -> str:
+    """Checks if 'tasks' appears anywhere in the folder name (case-insensitive).
+    If not, appends 'tasks'."""
+    if not raw_path or not isinstance(raw_path, str) or not raw_path.strip():
+        return ""
+    norm = os.path.normpath(os.path.abspath(os.path.expanduser(raw_path.strip())))
+    basename = os.path.basename(norm).lower()
+    if "tasks" not in basename:
+        norm = os.path.join(norm, "tasks")
+    return norm
+
+
+def unlink_skill(delete_files: bool = True) -> Tuple[bool, str]:
+    """Removes the configured AI agent skill and unlinks it from auto-updates.
+
+    If `delete_files` is True, also deletes SKILL.md and removes the directory if empty.
+    Returns (success, message).
+    """
+    from config import load_skill_target_dir, clear_skill_target_dir
+
+    target_dir = load_skill_target_dir()
+    if not target_dir:
+        return False, "No skill directory configured."
+
+    errors = []
+    if delete_files and os.path.isdir(target_dir):
+        skill_file = os.path.join(target_dir, "SKILL.md")
+        if os.path.isfile(skill_file):
+            try:
+                os.remove(skill_file)
+            except Exception as e:
+                errors.append(f"Could not remove SKILL.md: {e}")
+
+        # If directory is now empty, remove directory
+        try:
+            if not os.listdir(target_dir):
+                os.rmdir(target_dir)
+        except Exception:
+            pass
+
+    clear_skill_target_dir()
+
+    if errors:
+        return True, f"Skill unlinked from auto-update, but some files could not be deleted: {'; '.join(errors)}"
+    return True, f"Skill successfully unlinked and removed from auto-update (was at '{target_dir}')."
+
+
+def move_skill_target_dir(new_target_dir: str) -> Tuple[bool, str]:
+    """Moves the installed skill to a new directory and updates auto-update configuration.
+
+    Returns (success, new_path_or_error_message).
+    """
+    from config import load_skill_target_dir, save_skill_target_dir
+
+    if not new_target_dir or not isinstance(new_target_dir, str) or not new_target_dir.strip():
+        return False, "New target directory not specified."
+
+    clean_new = normalize_skill_target_dir(new_target_dir)
+    old_target = load_skill_target_dir()
+
+    # Sync to new directory
+    ok = sync_skill_to_dir(clean_new)
+    if not ok:
+        return False, f"Failed to install/copy skill to '{clean_new}'."
+
+    # If old location existed and differs, clean up old SKILL.md
+    if old_target:
+        clean_old = os.path.normpath(os.path.abspath(old_target))
+        if clean_old != clean_new and os.path.isdir(clean_old):
+            old_skill_file = os.path.join(clean_old, "SKILL.md")
+            if os.path.isfile(old_skill_file):
+                try:
+                    os.remove(old_skill_file)
+                except Exception:
+                    pass
+            try:
+                if not os.listdir(clean_old):
+                    os.rmdir(clean_old)
+            except Exception:
+                pass
+
+    save_skill_target_dir(clean_new)
+    return True, clean_new
+
+
 def handle_skill_command(sub_args: List[str]) -> int:
     """Manages syncing, configuration and status of the AI agent skill."""
     from config import load_skill_target_dir, save_skill_target_dir, is_skill_synced
 
     parser = argparse.ArgumentParser(prog="tasks skill", add_help=False)
-    parser.add_argument("action", nargs="?", default=None, help="sync, install, update, status, check, set-dir")
-    parser.add_argument("path", nargs="?", default="", help="Target directory (for set-dir)")
-    parser.add_argument("--target", default="", help="Explicit target directory for a one-off sync")
+    parser.add_argument("action", nargs="?", default=None, help="sync, install, update, status, check, set-dir, remove, unlink, move")
+    parser.add_argument("path", nargs="?", default="", help="Target directory (for set-dir or move)")
+    parser.add_argument("--target", default="", help="Explicit target directory")
     parser.add_argument("--set-dir", dest="set_dir", nargs="?", const="", default=None, help="Set/configure the skill directory")
+    parser.add_argument("--keep-files", action="store_true", help="Keep skill files on disk when unlinking")
     parser.add_argument("--json", action="store_true", help="JSON output")
     args, _ = parser.parse_known_args(sub_args)
 
     action = (args.action or "sync").lower()
     path_arg = (args.path or "").strip()
 
+    remove_requested = action in SKILL_REMOVE_ACTIONS
+    move_requested = action in SKILL_MOVE_ACTIONS
     set_dir_requested = action in SKILL_SET_DIR_ACTIONS or args.set_dir is not None
+
+    # ─────────────────────────────────────────────────────────────
+    # REMOVE / UNLINK
+    # ─────────────────────────────────────────────────────────────
+    if remove_requested:
+        delete_files = not args.keep_files
+        ok, msg = unlink_skill(delete_files=delete_files)
+        if args.json:
+            print(json.dumps({
+                "success": ok,
+                "action": "remove",
+                "delete_files": delete_files,
+                "message": msg,
+                "configured_dir": load_skill_target_dir(),
+            }, ensure_ascii=False, indent=2))
+        else:
+            if ok:
+                print(f"OK: {msg}")
+            else:
+                print(f"Notice: {msg}")
+        return 0 if ok else 1
+
+    # ─────────────────────────────────────────────────────────────
+    # MOVE
+    # ─────────────────────────────────────────────────────────────
+    if move_requested:
+        dest_dir = path_arg or (args.target or "").strip()
+        if not dest_dir:
+            dest_dir = prompt_for_skill_directory()
+        if not dest_dir:
+            if args.json:
+                print(json.dumps({
+                    "success": False,
+                    "cancelled": True,
+                    "message": SKILL_CANCELLED_MESSAGE,
+                }, ensure_ascii=False, indent=2))
+            else:
+                print(SKILL_CANCELLED_MESSAGE)
+            return 0
+
+        ok, res = move_skill_target_dir(dest_dir)
+        if args.json:
+            print(json.dumps({
+                "success": ok,
+                "action": "move",
+                "target_dir": res if ok else None,
+                "error": res if not ok else None,
+                "configured_dir": load_skill_target_dir(),
+            }, ensure_ascii=False, indent=2))
+        else:
+            if ok:
+                print(f"OK: Skill successfully moved to: {res}")
+            else:
+                print(f"Error: {res}")
+        return 0 if ok else 1
+
     if not set_dir_requested and action not in ["sync", "install", "update", "status", "check", "info"]:
         action = "sync"
 
@@ -1880,7 +2155,7 @@ def handle_skill_command(sub_args: List[str]) -> int:
             print(json.dumps({
                 "installed": installed,
                 "in_sync": in_sync,
-                "source_file": source_skill_file if source_exists else None,
+                "source_file": source_skill_file if source_exists else SKILL_GITHUB_RAW_URL,
                 "target_file": target_skill_file,
                 "target_dir": target_dir,
                 "configured_dir": configured_dir,
@@ -1899,7 +2174,7 @@ def handle_skill_command(sub_args: List[str]) -> int:
                 else:
                     print(f"Notice: tasks skill is not installed at '{target_dir}' yet. Run 'tasks skill sync' to install.")
             if not source_exists:
-                print(f"Warning: Source skill not found at '{source_skill_file}'.")
+                print(f"Notice: Using on-demand download from GitHub repository ({SKILL_GITHUB_RAW_URL}).")
         return 0
 
     # ─────────────────────────────────────────────────────────────
@@ -1931,7 +2206,7 @@ def handle_skill_command(sub_args: List[str]) -> int:
                 "action": "set-dir",
                 "target_dir": chosen_dir,
                 "target_file": os.path.join(chosen_dir, "SKILL.md"),
-                "source_file": source_skill_file,
+                "source_file": source_skill_file or SKILL_GITHUB_RAW_URL,
                 "configured_dir": load_skill_target_dir(),
             }, ensure_ascii=False, indent=2))
         else:
@@ -1946,13 +2221,7 @@ def handle_skill_command(sub_args: List[str]) -> int:
     # ─────────────────────────────────────────────────────────────
     # SYNC / INSTALL / UPDATE
     # ─────────────────────────────────────────────────────────────
-    if not source_skill_file:
-        msg = "Error: Source skill file (skills/tasks/SKILL.md) not found."
-        if args.json:
-            print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
-        else:
-            print(msg)
-        return 1
+    # When source_skill_file is not found locally, sync_skill_to_dir downloads on-demand from GitHub.
 
     if args.target.strip():
         # Explizites Ziel: direkt synchronisieren, ohne Prompt und ohne Speichern
@@ -1982,7 +2251,7 @@ def handle_skill_command(sub_args: List[str]) -> int:
         print(json.dumps({
             "success": synced,
             "action": "synced" if synced else "failed",
-            "source_file": source_skill_file,
+            "source_file": source_skill_file or SKILL_GITHUB_RAW_URL,
             "target_file": target_skill_file,
             "target_dir": target_dir,
             "configured_dir": load_skill_target_dir(),

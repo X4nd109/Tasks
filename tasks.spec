@@ -15,7 +15,6 @@ spec_root = os.path.abspath(SPECPATH)
 
 datas = [
     (os.path.join(spec_root, 'assets'), 'assets'),
-    (os.path.join(spec_root, 'skills'), 'skills'),
     (os.path.join(spec_root, 'src'), 'src'),
 ]
 

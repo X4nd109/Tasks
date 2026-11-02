@@ -8,12 +8,14 @@
 
 ## 1. Quick Reference & Commands
 
-- **Run TUI (Interactive)**: `.\Tasks.exe` or `python main.py`
-- **Run CLI (Agent / Headless)**: `.\tasks.cmd <cmd>` or `.\Tasks.exe <cmd>`
-  - `tasks list [-s all|open|overdue] [-f <fach>] [--json]` | `tasks show <id|index> [--json]`
-  - `tasks download <id|index> [--auto-dir]` | `tasks explain <id|index>` | `tasks sync [--deep]`
-  - `tasks books [list|open|download]` | `tasks dirs [list|open]` | `tasks open <fach>`
-  - `tasks tray [status|enable|disable]` | `tasks autostart [status|enable|disable]` | `tasks skill [sync|status|set-dir]`
+- **Run TUI (Development)**: `python main.py`
+- **Run CLI (Development)**: `python main.py <cmd>`
+  - `python main.py list [-s all|open|overdue] [-f <fach>] [--json]` | `python main.py show <id|index> [--json]`
+  - `python main.py download <id|index> [--auto-dir]` | `python main.py explain <id|index>` | `python main.py sync [--deep]`
+  - `python main.py books [list|open|download]` | `python main.py dirs [list|open]` | `python main.py open <fach>`
+  - `python main.py tray [status|enable|disable]` | `python main.py autostart [status|enable|disable]` | `python main.py skill [sync|status|set-dir]`
+  - `python main.py update [--force]` | `.\update.bat`
+- **Installed Distribution (End-User)**: `tasks <cmd>` / `Tasks.exe` (aus `dist\Tasks\` oder Installationsverzeichnis)
 
 - **Build Standalone Binaries**: `.\build.bat` or `python scripts/build_exe.py`
 - **Tests**: `python -m unittest discover tests` or `pytest tests/`

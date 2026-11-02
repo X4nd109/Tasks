@@ -7,6 +7,78 @@
 
 ## 1. Completed Tasks & Milestones
 
+- [x] **AI Agent Hub Modal, Skill State Management, Relocation & Clean Unlink/Removal Flow (2026-11-02)**:
+    6. **Automatische Integritätsprüfung bei manuellem Löschen auf der Festplatte**:
+       - Wenn ein Benutzer den Ordner oder die `SKILL.md` außerhalb von Tasks manuell löscht, erkennt `verify_skill_integrity()` dies bei jedem Programmstart (`TasksApp.on_mount`), vor jeder Hintergrund-Update-Prüfung (`_start_update_checker`), im CLI (`tasks update`) sowie beim Öffnen des Hubs (`AgentHubModal._refresh_state`).
+       - Die Konfiguration wird sofort bereinigt (`clear_skill_target_dir()`), der Button `Skill State` im Hub wird deaktiviert und in Tasks erscheint rechts unten eine Warning-Toast-Benachrichtigung: `"Agent Skill was unexpectedly removed"`.
+  - **Problem & Anforderungen**:
+    1. Wenn ein Benutzer den AI Agent Skill eingerichtet hat und später nicht mehr verwenden möchte, blieb der Pfad weiterhin in der Konfiguration hinterlegt, sodass der Skill bei jedem zukünftigen Update erneut heruntergeladen und installiert wurde.
+    2. Es fehlte ein zentraler Hub beim Klick auf den 🤖 Agent-Button im Chat, der vor dem Guide geschaltet ist und zwei klare Optionen bietet: 🛠️ Setup Guide und 📊 Skill State.
+    3. Der 📊 Skill State-Button muss dynamisch ausgegraut (disabled = True) sein, wenn noch kein Skill installiert/hinterlegt ist.
+    4. Das neue AgentSkillStatusModal (auf Englisch) soll den aktuellen Zielordner anzeigen, den Status der automatischen Updates (ENABLED), einen 📦 Move Skill-Button zum Verschieben an einen neuen Ordner (inkl. Bereinigung der alten SKILL.md) und einen 🗑️ Remove Skill-Button besitzen.
+    5. Vor dem Löschen muss ein Sicherheitsdialog (ConfirmSkillRemovalModal) bestätigen; nach der Bestätigung wird SKILL.md gelöscht, die Auto-Update-Eintragung entfernt (clear_skill_target_dir()) und der Benutzer kehrt zum AgentHubModal zurück, wo der 📊 Skill State-Button sofort wieder dynamisch ausgegraut ist.
+  - **Lösung & Implementierung**:
+    - src/core/config.py:
+      - Neue atomare Funktion clear_skill_target_dir() -> bool entfernt den Key skill_target_dir synchron aus APP_CONFIG_FILE und CONFIG_FILE.
+    - src/core/agent_cli.py:
+      - unlink_skill(delete_files=True): Löscht SKILL.md, entfernt leere Verzeichnisse und leert die Konfiguration.
+      - move_skill_target_dir(new_target_dir): Normalisiert den neuen Zielordner (mit automatischer 	asks-Namensprüfung), synchronisiert den Skill dorthin, bereinigt die alte SKILL.md und aktualisiert den Konfigurationspfad.
+      - CLI-Befehle 	asks skill remove / 	asks skill unlink [--keep-files] [--json] und 	asks skill move <pfad> [--json].
+    - src/ui/tui_app.py:
+      - ConfirmSkillRemovalModal: Sicherheitsdialog mit englischer Warnung und tn_confirm_remove (🗑️ Yes, Remove Skill) sowie tn_cancel_remove (↩️ Cancel).
+      - AgentSkillStatusModal: Statusanzeige mit Verzeichnis, Auto-Update-Status und Aktionen 📦 Move Skill, 🗑️ Remove Skill und ↩️ Back.
+      - AgentHubModal: Intermediärer Hub mit 🛠️ Setup Guide, 📊 Skill State (dynamisch disabled, wenn nicht installiert) und ↩️ Back. Beim Schließen des Guides oder nach Bestätigung der Löschung wird der Status sofort aktualisiert (_refresh_state()).
+      - AiChatScreen: ction_open_agent_skill() öffnet nun AgentHubModal.
+    - **Testabdeckung**:
+      - 	ests/test_agent_skill_modal.py: 13 Unittests inklusive Tests für AgentHubModal (Ausgrauen vor Installation und nach Löschung), AgentSkillStatusModal (Statusanzeige & Verschieben) und ConfirmSkillRemovalModal (100% bestanden).
+      - 	ests/test_agent_cli.py: 22 Unittests inklusive 	asks skill remove, 	asks skill unlink und 	asks skill move (100% bestanden).
+      - 	ests/test_skill_auto_sync.py: 21 Unittests (100% bestanden).
+
+
+- [x] **On-Demand AI Agent Skill Downloader, Installer Cleanup & TUI Universal Setup Wizard (2026-11-02)**:
+  - **Problem & Anforderungen**:
+    1. Bislang wurde der Ordner skills/tasks/ bei jedem Build in die Distribution und das Installer-Paket gepackt. Das vergrößerte unnötig das Setup und konnte veraltete Skill-Versionen ausliefern.
+    2. Der Skill soll nun stattdessen bei Bedarf direkt aus dem öffentlichen GitHub-Repository heruntergeladen werden — und zwar zwingend ohne GitHub-Authentifizierung / Login.
+    3. Bei der Neuinstallation / beim Update durch Inno Setup soll ein vorhandener alter skills/-Ordner im Anwendungsverzeichnis bereinigt werden.
+    4. In der TUI sollte im AI-Chat-Menü ein neuer Button 🤖 Agent in Zeile 2 zwischen 🗑️ Clear (Zeile 1) und ↩️ Back (Zeilen 3-5) platziert werden, der einen englischsprachigen Schritt-für-Schritt-Assistenten (AgentSkillSetupModal) öffnet, welcher nicht nur für Antigravity, sondern universell für verschiedene Agent Harnesses (Antigravity, Claude Code, Cursor, Windsurf, Custom Folder) anleitet.
+  - **Lösung & Implementierung**:
+    - 	asks.spec & scripts/build_exe.py: skills/ aus den PyInstaller-Datas und dem Dist-Kopierschritt entfernt.
+    - installer/tasks.iss: DelTree(AppDir + '\skills', True, True, True) in CurStepChanged (ssInstall) eingefügt sowie skills\* in [Files] ausgeschlossen.
+    - src/core/agent_cli.py:
+      - Neue Funktion download_skill_from_github(target_dir) lädt SKILL.md via urllib.request direkt und ohne Authentifizierung von https://raw.githubusercontent.com/X4nd109/Tasks/main/skills/tasks/SKILL.md.
+      - sync_skill_to_dir() und handle_skill_command() greifen bei Standalone-Installationen automatisch auf den On-Demand-Download zurück; Dev-Repo-Fallback bleibt erhalten.
+    - src/ui/tui_app.py:
+      - Neue Modalklasse AgentSkillSetupModal: 3-stufiger englischer Wizard mit direkter Ordnerauswahl via nativem Windows Dialog (`win_dialogs.pick_directory`), schlüssellosem On-Demand-Download von GitHub und kompaktem Leitfaden.
+      - **Automatische 'tasks'-Ordner-Erkennung**: Unmittelbar nach der Ordnerauswahl sowie beim Wechsel zu Schritt 2 wird im Hintergrund geprüft, ob `tasks` irgendwo im Namen des Zielordners vorkommt (z. B. `Tasks App`, `App Tasks`, `TASKS - App`, `tasks_app`). Nur falls nicht, wird `tasks` automatisch ergänzt.
+      - **Flag-Persistierung erst in Schritt 3**: Das Zielverzeichnis und die Konfigurations-Flags werden erst bei erfolgreicher Skill-Installation beim Übergang zu Schritt 3 persistent gespeichert (Abbrüche in Schritt 1 oder 2 hinterlassen kein Flag).
+      - AiChatScreen: Neuer Button 🤖 Agent (`btn_ai_agent_skill`, Shortcut [Alt+A]) zwischen Clear (Zeile 1) und Back (Zeilen 3-5); CSS für `#ai_input_btn_box` mit 1-Zeilen / 3-Zeilen Buttons perfekt aufgeteilt.
+    - **Testabdeckung**:
+      - `tests/test_agent_skill_modal.py`: 7 Unittests für Modal-Initialisierung, Ordner-Picker, Step-Transitions, Download-Worker, Button-Hierarchie und die stille automatische `tasks`-Ordnerergänzung (100% bestanden).
+      - `tests/test_skill_auto_sync.py`: Unittests für schlüssellosen Download, Fehlerbehandlung und CLI-Fallback (100% bestanden).
+      - `tests/test_ai_chat_ui.py`: Aktualisiert auf 3-Button-Layout (100% bestanden).
+      - `tests/test_agent_cli.py`: 19 Unittests inklusive `tasks update` und `reinstall` (100% bestanden).
+
+- [x] **Update Manager Verbesserungen: ANSI-Fix, Englische Lokalisierung, 5s Auto-Close & `update.bat` (2026-11-02)**:
+  - **Problem**:
+    1. In Schritt 3 des Update Managers trat durch variierende Längen des animierten Spinners eine Text-Überlappung auf (`[✓] Installation abgeschlossen. onenten...nten...`).
+    2. Die Ausgaben und Fehlerboxen des Update Managers waren auf Deutsch statt einheitlich auf Englisch.
+    3. Es fehlte eine Möglichkeit, Tasks drüberzuinstallieren / zu reparieren (z. B. wenn die Anwendung beschädigt ist).
+    4. Das Terminal-Fenster des Update Managers blieb nach erfolgreichem Update im PowerShell-Prompt offen (`-NoExit`), statt sich nach einem kurzen Countdown selbstständig zu schließen.
+  - **Lösung & Implementierung**:
+    - `src/services/update_service.py`:
+      - **ANSI-Bereinigung**: Schritt 3 nutzt nun `$e[2K` (Clear Entire Line) vor dem Zeilenumbruch `
+` bei jedem Frame und beim Abschluss (`Installation completed.`), wodurch jegliche Geisterzeichen restlos eliminiert werden.
+      - **Vollständige englische Lokalisierung**: Header (`TASKS UPDATE MANAGER`), Schritte [1/5] bis [5/5], Logs und Fehlerboxen (`UPDATE FAILED`, `Error details`, `This window will remain open for troubleshooting`).
+      - **Sofortiger Neustart & 5s Auto-Close**: Tasks wird nach Schritt 5 sofort im Hintergrund gestartet; anschließend läuft ein 5-Sekunden-Countdown (`Closing window in Xs... (press any key to exit immediately)`), geschützt gegen `InvalidOperationException` bei nicht-interaktiver stdin.
+      - **Fenster-Lifecycle**: `-NoExit` beim Aufruf von `powershell.exe` entfernt; bei Erfolg schließt sich das Terminal nach 5 Sekunden oder Tastendruck automatisch, bei Fehlern hält `Read-Host` das Fenster zur Diagnose offen.
+    - **Drüber-Installation & Reparatur**:
+      - `update.bat` und `scripts/update_launcher.ps1`: Eigenständiger Launcher im Programmverzeichnis, der auch bei beschädigter oder fehlender `Tasks.exe` das neueste Release via GitHub API abfragt, das Setup herunterlädt und den Update Manager startet.
+      - `src/core/agent_cli.py`: Neuer CLI-Befehl `tasks update` (inkl. Aliase `reinstall`, `--force` und `--json`).
+      - `scripts/build_exe.py` & `installer/build_installer.py`: `update.bat` und `scripts/update_launcher.ps1` werden automatisiert in `dist/Tasks/` und das Inno Setup Installationspaket übernommen.
+    - **Testabdeckung**:
+      - `tests/test_update_service.py`: Tests an englische Strings, ANSI-Clear `$e[2K`, Auto-Close Countdown und PowerShell 5.1 Syntax validiert (21/21 Tests bestanden).
+      - `tests/test_agent_cli.py`: 4 neue Unittests für `tasks update` / `reinstall` (19/19 Tests bestanden).
+
 - [x] **Kein `explorer.exe`-Kill mehr beim Start aus Desktop-/Startmenü-Verknüpfung (2026-11-02)**:
   - **Problem**: Lief Tasks bereits im System Tray und wurde die App erneut über Desktop- oder Startmenü-Verknüpfung gestartet, flackerte der gesamte Bildschirm und die Taskleiste wurde zurückgesetzt (Windows Explorer Neustart).
   - **Ursache**: Bei Shortcut-Starts ist `os.getppid()` der `explorer.exe`. `_close_current_terminal_window()` beendete den Parent-PID bedingungslos mit `os.kill(..., SIGTERM)` → Desktop-Shell stirbt → Windows startet sie neu.
@@ -807,25 +879,25 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
 
 ## 2. In Progress / Immediate Next Steps
 
-- [x] **Sofortiges Schließen des sekundären Terminals**: 10s-Countdown und Ausgaben entfernt, sofortiges und geräuschlos Schließen bei Wiederherstellung aus dem System-Tray.
-- [x] **Updater-Runner PowerShell 5.1 Syntax-Fix & UTF-8 BOM Hardening**: Parsing-Crash durch Unicode-Rahmenzeichen und Tab-Blockade mit Exit-Code 42 behoben.
-- [x] **Inno Setup Installer: Englische Lokalisierung (`compiler:Default.isl`)**: Vollständig auf Englisch umgestellt.
-- [x] **Installer Finish-Page Neugestaltung**: Genau 3 Checkboxen (`PATH`, `Terminal Profile`, `Start Menu`), "Tasks Starten" entfernt, alle Checkboxen standardmäßig aktiv.
-- [x] **Uninstaller Cleanup**: Restlose Entfernung dynamischer Startmenü-Shortcuts, Registry-Protokolle (`tasks://`) und AppUserModelId.
+- [x] **Update Manager Verbesserungen & Reparatur**: ANSI-Clear-Line ($e[2K), englische Lokalisierung, 5s Auto-Close Countdown, `update.bat` und CLI `tasks update`.
+- [x] **Entwicklungs-Laufzeit Bereinigung**: `tasks.cmd`, `Tasks.exe`, `TasksTray.exe` und veraltete Debug-Logs (`ctrl_test.log`, `tray_err.log`) aus dem Root entfernt; C#-Root-Launcher-Kompilierung in `build_exe.py` deaktiviert.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
-- [ ] **Vorbereitung Release v2.3.3 / Tagging**: Versionierung hochstufen und Release-Paket schnüren.
+- [ ] **Vorbereitung Release v2.3.6 / Tagging**: Versionierung hochstufen und Release-Paket schnüren.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session (Sofortiges Terminal-Schließen & Installer-Hardening)**:
-  - **Sofortiges Schließen des sekundären Terminals bei Vordergrund-Aktivierung**:
-    - Der frühere 10-Sekunden-Countdown mit Abbruch-Option ([ENTER]) und Konsolenausgaben in main.py wurde vollständig entfernt.
-    - Wenn 	asks in einem Terminal ausgeführt wird während die Anwendung im Hintergrund läuft, wird das Hauptfenster nach vorne geholt (SHOW) und das aufrufende Terminal schließt sich unmittelbar und völlig geräuschlos via _close_current_terminal_window() und sys.exit(0).
-    - Unit-Tests in 	ests/test_terminal_autoclose.py auf sofortiges Schließen und 0 Stdout-Ausgabe aktualisiert.
-  - **PowerShell 5.1 Catppuccin Update-Runner**: update_runner.ps1 wird mit UTF-8 BOM (utf-8-sig) generiert; -NoExit und persistentes Logging in %TEMP%\\Tasks_Update\\update.log garantieren volle Nachvollziehbarkeit.
-  - **TUI Exit-Code Handshake**: TUI beendet sich beim Update mit Code 0 statt 42; Windows Terminal schließt den Haupt-Tab geräuschlos.
+- **Erreicht in dieser Session (Update Manager Polish, Reinstall Feature & Dev Environment Decoupling)**:
+  - **Behebung der Text-Überlappung**: Schritt [3/5] nutzt nun `$e[2K` vor dem Zeilenumbruch im Spinner und beim Abschlussframe (`Installation completed.`), wodurch Geisterzeichen (`ponenten...nten...`) restlos eliminiert werden.
+  - **Englische Lokalisierung**: Alle Ausgaben, Schritte [1/5]–[5/5], Logs und Fehlerboxen des Update Managers sind einheitlich auf Englisch umgestellt.
+  - **Drüber-Installations- & Reparatur-Pipeline**:
+    - `update.bat` & `scripts/update_launcher.ps1` (mit UTF-8 BOM) im Programmordner ermöglichen Reparatur/Neuinstallation per Doppelklick auch bei beschädigter `Tasks.exe`.
+    - Neuer CLI-Befehl `tasks update [--force] [--json]` (und Alias `reinstall`) in `src/core/agent_cli.py`.
+    - Voll automatisiert in `dist/Tasks/` und den Inno Setup Installer (`build_installer.py`) eingebunden.
+  - **5s Auto-Close & Sofortiger Neustart**: Tasks startet direkt nach Schritt 5; das Fenster schließt sich nach einem sicheren 5s-Countdown (überspringbar per Taste, immun gegen Pipe/Redirect `InvalidOperationException`), da `-NoExit` entfernt wurde.
+  - **Entwicklungs-Bereinigung**: Root-Binaries (`Tasks.exe`, `TasksTray.exe`, `tasks.cmd`) und veraltete Logs gelöscht. Entwicklung & Tests laufen nun zu 100% unverfälscht über `python main.py <cmd>`.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Codebase, Tests, Installer und Dokumentation sind synchron und produktionsbereit.
-  - Alle Änderungen sind in `docs/changelog.md`, `docs/current-state.md` und `docs/features.md` eingepflegt.
+  - Alle 40 betroffenen Tests in `test_update_service.py` und `test_agent_cli.py` sowie die gesamte Testsuite sind grün.
+  - ADR-025 wurde in `docs/decisions.md` dokumentiert.
+  - Dokumentation in `docs/current-state.md`, `docs/changelog.md`, `docs/features.md` und `AGENTS.md` ist vollständig synchron.

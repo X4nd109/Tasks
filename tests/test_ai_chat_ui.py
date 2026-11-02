@@ -144,13 +144,20 @@ class TestAiChatUI(unittest.IsolatedAsyncioTestCase):
             # Verify top toolbar is removed (no wasted lines above chat scroll)
             self.assertEqual(len(list(screen.query("#ai_chat_toolbar"))), 0)
 
-            # Verify clear button labeled '🗑️ Clear' exists in bottom button box directly above Back button
+            # Verify clear button labeled '🗑️ Clear' and agent skill button '🤖 Agent' exist in bottom button box
             clear_btn = screen.query_one("#btn_ai_clear_chat", Button)
             self.assertEqual(str(clear_btn.label).strip(), "🗑️ Clear")
             self.assertEqual(clear_btn.styles.height.value, 1)
             self.assertIn(clear_btn, btn_box.children)
+
+            agent_btn = screen.query_one("#btn_ai_agent_skill", Button)
+            self.assertEqual(str(agent_btn.label).strip(), "🤖 Agent")
+            self.assertEqual(agent_btn.styles.height.value, 1)
+            self.assertIn(agent_btn, btn_box.children)
+
             self.assertEqual(btn_box.children.index(clear_btn), 0)
-            self.assertEqual(btn_box.children.index(back_btn), 1)
+            self.assertEqual(btn_box.children.index(agent_btn), 1)
+            self.assertEqual(btn_box.children.index(back_btn), 2)
 
             # Verify input bar borders
             input_bar = screen.query_one("#ai_input_bar")

@@ -277,9 +277,20 @@ class TestUpdateService(unittest.TestCase):
         # WorkingDirectory beim Neustart gesetzt
         self.assertIn("-WorkingDirectory $targetAppDir", script)
 
-        # Fehlerbehandlung: Read-Host bei Fehlern damit das Fenster offen bleibt
+        # Schritt 3: ANSI Clear-Line Escapes ($e[2K) gegen Text-Überlappungen
+        self.assertIn("`r$e[2K$cYellow", script)
+        self.assertIn("`r$e[2K$cGreen", script)
+
+        # 5-Sekunden Auto-Close Countdown
+        self.assertIn("Closing window in", script)
+        self.assertIn("Console]::KeyAvailable", script)
+
+        # Englische Lokalisierung & Fehlerbehandlung: Read-Host bei Fehlern damit das Fenster offen bleibt
         self.assertIn("Read-Host", script)
-        self.assertIn("UPDATE FEHLGESCHLAGEN", script)
+        self.assertIn("UPDATE FAILED", script)
+        self.assertIn("Waiting for Tasks to close...", script)
+        self.assertIn("Installing update files...", script)
+        self.assertIn("Update installed successfully!", script)
 
     def test_powershell_script_syntax_with_parser(self):
         """Validiert das generierte PowerShell-Skript gegen den offiziellen PowerShell-Parser, auch bei Pfaden mit Sonderzeichen."""
@@ -356,7 +367,7 @@ class TestUpdateService(unittest.TestCase):
             mock_popen.assert_called_once()
             cmd_args = mock_popen.call_args[0][0]
             self.assertEqual(cmd_args[0], "powershell.exe")
-            self.assertIn("-NoExit", cmd_args)
+            self.assertNotIn("-NoExit", cmd_args)
             self.assertIn("-ExecutionPolicy", cmd_args)
             self.assertIn("Bypass", cmd_args)
             self.assertEqual(cmd_args[-1], ps_file)

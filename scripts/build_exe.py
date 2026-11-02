@@ -18,7 +18,6 @@ import sys
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-
 def build() -> int:
     os.chdir(PROJECT_ROOT)
     print("=" * 60)
@@ -92,6 +91,16 @@ def build() -> int:
     with open(tasks_cmd_path, "w", encoding="utf-8") as f:
         f.write('@echo off\n"%~dp0Tasks.exe" %*\n')
 
+    # update.bat and scripts/update_launcher.ps1
+    src_update_bat = os.path.join(PROJECT_ROOT, "update.bat")
+    if os.path.isfile(src_update_bat):
+        shutil.copy2(src_update_bat, os.path.join(dist_dir, "update.bat"))
+    target_scripts = os.path.join(dist_dir, "scripts")
+    os.makedirs(target_scripts, exist_ok=True)
+    src_launcher = os.path.join(PROJECT_ROOT, "scripts", "update_launcher.ps1")
+    if os.path.isfile(src_launcher):
+        shutil.copy2(src_launcher, os.path.join(target_scripts, "update_launcher.ps1"))
+
     # Copy top-level assets (icons)
     target_assets = os.path.join(dist_dir, "assets")
     os.makedirs(target_assets, exist_ok=True)
@@ -100,11 +109,6 @@ def build() -> int:
         if os.path.isfile(src_icon):
             shutil.copy2(src_icon, os.path.join(target_assets, icon_name))
 
-    # Copy skills directory to dist top-level
-    src_skills = os.path.join(PROJECT_ROOT, "skills")
-    target_skills = os.path.join(dist_dir, "skills")
-    if os.path.isdir(src_skills):
-        shutil.copytree(src_skills, target_skills, dirs_exist_ok=True)
 
     # Strip large tutorial screenshots from dist to keep installation lean
     tutorial_dir = os.path.join(dist_dir, "assets", "git-sync-tutorial")
@@ -115,14 +119,6 @@ def build() -> int:
     if os.path.isdir(internal_tutorial):
         shutil.rmtree(internal_tutorial, ignore_errors=True)
 
-    # 4. Compile root Tasks.exe launcher for instant development execution
-    csc_path = r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
-    root_cs = os.path.join(PROJECT_ROOT, "scripts", "RootLauncher.cs")
-    if os.path.isfile(csc_path) and os.path.isfile(root_cs):
-        icon_arg = f"/win32icon:{os.path.join(PROJECT_ROOT, 'assets', 'app_icon.ico')}"
-        out_arg = f"/out:{os.path.join(PROJECT_ROOT, 'Tasks.exe')}"
-        subprocess.call([csc_path, "/nologo", "/target:exe", icon_arg, out_arg, root_cs])
-        print(f"[*] Compiled development root launcher: {os.path.join(PROJECT_ROOT, 'Tasks.exe')}")
 
     print("\n" + "=" * 60)
     print("  [OK] Build Successful!")
@@ -130,7 +126,6 @@ def build() -> int:
     print(f"  Background Binary: {tray_exe}")
     print("=" * 60)
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(build())

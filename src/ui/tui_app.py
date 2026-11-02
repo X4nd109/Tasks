@@ -3779,6 +3779,18 @@ class UpdateReminderModal(ModalScreen[None]):
         if self._is_downloading:
             return
 
+        try:
+            from config import verify_skill_integrity
+            was_cfg, is_valid = verify_skill_integrity()
+            if was_cfg and not is_valid:
+                self.app.notify(
+                    "Agent Skill was unexpectedly removed",
+                    title="AI Agent Skill",
+                    severity="warning",
+                )
+        except Exception:
+            pass
+
         installer_url = self.update_info.get("installer_url")
         if not installer_url:
             self._show_error(
@@ -8603,6 +8615,746 @@ class ClearChatConfirmModal(ModalScreen[bool]):
         self.dismiss(False)
 
 
+
+
+class AgentSkillSetupModal(ModalScreen[bool]):
+    """Step-by-step AI Agent Skill setup wizard for autonomous agent harnesses."""
+
+    DEFAULT_CSS = """
+    AgentSkillSetupModal {
+        align: center middle;
+    }
+    #agent_modal_dialog {
+        width: 78;
+        height: auto;
+        max-height: 90%;
+        overflow-y: auto;
+        border: thick #89b4fa;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #agent_modal_header {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #89b4fa;
+        margin-bottom: 1;
+    }
+    #agent_modal_subtitle {
+        width: 100%;
+        text-align: center;
+        color: #cdd6f4;
+        margin-bottom: 1;
+    }
+    .agent_wizard_step_box {
+        width: 100%;
+        height: auto;
+    }
+    .agent_wizard_desc {
+        width: 100%;
+        color: #cdd6f4;
+        margin-bottom: 1;
+    }
+    .agent_field_label {
+        color: #fab387;
+        text-style: bold;
+        margin-top: 1;
+    }
+    #agent_path_row {
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+        align: left middle;
+    }
+    #skill_path_input {
+        width: 1fr;
+        height: 3;
+        border: solid #45475a;
+        background: #181825;
+        color: #cdd6f4;
+        padding: 0 1;
+    }
+    #skill_path_input:focus {
+        border: solid #89b4fa;
+        background: #313244;
+        color: #ffffff;
+    }
+    #btn_browse_skill_dir {
+        width: 15;
+        min-width: 15;
+        height: 3;
+        margin-left: 1;
+    }
+    #agent_status_lbl {
+        width: 100%;
+        margin-bottom: 1;
+        color: #a6e3a1;
+    }
+    #step2_download_status {
+        width: 100%;
+        margin-top: 1;
+        margin-bottom: 1;
+        color: #a6e3a1;
+        text-align: center;
+    }
+    #agent_nav_buttons {
+        width: 100%;
+        height: auto;
+        align: right middle;
+        margin-top: 1;
+    }
+    #agent_nav_buttons Button {
+        margin-left: 1;
+        min-width: 14;
+    }
+    .agent_guide_box {
+        width: 100%;
+        height: auto;
+        background: #181825;
+        border: solid #313244;
+        color: #cdd6f4;
+        padding: 1 2;
+        margin-bottom: 1;
+    }
+    .agent_guide_box Label {
+        width: 100%;
+    }
+    #btn_do_download {
+        width: 100%;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+
+    .-theme-oled #agent_modal_dialog {
+        background: #000000;
+        border: thick #205ea6;
+    }
+    .-theme-oled #agent_modal_header {
+        color: #205ea6;
+    }
+    .-theme-oled #skill_path_input {
+        background: #181816;
+        border: solid #343331;
+        color: #ffffff;
+    }
+    .-theme-oled #skill_path_input:focus {
+        border: solid #205ea6;
+    }
+    .-theme-oled .agent_guide_box {
+        background: #181816;
+        border: solid #343331;
+        color: #fffcfa;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.current_step = 1
+        self.target_dir = ""
+        self._init_default_dir()
+
+    def _init_default_dir(self) -> None:
+        try:
+            from config import load_skill_target_dir
+            saved = load_skill_target_dir()
+            if saved:
+                self.target_dir = os.path.abspath(saved)
+                return
+        except Exception:
+            pass
+
+        # Check common agent folder candidates
+        candidates = [
+            os.path.expanduser("~/.gemini/antigravity/skills/tasks"),
+            os.path.expanduser("~/.gemini/config/skills/tasks"),
+            os.path.expanduser("~/.claude/skills/tasks"),
+            os.path.expanduser("~/.cursor/skills/tasks"),
+            os.path.expanduser("~/.codeium/windsurf/skills/tasks"),
+        ]
+        for candidate in candidates:
+            parent = os.path.dirname(candidate)
+            if os.path.exists(parent):
+                self.target_dir = os.path.abspath(candidate)
+                return
+
+        # Default fallback
+        self.target_dir = os.path.abspath(candidates[0])
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="agent_modal_dialog"):
+            yield Label("🤖 AI Agent Skill Setup Wizard", id="agent_modal_header")
+            yield Label("Step 1 of 3: Connect Agent Skills Directory", id="agent_modal_subtitle")
+
+            # Step 1 Container
+            with Vertical(id="agent_step_1", classes="agent_wizard_step_box"):
+                yield Label(
+                    "Connect your AI agent skills folder. Tasks will install the '/tasks' skill here "
+                    "and automatically keep it up to date across future application updates.",
+                    classes="agent_wizard_desc"
+                )
+
+                yield Label("Skill Target Directory:", classes="agent_field_label")
+                with Horizontal(id="agent_path_row"):
+                    yield Input(value=self.target_dir, id="skill_path_input", placeholder="Select or enter your agent skills folder...")
+                    yield Button("📁 Browse...", id="btn_browse_skill_dir", variant="default")
+
+                yield Label("", id="agent_status_lbl")
+
+                with Horizontal(id="agent_nav_buttons"):
+                    yield Button("Next: Download & Install ➡️", id="btn_step1_next", variant="primary")
+                    yield Button("↩️ Back", id="btn_step1_cancel", variant="default")
+
+            # Step 2 Container (Hidden initially)
+            with Vertical(id="agent_step_2", classes="agent_wizard_step_box"):
+                yield Label(
+                    "Download and install the agent skill directly from GitHub.\n"
+                    "No GitHub login, personal access token, or git credentials required.",
+                    classes="agent_wizard_desc"
+                )
+                with Vertical(classes="agent_guide_box"):
+                    yield Label("Source: GitHub repository (raw.githubusercontent.com)", id="step2_source_lbl")
+                    yield Label(f"Target: {os.path.join(self.target_dir, 'SKILL.md')}", id="step2_target_lbl")
+
+                yield Button("📥 Download & Install Skill Now", id="btn_do_download", variant="success")
+                yield Label("", id="step2_download_status")
+
+                with Horizontal(id="agent_nav_buttons"):
+                    yield Button("↩️ Back", id="btn_step2_back", variant="default")
+
+            # Step 3 Container (Hidden initially)
+            with Vertical(id="agent_step_3", classes="agent_wizard_step_box"):
+                yield Label("🎉 Skill successfully installed and verified!", classes="agent_wizard_desc")
+                with Vertical(classes="agent_guide_box"):
+                    yield Label(
+                        "Your AI agent can now use the 'tasks' CLI commands to query\n"
+                        "assignments, deadlines, files, and schoolbooks.\n\n"
+                        "Ask your agent anytime to explore what it can do with\n"
+                        "the Tasks skill!"
+                    )
+
+                with Horizontal(id="agent_nav_buttons"):
+                    yield Button("📂 Open Folder", id="btn_step3_open_folder", variant="default")
+                    yield Button("✓ Finish", id="btn_step3_finish", variant="success")
+
+    def on_mount(self) -> None:
+        self._update_step_visibility()
+        self._refresh_step1_status()
+
+    def _update_step_visibility(self) -> None:
+        step1 = self.query_one("#agent_step_1", Vertical)
+        step2 = self.query_one("#agent_step_2", Vertical)
+        step3 = self.query_one("#agent_step_3", Vertical)
+        subtitle = self.query_one("#agent_modal_subtitle", Label)
+
+        step1.display = (self.current_step == 1)
+        step2.display = (self.current_step == 2)
+        step3.display = (self.current_step == 3)
+
+        if self.current_step == 1:
+            subtitle.update("Step 1 of 3: Connect Agent Skills Directory")
+        elif self.current_step == 2:
+            subtitle.update("Step 2 of 3: Download & Install Skill")
+            try:
+                self.query_one("#step2_target_lbl", Label).update(f"Target: {os.path.join(self.target_dir, 'SKILL.md')}")
+            except Exception:
+                pass
+        elif self.current_step == 3:
+            subtitle.update("Step 3 of 3: Verification & Usage Guide")
+
+    def _refresh_step1_status(self) -> None:
+        lbl = self.query_one("#agent_status_lbl", Label)
+        path = self.target_dir.strip()
+        if not path:
+            lbl.update("⚠️ Please specify a target directory.")
+            return
+
+        skill_file = os.path.join(path, "SKILL.md")
+        from config import load_skill_target_dir
+        configured_dir = load_skill_target_dir()
+
+        if os.path.isfile(skill_file):
+            if configured_dir and os.path.normcase(os.path.abspath(configured_dir)) == os.path.normcase(os.path.abspath(path)):
+                lbl.update("✅ SKILL.md already installed in this folder. Proceeding will update it.")
+            else:
+                lbl.update("📁 Folder contains existing SKILL.md. Proceeding will link & update it.")
+        elif os.path.isdir(path):
+            lbl.update("📁 Directory exists. SKILL.md will be downloaded here.")
+        else:
+            lbl.update("ℹ️ Directory will be created automatically upon installation.")
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "skill_path_input":
+            self.target_dir = event.value.strip()
+            self._refresh_step1_status()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "skill_path_input" and self.current_step == 1:
+            self._handle_step1_next()
+
+    def _normalize_and_ensure_tasks_folder(self, raw_path: str) -> str:
+        """Checks if a 'tasks' folder is already part of the path (case-insensitive substring).
+        If not (e.g. 'skills' or custom dir), automatically appends 'tasks'."""
+        if not raw_path or not raw_path.strip():
+            return ""
+        norm = os.path.normpath(os.path.abspath(raw_path.strip()))
+        basename = os.path.basename(norm).lower()
+        if "tasks" not in basename:
+            norm = os.path.join(norm, "tasks")
+        return norm
+
+    def _handle_step1_next(self) -> None:
+        raw_path = self.target_dir.strip()
+        if not raw_path:
+            self.app.notify("Please enter or select a valid target directory.", severity="warning")
+            return
+        self.target_dir = self._normalize_and_ensure_tasks_folder(raw_path)
+        try:
+            self.query_one("#skill_path_input", Input).value = self.target_dir
+        except Exception:
+            pass
+        self.current_step = 2
+        self._update_step_visibility()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id or ""
+
+        if bid == "btn_browse_skill_dir":
+            self._browse_directory()
+        elif bid == "btn_step1_cancel":
+            self.dismiss(False)
+        elif bid == "btn_step1_next":
+            self._handle_step1_next()
+        elif bid == "btn_step2_back":
+            self.current_step = 1
+            self._update_step_visibility()
+            self._refresh_step1_status()
+        elif bid == "btn_do_download":
+            self._execute_download()
+        elif bid == "btn_step3_open_folder":
+            self._open_target_folder()
+        elif bid == "btn_step3_finish":
+            self.dismiss(True)
+
+    def _browse_directory(self) -> None:
+        picker = None
+        try:
+            from win_dialogs import pick_directory as picker
+        except ImportError:
+            try:
+                from core.win_dialogs import pick_directory as picker
+            except ImportError:
+                pass
+        chosen = None
+        if picker:
+            chosen = picker(dialog_title="Select Agent Skills Directory")
+        if chosen:
+            self.target_dir = self._normalize_and_ensure_tasks_folder(str(chosen))
+            self.query_one("#skill_path_input", Input).value = self.target_dir
+            self._refresh_step1_status()
+
+    def _execute_download(self) -> None:
+        status_lbl = self.query_one("#step2_download_status", Label)
+        btn_dl = self.query_one("#btn_do_download", Button)
+
+        status_lbl.update("⏳ Downloading SKILL.md from GitHub repository...")
+        btn_dl.disabled = True
+
+        def _worker():
+            from agent_cli import sync_skill_to_dir
+            from config import save_skill_target_dir
+
+            clean_dir = os.path.abspath(self.target_dir.strip())
+            ok = sync_skill_to_dir(clean_dir)
+
+            def _done():
+                btn_dl.disabled = False
+                if ok:
+                    save_skill_target_dir(clean_dir)
+                    status_lbl.update("✅ SKILL.md installed successfully!")
+                    self.current_step = 3
+                    self._update_step_visibility()
+                else:
+                    status_lbl.update("❌ Download failed. Please verify your internet connection and try again.")
+
+            self.app.call_from_thread(_done)
+
+        threading.Thread(target=_worker, daemon=True, name="SkillDownloadWorker").start()
+
+    def _open_target_folder(self) -> None:
+        try:
+            clean_dir = os.path.abspath(self.target_dir.strip())
+            if os.path.exists(clean_dir):
+                os.startfile(clean_dir)
+            else:
+                self.app.notify(f"Directory not found: {clean_dir}", severity="warning")
+        except Exception as e:
+            self.app.notify(f"Could not open directory: {e}", severity="error")
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class ConfirmSkillRemovalModal(ModalScreen[bool]):
+    """Confirmation modal dialog before removing the Tasks AI agent skill."""
+
+    DEFAULT_CSS = """
+    ConfirmSkillRemovalModal {
+        align: center middle;
+    }
+    #confirm_remove_dialog {
+        width: 60;
+        height: auto;
+        border: thick #e03131;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #confirm_remove_title {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #f38ba8;
+        margin-bottom: 1;
+    }
+    #confirm_remove_desc {
+        width: 100%;
+        text-align: center;
+        color: #cdd6f4;
+        margin-bottom: 2;
+    }
+    #confirm_remove_buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+    #confirm_remove_buttons Button {
+        margin: 0 1;
+        min-width: 16;
+    }
+    #btn_confirm_remove {
+        background: #e03131;
+        color: #ffffff;
+    }
+    #btn_confirm_remove:hover {
+        background: #c92a2a;
+    }
+    .-theme-oled #confirm_remove_dialog {
+        background: #000000;
+        border: thick #af3029;
+    }
+    .-theme-oled #confirm_remove_title {
+        color: #af3029;
+    }
+    .-theme-oled #confirm_remove_desc {
+        color: #ffffff;
+    }
+    .-theme-oled #btn_confirm_remove {
+        background: #af3029;
+        color: #ffffff;
+    }
+    .-theme-oled #btn_confirm_remove:hover {
+        background: #c33a32;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="confirm_remove_dialog"):
+            yield Label("🗑️ Remove AI Agent Skill", id="confirm_remove_title")
+            yield Label(
+                "Are you sure you want to remove the Tasks skill?\n\n"
+                "This will delete 'SKILL.md' from disk and disable automatic updates.",
+                id="confirm_remove_desc"
+            )
+            with Horizontal(id="confirm_remove_buttons"):
+                yield Button("🗑️ Yes, Remove Skill", id="btn_confirm_remove", variant="error")
+                yield Button("↩️ Cancel", id="btn_cancel_remove", variant="default")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_confirm_remove":
+            self.dismiss(True)
+        elif event.button.id == "btn_cancel_remove":
+            self.dismiss(False)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class AgentSkillStatusModal(ModalScreen[bool]):
+    """Modal displaying current AI Agent Skill installation details, move, and remove controls."""
+
+    DEFAULT_CSS = """
+    AgentSkillStatusModal {
+        align: center middle;
+    }
+    #skill_status_dialog {
+        width: 72;
+        height: auto;
+        max-height: 90%;
+        overflow-y: auto;
+        border: thick #89b4fa;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #skill_status_header {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #89b4fa;
+        margin-bottom: 1;
+    }
+    #skill_status_subtitle {
+        width: 100%;
+        text-align: center;
+        color: #cdd6f4;
+        margin-bottom: 1;
+    }
+    .skill_status_box {
+        width: 100%;
+        height: auto;
+        background: #181825;
+        border: solid #313244;
+        color: #cdd6f4;
+        padding: 1 2;
+        margin-bottom: 1;
+    }
+    .skill_status_box Label {
+        width: 100%;
+    }
+    .skill_status_label {
+        color: #fab387;
+        text-style: bold;
+        margin-top: 1;
+    }
+    #skill_status_buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+        margin-top: 1;
+    }
+    #skill_status_buttons Button {
+        margin: 0 1;
+        min-width: 16;
+    }
+    .-theme-oled #skill_status_dialog {
+        background: #000000;
+        border: thick #205ea6;
+    }
+    .-theme-oled #skill_status_header {
+        color: #205ea6;
+    }
+    .-theme-oled .skill_status_box {
+        background: #181816;
+        border: solid #343331;
+        color: #fffcfa;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="skill_status_dialog"):
+            yield Label("📊 AI Agent Skill State", id="skill_status_header")
+            yield Label("Current status and configuration of your AI Agent skill.", id="skill_status_subtitle")
+
+            with Vertical(classes="skill_status_box"):
+                yield Label("Skill Target Directory:", classes="skill_status_label")
+                yield Label("", id="status_dir_value")
+                yield Label("Auto-Update Status:", classes="skill_status_label")
+                yield Label("", id="status_autoupdate_value")
+                yield Label("File Status:", classes="skill_status_label")
+                yield Label("", id="status_file_value")
+
+            with Horizontal(id="skill_status_buttons"):
+                yield Button("📦 Move Skill", id="btn_status_move", variant="primary")
+                yield Button("🗑️ Remove Skill", id="btn_status_remove", variant="error")
+                yield Button("↩️ Back", id="btn_status_back", variant="default")
+
+    def on_mount(self) -> None:
+        self._refresh_details()
+
+    def _refresh_details(self) -> None:
+        from config import load_skill_target_dir
+        target_dir = load_skill_target_dir()
+
+        dir_lbl = self.query_one("#status_dir_value", Label)
+        auto_lbl = self.query_one("#status_autoupdate_value", Label)
+        file_lbl = self.query_one("#status_file_value", Label)
+
+        if not target_dir:
+            dir_lbl.update("⚠️ No directory configured.")
+            auto_lbl.update("❌ Disabled (no target folder saved)")
+            file_lbl.update("❌ Not installed")
+            return
+
+        clean_dir = os.path.abspath(target_dir)
+        dir_lbl.update(clean_dir)
+        auto_lbl.update("✅ ENABLED (syncs automatically upon Tasks updates)")
+
+        skill_file = os.path.join(clean_dir, "SKILL.md")
+        if os.path.isfile(skill_file):
+            file_lbl.update("✅ Installed & present (SKILL.md)")
+        else:
+            file_lbl.update("⚠️ Folder exists, but SKILL.md is missing")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id or ""
+        if bid == "btn_status_move":
+            self._handle_move()
+        elif bid == "btn_status_remove":
+            self._handle_remove()
+        elif bid == "btn_status_back":
+            self.dismiss(False)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+    def _handle_move(self) -> None:
+        picker = None
+        try:
+            from win_dialogs import pick_directory as picker
+        except ImportError:
+            try:
+                from core.win_dialogs import pick_directory as picker
+            except ImportError:
+                pass
+        chosen = None
+        if picker:
+            chosen = picker(dialog_title="Select New AI Agent Skills Directory")
+        if not chosen:
+            return
+
+        from agent_cli import move_skill_target_dir
+        success, msg = move_skill_target_dir(str(chosen))
+        if success:
+            self._refresh_details()
+            self.app.notify("Skill moved successfully!", severity="information")
+        else:
+            self.app.notify(f"Move failed: {msg}", severity="error")
+
+    def _handle_remove(self) -> None:
+        def _on_confirm(confirmed: Optional[bool]) -> None:
+            if confirmed:
+                from agent_cli import unlink_skill
+                unlink_skill(delete_files=True)
+                self.app.notify("Skill removed and auto-updates disabled.", severity="information")
+                self.dismiss(True)
+
+        self.app.push_screen(ConfirmSkillRemovalModal(), _on_confirm)
+
+
+class AgentHubModal(ModalScreen[None]):
+    """Hub dialog for AI Agent Skill setup wizard and status / management."""
+
+    DEFAULT_CSS = """
+    AgentHubModal {
+        align: center middle;
+    }
+    #agent_hub_dialog {
+        width: 62;
+        height: auto;
+        border: thick #89b4fa;
+        background: #1e1e2e;
+        padding: 1 2;
+    }
+    #agent_hub_header {
+        width: 100%;
+        text-align: center;
+        text-style: bold;
+        color: #89b4fa;
+        margin-bottom: 1;
+    }
+    #agent_hub_subtitle {
+        width: 100%;
+        text-align: center;
+        color: #cdd6f4;
+        margin-bottom: 2;
+    }
+    .agent_hub_buttons {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+    .agent_hub_buttons Button {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    #btn_hub_back {
+        margin-top: 1;
+    }
+    .-theme-oled #agent_hub_dialog {
+        background: #000000;
+        border: thick #205ea6;
+    }
+    .-theme-oled #agent_hub_header {
+        color: #205ea6;
+    }
+    .-theme-oled #agent_hub_subtitle {
+        color: #ffffff;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="agent_hub_dialog"):
+            yield Label("🤖 AI Agent Integration", id="agent_hub_header")
+            yield Label("Set up or manage the Tasks skill for your AI Agent harness.", id="agent_hub_subtitle")
+
+            with Vertical(classes="agent_hub_buttons"):
+                yield Button("🛠️ Setup Guide", id="btn_hub_setup", variant="primary")
+                yield Button("📊 Skill State", id="btn_hub_state", variant="default")
+                yield Button("↩️ Back", id="btn_hub_back", variant="default")
+
+    def on_mount(self) -> None:
+        self._refresh_state()
+
+    def _refresh_state(self) -> None:
+        try:
+            from config import verify_skill_integrity
+            was_cfg, is_valid = verify_skill_integrity()
+            if was_cfg and not is_valid:
+                try:
+                    self.app.notify("Agent Skill was unexpectedly removed", title="AI Agent Skill", severity="warning")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        from config import load_skill_target_dir
+        configured = load_skill_target_dir()
+        try:
+            btn_state = self.query_one("#btn_hub_state", Button)
+            btn_state.disabled = not bool(configured)
+        except Exception:
+            pass
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        bid = event.button.id or ""
+        if bid == "btn_hub_setup":
+            def _on_guide_done(result: Optional[bool]) -> None:
+                self._refresh_state()
+            self.app.push_screen(AgentSkillSetupModal(), _on_guide_done)
+        elif bid == "btn_hub_state":
+            def _on_status_done(removed: Optional[bool]) -> None:
+                self._refresh_state()
+            self.app.push_screen(AgentSkillStatusModal(), _on_status_done)
+        elif bid == "btn_hub_back":
+            self.dismiss()
+
+    def action_cancel(self) -> None:
+        self.dismiss()
+
+
 class AiChatScreen(Screen):
     """
     Interactive full-screen AI chat assistant with browser-style task tabs,
@@ -8782,7 +9534,7 @@ class AiChatScreen(Screen):
         height: 1;
         min-height: 1;
         max-height: 1;
-        margin-bottom: 1;
+        margin: 0;
         border: none;
         background: #e03131;
         color: #ffffff;
@@ -8793,6 +9545,24 @@ class AiChatScreen(Screen):
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
+    #btn_ai_agent_skill {
+        width: 100%;
+        min-width: 4;
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        margin: 0;
+        border: none;
+        background: #89b4fa;
+        color: #11111b;
+        content-align: center middle;
+        text-align: center;
+        padding: 0;
+        text-style: bold;
+    }
+    #btn_ai_agent_skill:hover {
+        background: #b4befe;
+    }
     #btn_ai_back {
         width: 100%;
         min-width: 4;
@@ -8801,6 +9571,8 @@ class AiChatScreen(Screen):
         max-height: 3;
         content-align: center middle;
         text-align: center;
+        border: none;
+        padding: 0;
     }
     #btn_ai_back:hover {
         background: $boost;
@@ -8890,7 +9662,7 @@ class AiChatScreen(Screen):
         height: 1;
         min-height: 1;
         max-height: 1;
-        margin-bottom: 1;
+        margin: 0;
         content-align: center middle;
         text-align: center;
         background: #e03131;
@@ -8900,6 +9672,24 @@ class AiChatScreen(Screen):
     }
     .-theme-oled #btn_ai_clear_chat:hover {
         background: #c92a2a;
+    }
+    .-theme-oled #btn_ai_agent_skill {
+        width: 100%;
+        min-width: 4;
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        margin: 0;
+        content-align: center middle;
+        text-align: center;
+        background: #205ea6;
+        color: #ffffff;
+        border: none;
+        padding: 0;
+        text-style: bold;
+    }
+    .-theme-oled #btn_ai_agent_skill:hover {
+        background: #2868b2;
     }
     .-theme-oled ChatInputArea {
         background: #181816;
@@ -8941,6 +9731,7 @@ class AiChatScreen(Screen):
     BINDINGS = [
         Binding("escape", "dismiss_screen", "Back [ESC]"),
         Binding("ctrl+l", "clear_chat", "Clear Chat"),
+        Binding("alt+a", "open_agent_skill", "Agent Skill", show=False),
         Binding("left", "prev_tab", "Previous Tab", show=False),
         Binding("right", "next_tab", "Next Tab", show=False),
     ]
@@ -8983,6 +9774,7 @@ class AiChatScreen(Screen):
             yield ChatInputArea(id="ai_chat_input", placeholder="Ask a question about this assignment...")
             with Vertical(id="ai_input_btn_box"):
                 yield Button("🗑️ Clear", id="btn_ai_clear_chat", variant="error", tooltip="Clear chat for current task [Ctrl+L]")
+                yield Button("🤖 Agent", id="btn_ai_agent_skill", variant="primary", tooltip="Install AI Agent Skill [Alt+A]")
                 yield Button("↩️ Back", id="btn_ai_back", variant="default", tooltip="Back to tasks [ESC]")
 
     def on_mount(self) -> None:
@@ -9269,6 +10061,8 @@ class AiChatScreen(Screen):
         bid = event.button.id or ""
         if bid == "btn_ai_clear_chat":
             self.action_clear_chat()
+        elif bid == "btn_ai_agent_skill":
+            self.action_open_agent_skill()
         elif bid in ("btn_ai_back", "btn_ai_close_screen"):
             self.action_dismiss_screen()
         elif bid.startswith("btn_aitab_"):
@@ -9369,6 +10163,9 @@ class AiChatScreen(Screen):
             self.app.call_from_thread(update_ui)
 
         threading.Thread(target=worker, daemon=True, name="AiChatRequestWorker").start()
+
+    def action_open_agent_skill(self) -> None:
+        self.app.push_screen(AgentHubModal())
 
     def action_clear_chat(self, force: bool = False) -> None:
         if not self.active_task:
@@ -9786,7 +10583,7 @@ class TasksApp(App):
         height: 1;
         min-height: 1;
         max-height: 1;
-        margin-bottom: 1;
+        margin: 0;
         border: none;
         background: #e03131;
         color: #ffffff;
@@ -9797,6 +10594,24 @@ class TasksApp(App):
     #btn_ai_clear_chat:hover {
         background: #c92a2a;
     }
+    #btn_ai_agent_skill {
+        width: 100%;
+        min-width: 4;
+        height: 1;
+        min-height: 1;
+        max-height: 1;
+        margin: 0;
+        border: none;
+        background: #89b4fa;
+        color: #11111b;
+        content-align: center middle;
+        text-align: center;
+        padding: 0;
+        text-style: bold;
+    }
+    #btn_ai_agent_skill:hover {
+        background: #b4befe;
+    }
     #btn_ai_back {
         width: 100%;
         min-width: 4;
@@ -9805,6 +10620,8 @@ class TasksApp(App):
         max-height: 3;
         content-align: center middle;
         text-align: center;
+        border: none;
+        padding: 0;
     }
     #btn_ai_back:hover {
         background: #45475a;
@@ -9832,7 +10649,7 @@ class TasksApp(App):
         height: 1;
         min-height: 1;
         max-height: 1;
-        margin-bottom: 1;
+        margin: 0;
         content-align: center middle;
         text-align: center;
         background: #e03131;
@@ -10088,7 +10905,20 @@ class TasksApp(App):
         elif not self.is_headless:
             self._start_update_checker()
 
-        # Win32 Console Icon setzen (falls im klassischen conhost CMD-Fenster ausgeführt)
+                # Prüfe AI Agent Skill Integrität
+        try:
+            from config import verify_skill_integrity
+            was_cfg, is_valid = verify_skill_integrity()
+            if was_cfg and not is_valid:
+                self.notify(
+                    "Agent Skill was unexpectedly removed",
+                    title="AI Agent Skill",
+                    severity="warning",
+                )
+        except Exception:
+            pass
+
+# Win32 Console Icon setzen (falls im klassischen conhost CMD-Fenster ausgeführt)
         if sys.platform == "win32" and not self.is_headless:
             self._set_win32_console_icon()
 

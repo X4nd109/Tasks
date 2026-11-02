@@ -20,6 +20,8 @@ for _sub in [_SRC_DIR, os.path.join(_SRC_DIR, "core"), os.path.join(_SRC_DIR, "s
 
 import config
 from agent_cli import (
+    download_skill_from_github,
+    SKILL_GITHUB_RAW_URL,
     normalize_argv,
     run_agent_cli,
     sync_skill_to_dir,
@@ -286,6 +288,118 @@ class TaskManagerAutoSyncTest(unittest.TestCase):
         source = resolve_skill_source_file()
         with open(source, "r", encoding="utf-8") as f_s, open(os.path.join(self.skill_dir, "SKILL.md"), "r", encoding="utf-8") as f_t:
             self.assertEqual(f_s.read(), f_t.read())
+
+
+
+
+class SkillOnDemandDownloadTest(unittest.TestCase):
+    """Tests für das On-Demand-Herunterladen von Skills von GitHub ohne Authentifizierung."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.target = os.path.join(self.tmp, "installed-skill")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_download_skill_from_github_success(self):
+        class MockResponse:
+            status = 200
+            def read(self):
+                return b"# Downloaded Tasks Skill\n"
+            def __enter__(self):
+                return self
+            def __exit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        with patch("urllib.request.urlopen", return_value=MockResponse()):
+            ok, res_path = download_skill_from_github(self.target)
+
+        self.assertTrue(ok)
+        self.assertEqual(res_path, os.path.join(self.target, "SKILL.md"))
+        self.assertTrue(os.path.isfile(res_path))
+        with open(res_path, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "# Downloaded Tasks Skill\n")
+
+    def test_download_skill_from_github_network_error(self):
+        import urllib.error
+        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("Connection refused")):
+            ok, err_msg = download_skill_from_github(self.target)
+
+        self.assertFalse(ok)
+        self.assertIn("Connection refused", err_msg)
+        self.assertFalse(os.path.exists(os.path.join(self.target, "SKILL.md")))
+
+    def test_sync_skill_to_dir_falls_back_to_download_when_no_local_source(self):
+        with patch("agent_cli.resolve_skill_source_file", return_value=None), \
+             patch("agent_cli.download_skill_from_github", return_value=(True, os.path.join(self.target, "SKILL.md"))) as mock_dl:
+            ok = sync_skill_to_dir(self.target)
+
+        self.assertTrue(ok)
+        mock_dl.assert_called_once_with(os.path.abspath(self.target))
+
+    def test_sync_cli_command_downloads_when_no_local_source(self):
+        def _fake_dl(target_dir):
+            os.makedirs(target_dir, exist_ok=True)
+            with open(os.path.join(target_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+                f.write("# Tasks Skill\n")
+            return True, os.path.join(target_dir, "SKILL.md")
+
+        with patch("agent_cli.resolve_skill_source_file", return_value=None), \
+             patch("agent_cli.download_skill_from_github", side_effect=_fake_dl), \
+             patch("sys.stdout", new_callable=io.StringIO):
+            code = run_agent_cli(["skill", "sync", "--target", self.target])
+
+        self.assertEqual(code, 0)
+        self.assertTrue(os.path.isfile(os.path.join(self.target, "SKILL.md")))
+
+
+    def test_verify_skill_integrity_intact(self):
+        """When skill directory exists and contains SKILL.md, verify_skill_integrity returns (True, True)."""
+        from config import save_skill_target_dir, verify_skill_integrity, load_skill_target_dir
+        skill_dir = os.path.join(self.target, "tasks")
+        os.makedirs(skill_dir, exist_ok=True)
+        with open(os.path.join(skill_dir, "SKILL.md"), "w", encoding="utf-8") as f:
+            f.write("# Tasks Skill")
+        save_skill_target_dir(skill_dir)
+
+        was_cfg, is_valid = verify_skill_integrity()
+        self.assertTrue(was_cfg)
+        self.assertTrue(is_valid)
+        self.assertEqual(load_skill_target_dir(), os.path.abspath(skill_dir))
+
+    def test_verify_skill_integrity_missing_directory(self):
+        """When skill directory was manually deleted, verify_skill_integrity unlinks it and returns (True, False)."""
+        from config import save_skill_target_dir, verify_skill_integrity, load_skill_target_dir
+        deleted_dir = os.path.join(self.target, "deleted_tasks_folder")
+        save_skill_target_dir(deleted_dir)
+
+        was_cfg, is_valid = verify_skill_integrity()
+        self.assertTrue(was_cfg)
+        self.assertFalse(is_valid)
+        self.assertIsNone(load_skill_target_dir())
+
+    def test_verify_skill_integrity_missing_skill_file(self):
+        """When skill directory exists but SKILL.md was deleted, verify_skill_integrity unlinks it and returns (True, False)."""
+        from config import save_skill_target_dir, verify_skill_integrity, load_skill_target_dir
+        skill_dir = os.path.join(self.target, "tasks")
+        os.makedirs(skill_dir, exist_ok=True)
+        # Directory exists, but NO SKILL.md inside
+        save_skill_target_dir(skill_dir)
+
+        was_cfg, is_valid = verify_skill_integrity()
+        self.assertTrue(was_cfg)
+        self.assertFalse(is_valid)
+        self.assertIsNone(load_skill_target_dir())
+
+    def test_verify_skill_integrity_unconfigured(self):
+        """When no skill directory is configured, verify_skill_integrity returns (False, False)."""
+        from config import clear_skill_target_dir, verify_skill_integrity
+        clear_skill_target_dir()
+
+        was_cfg, is_valid = verify_skill_integrity()
+        self.assertFalse(was_cfg)
+        self.assertFalse(is_valid)
 
 
 if __name__ == "__main__":

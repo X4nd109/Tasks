@@ -10,7 +10,7 @@ import re
 import sys
 from pathlib import Path
 import threading
-from typing import Optional, List
+from typing import Optional, List, Tuple
 
 # Basis-Verzeichnisse:
 if getattr(sys, "frozen", False):
@@ -39,7 +39,7 @@ else:
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.3.5"
+APP_VERSION = "2.4.0"
 GITHUB_REPO = "X4nd109/Tasks"
 
 
@@ -819,6 +819,43 @@ def save_saved_theme(theme_name: str) -> None:
         except Exception:
             pass
 
+
+def clear_skill_target_dir() -> bool:
+    """Löscht das hinterlegte Skill-Zielverzeichnis aus der Konfiguration.
+
+    Entfernt skill_target_dir aus APP_CONFIG_FILE und zusätzlich aus der
+    Workspace-CONFIG_FILE, sofern vorhanden.
+    Gibt True zurück, wenn mindestens eine Datei erfolgreich bereinigt wurde.
+    """
+    paths = [APP_CONFIG_FILE]
+    try:
+        if (
+            CONFIG_FILE
+            and os.path.exists(CONFIG_FILE)
+            and os.path.abspath(CONFIG_FILE) != os.path.abspath(APP_CONFIG_FILE)
+        ):
+            paths.append(CONFIG_FILE)
+    except Exception:
+        pass
+
+    cleared_any = False
+    for path in paths:
+        if not path or not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and SKILL_TARGET_DIR_KEY in data:
+                del data[SKILL_TARGET_DIR_KEY]
+                tmp_path = f"{path}.tmp"
+                with open(tmp_path, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+                os.replace(tmp_path, path)
+                cleared_any = True
+        except Exception:
+            pass
+    return cleared_any
+
     # Automatisch zu Git pushen, wenn sich das Theme geändert hat
     if changed:
         try:
@@ -1575,6 +1612,33 @@ def is_skill_synced() -> bool:
         return os.path.isdir(target_dir) and os.path.isfile(os.path.join(target_dir, "SKILL.md"))
     except Exception:
         return False
+
+def verify_skill_integrity() -> Tuple[bool, bool]:
+    """Prüft die Integrität des konfigurierten AI-Agent-Skill-Zielverzeichnisses.
+
+    Rückgabe:
+        (was_configured, is_valid)
+        - was_configured: True, wenn skill_target_dir in den Konfigurationsdateien hinterlegt war.
+        - is_valid: True, wenn das Verzeichnis existiert und eine SKILL.md Datei enthält.
+
+    Wenn der Skill konfiguriert war (was_configured=True), aber entweder das Verzeichnis
+    oder die Datei SKILL.md fehlt (is_valid=False), wird clear_skill_target_dir()
+    aufgerufen, um die ungültige Konfiguration atomar zu bereinigen und den Skill
+    intern als unlinked/gelöscht zu markieren.
+    """
+    target = load_skill_target_dir()
+    if not target:
+        return False, False
+
+    try:
+        if os.path.isdir(target) and os.path.isfile(os.path.join(target, "SKILL.md")):
+            return True, True
+    except Exception:
+        pass
+
+    clear_skill_target_dir()
+    return True, False
+
 
 
 MINIMIZE_TO_TRAY_KEY = "minimize_to_tray"

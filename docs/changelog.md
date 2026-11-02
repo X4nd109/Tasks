@@ -9,6 +9,59 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+---
+
+## [2.4.0] - 2026-11-03
+
+### Added
+- **AI Agent Hub & Skill Management System (`src/ui/tui_app.py` & `src/core/agent_cli.py`)**:
+  - **Automatische Integritätsprüfung & Benachrichtigung bei manuellem Löschen (`verify_skill_integrity`)**:
+    - Prüft bei jedem Programmstart (`on_mount`), vor Update-Prüfungen (`_start_update_checker`, `tasks update`), vor Update-Installationen und im Hub-Menü, ob das Zielverzeichnis und `SKILL.md` noch existieren.
+    - Wurde der Ordner oder die Datei extern gelöscht, wird die Konfiguration automatisch bereinigt (`clear_skill_target_dir()`) und in Tasks erscheint rechts unten ein Warning-Toast mit `"Agent Skill was unexpectedly removed"`.
+  - `AgentHubModal`: Neues Zwischenmodal beim Klick auf `🤖 Agent` im AI Chat mit Auswahl zwischen `🛠️ Setup Guide` (Öffnen des 3-stufigen Installationsassistenten) und `📊 Skill State` (Skill-Status und Verwaltung).
+  - **Dynamisches Ausgrauen (`disabled=True`)**: Ist noch kein Skill installiert bzw. kein Zielpfad konfiguriert, ist der Button `📊 Skill State` im Hub-Menü automatisch deaktiviert.
+  - `AgentSkillStatusModal`: Neues Status- und Verwaltungsmodal mit Pfadanzeige des Zielordners, Auto-Update-Status (`ENABLED`) und Dateistatus (`SKILL.md present`).
+  - **Skill Verschieben (`📦 Move Skill`)**: Öffnet den nativen Windows-Ordnerdialog, normalisiert den Zielpfad (`tasks`-Ordnererkennung), synchronisiert die Dateien dorthin, löscht die alte `SKILL.md` (und leere Elternordner) und aktualisiert persistent den Auto-Update-Pfad.
+  - **Skill Löschen & Deaktivieren (`🗑️ Remove Skill`)**: Öffnet das Sicherheitsabfrage-Modal `ConfirmSkillRemovalModal`. Nach Bestätigung wird `SKILL.md` von der Festplatte gelöscht, leere Ordner bereinigt und `skill_target_dir` aus den Konfigurationsdateien entfernt (`clear_skill_target_dir()`).
+  - **Automatisches Re-Disabling im Agent Hub**: Nach Bestätigung der Löschung kehrt die TUI automatisch in das `AgentHubModal` zurück, in dem der `📊 Skill State`-Button sofort wieder dynamisch ausgegraut wird.
+  - **CLI-Parität**:
+    - `tasks skill remove` / `tasks skill unlink [--keep-files] [--json]`: Löscht die installierte `SKILL.md` und entfernt den Pfad aus zukünftigen automatischen Updates.
+    - `tasks skill move <new_path> [--json]`: Verschiebt den Skill an einen neuen Pfad und aktualisiert die Auto-Update-Konfiguration.
+- **On-Demand AI Agent Skill Downloader (src/core/agent_cli.py)**:
+  - download_skill_from_github(target_dir) lädt SKILL.md direkt aus dem öffentlichen GitHub-Repository herunter (https://raw.githubusercontent.com/X4nd109/Tasks/main/skills/tasks/SKILL.md).
+  - Funktioniert zu 100 % ohne GitHub-Login, Token oder Git-CLI (gh).
+  - 	asks skill sync und 	asks skill install greifen bei Standalone-Installationen automatisch auf den On-Demand-Download zurück (Fallback auf lokale Repository-Dateien im Dev-Modus bleibt erhalten).
+- **Universeller AI Agent Setup Wizard (AgentSkillSetupModal in src/ui/tui_app.py)**:
+  - Schlankes, 3-stufiges modales Setup auf Englisch mit direkter Ordnerauswahl (über nativen Windows Explorer Dialog) ohne überflüssige Preset-Buttons.
+  - Enthält in Schritt 1 den Hinweis auf automatische Skill-Aktualisierungen bei zukünftigen Tasks-Updates.
+  - **Automatische 'tasks'-Unterordner-Erkennung**: Unmittelbar nach der Ordnerauswahl im Windows-Dialog sowie beim Verlassen von Schritt 1 wird geprüft, ob `tasks` irgendwo im Namen des Zielordners vorkommt (z. B. `Tasks App`, `App Tasks`, `TASKS - App`, `tasks_app`). Nur falls nicht, wird `tasks` automatisch ergänzt.
+  - **Transaktionales Flag-Setting in Schritt 3**: Das Zielverzeichnis und die Konfigurations-Flags werden erst bei erfolgreichem Abschluss und Übergang zu Schritt 3 persistent gespeichert; bei einem Abbruch in Schritt 1 oder Schritt 2 wird kein Installations-Flag hinterlegt.
+  - Vollständig sichtbare Button-Beschriftungen (keine Höhenabschnitte), kompakter Textbereich in Schritt 2 & 3, ↩️ Back-Button ganz rechts sowie sauberer ✓ Finish-Button zum Beenden.
+- **Neuer Button 🤖 Agent im AI-Menü (AiChatScreen)**:
+  - Perfekt verteilt in #ai_input_btn_box: Zeile 1 für 🗑️ Clear (1 Zeile), Zeile 2 für 🤖 Agent (1 Zeile) und Zeilen 3 bis 5 für ↩️ Back (3 Zeilen) ohne Leerzeilen dazwischen.
+  - Öffnet per Mausklick oder Shortcut [Alt+A] das AgentSkillSetupModal.
+- **Eigenständige Drüber-Installations- & Reparaturfunktion (`update.bat` & `scripts/update_launcher.ps1`)**:
+  - Ermöglicht Benutzern, Tasks im selben Verzeichnis drüberzuinstallieren oder zu reparieren (z. B. wenn Programmdateien beschädigt wurden), selbst wenn `Tasks.exe` nicht mehr startet.
+  - Fragt über die GitHub REST API das neueste Release ab, lädt das Installationspaket herunter und führt den Update Manager aus.
+  - Automatisch in `dist/Tasks/` und das Inno Setup Setup-Paket eingebunden.
+- **Neuer CLI-Befehl `tasks update` (`src/core/agent_cli.py`)**:
+  - `tasks update [--force] [--json]` prüft auf Updates bzw. stößt bei `--force` (oder Alias `reinstall`) die Neuinstallation direkt über das Terminal an.
+
+### Changed
+- **Entkopplung der AI Skills vom Installer (	asks.spec, scripts/build_exe.py, installer/tasks.iss)**:
+  - skills/ wird nicht mehr in Binaries und Installer-Pakete gebündelt, was Paketgröße spart und veraltete Dateien verhindert.
+  - In installer/tasks.iss wird bei der Installation (ssInstall) der veraltete Ordner {app}\skills automatisch über DelTree restlos bereinigt.
+- **Update Manager: Vollständige englische Lokalisierung (`src/services/update_service.py`)**:
+  - Alle Schritte [1/5] bis [5/5], Logs, Statusboxen und Fehlerbehandlungen einheitlich auf Englisch umgestellt.
+- **Update Manager: 5-Sekunden Auto-Close-Timer & sofortiger Neustart**:
+  - Tasks wird nach der Installation sofort im Hintergrund gestartet.
+  - Das Konsolenfenster schließt sich nach einem 5-Sekunden-Countdown automatisch (jederzeit per Tastendruck sofort überspringbar).
+  - `-NoExit` beim Aufruf von PowerShell entfernt; bei Fehlern bleibt das Fenster zur Diagnose weiterhin offen (`Read-Host`).
+
+### Fixed
+- **Update Manager: Behebung der Textüberlappung in Schritt 3**:
+  - Durch ANSI-Clear-Line-Sequenzen (`$e[2K`) vor dem Carriage Return `\r` im Fortschritts-Spinner und beim Abschlussframe werden jegliche Geisterzeichen (`ponenten...nten...`) zuverlässig eliminiert.
+
 ## [2.3.5] - 2026-11-02
 
 ### Fixed

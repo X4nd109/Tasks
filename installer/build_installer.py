@@ -63,6 +63,7 @@ ISCC_PATHS = [
 
 INCLUDE_FILES = [
     "tasks.cmd",
+    "update.bat",
 ]
 
 INCLUDE_DIRS = [
@@ -259,8 +260,8 @@ def main():
     )
     parser.add_argument(
         "--version",
-        default="2.3.5",
-        help="Release version string (e.g. '2.3.3'). Defaults to 2.3.5.",
+        default="2.4.0",
+        help="Release version string (e.g. '2.3.3'). Defaults to 2.4.0.",
     )
     parser.add_argument(
         "--output-name",

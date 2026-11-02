@@ -241,8 +241,9 @@ class TaskManager:
             # Nach einem App-Update den AI-Agent-Skill automatisch aktualisieren,
             # sofern bereits ein Zielverzeichnis konfiguriert wurde.
             try:
-                from config import is_skill_synced, load_skill_target_dir
-                if is_skill_synced():
+                from config import verify_skill_integrity, is_skill_synced, load_skill_target_dir
+                was_configured, is_valid = verify_skill_integrity()
+                if was_configured and is_valid:
                     saved_dir = load_skill_target_dir()
                     if saved_dir and os.path.isdir(saved_dir):
                         from agent_cli import sync_skill_to_dir
