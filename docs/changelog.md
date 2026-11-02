@@ -9,6 +9,15 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-11-02
+
+### Fixed
+- **Kein Beenden von `explorer.exe` mehr beim Start aus Desktop-/Startmenü-Verknüpfung (`main.py`)**:
+  - Wurde Tasks über die Desktop- oder Startmenü-Verknüpfung gestartet, während die App bereits im System Tray lief, war `os.getppid()` der Windows-Explorer. `_close_current_terminal_window()` beendete diesen Parent-Prozess bedingungslos via `os.kill(..., SIGTERM)`.
+  - Windows startete daraufhin die Desktop-Shell neu — sichtbar als Vollbild-Flackern und Zurücksetzen der Taskleiste.
+  - Neue Hilfsfunktion `_get_process_name(pid)` (via `OpenProcess` + `QueryFullProcessImageNameW`) ermittelt den Prozessnamen. Der Parent wird nur noch beendet, wenn er ein bekannter Shell-Prozess ist (`cmd.exe`, `powershell.exe`, `pwsh.exe`).
+  - Neue Regressionstests in `tests/test_terminal_autoclose.py` (`test_close_window_does_not_kill_explorer`, `test_close_window_kills_whitelisted_shell`).
+
 ## [2.3.4] - 2026-11-01
 
 ### Fixed

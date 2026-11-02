@@ -70,6 +70,26 @@ class TerminalAutocloseTest(unittest.TestCase):
 
         self.assertEqual(stdout.getvalue(), "")
 
+    def test_close_window_does_not_kill_explorer(self):
+        """explorer.exe (Desktop/Start Menu shortcut parent) must never be terminated."""
+        with patch.object(main.sys, "platform", "win32"), \
+                patch.object(main.os, "getppid", return_value=1234), \
+                patch.object(main, "_get_process_name", return_value="explorer.exe"), \
+                patch.object(main.os, "kill") as kill_mock:
+            main._close_current_terminal_window()
+
+        kill_mock.assert_not_called()
+
+    def test_close_window_kills_whitelisted_shell(self):
+        """A whitelisted parent shell (cmd.exe) is terminated so the terminal tab closes."""
+        with patch.object(main.sys, "platform", "win32"), \
+                patch.object(main.os, "getppid", return_value=1234), \
+                patch.object(main, "_get_process_name", return_value="cmd.exe"), \
+                patch.object(main.os, "kill") as kill_mock:
+            main._close_current_terminal_window()
+
+        kill_mock.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

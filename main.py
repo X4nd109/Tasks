@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import warnings
+from typing import Optional
 
 # Suppress PyMuPDF legacy fitz module deprecation warning
 warnings.filterwarnings("ignore", category=FutureWarning, module="fitz")
@@ -327,6 +328,31 @@ def _run_tray_background():
     return 0
 
 
+def _get_process_name(pid: int) -> Optional[str]:
+    """Returns the lowercase executable name of a process (e.g. 'explorer.exe')."""
+    if sys.platform != "win32" or not pid:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h_process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h_process:
+            return None
+        buf = ctypes.create_unicode_buffer(1024)
+        size = wintypes.DWORD(1024)
+        try:
+            if kernel32.QueryFullProcessImageNameW(h_process, 0, buf, ctypes.byref(size)):
+                return os.path.basename(buf.value).lower()
+        finally:
+            kernel32.CloseHandle(h_process)
+    except Exception:
+        pass
+    return None
+
+
 def _close_current_terminal_window() -> None:
     """Closes the current terminal window / tab (Windows, best effort)."""
     if sys.platform != "win32":
@@ -350,12 +376,17 @@ def _close_current_terminal_window() -> None:
 
     # 2) Terminate the parent shell (cmd.exe / powershell.exe / pwsh.exe) so that
     #    Windows Terminal also closes the hosting tab.
+    #    IMPORTANT: Never kill non-shell parents. When launched via a Desktop or
+    #    Start Menu shortcut the parent is explorer.exe - killing it restarts the
+    #    whole desktop shell (screen flicker, taskbar reset).
     try:
         import signal
 
         parent_pid = os.getppid()
         if parent_pid and parent_pid != os.getpid():
-            os.kill(parent_pid, signal.SIGTERM)
+            parent_name = _get_process_name(parent_pid)
+            if parent_name in ("cmd.exe", "powershell.exe", "pwsh.exe"):
+                os.kill(parent_pid, signal.SIGTERM)
     except Exception:
         pass
 

@@ -39,7 +39,7 @@ else:
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.3.4"
+APP_VERSION = "2.3.5"
 GITHUB_REPO = "X4nd109/Tasks"
 
 

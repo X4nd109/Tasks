@@ -1,11 +1,20 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-11-01  
-> **Active Milestone**: Release v2.3.4 — Settings Notification Navigation Fix & Polish (Completed)
+> **Last Updated**: 2026-11-02  
+> **Active Milestone**: Release v2.3.5 — Hotfix: Windows Explorer Restart & Screen Flicker on Second Instance Launch
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Kein `explorer.exe`-Kill mehr beim Start aus Desktop-/Startmenü-Verknüpfung (2026-11-02)**:
+  - **Problem**: Lief Tasks bereits im System Tray und wurde die App erneut über Desktop- oder Startmenü-Verknüpfung gestartet, flackerte der gesamte Bildschirm und die Taskleiste wurde zurückgesetzt (Windows Explorer Neustart).
+  - **Ursache**: Bei Shortcut-Starts ist `os.getppid()` der `explorer.exe`. `_close_current_terminal_window()` beendete den Parent-PID bedingungslos mit `os.kill(..., SIGTERM)` → Desktop-Shell stirbt → Windows startet sie neu.
+  - **Lösung & Implementierung**:
+    - `main.py`: Neue Hilfsfunktion `_get_process_name(pid)` (`OpenProcess` + `QueryFullProcessImageNameW`) liefert den lowercase-EXE-Namen.
+    - `_close_current_terminal_window()` beendet den Parent nur noch bei Whitelist-Treffern (`cmd.exe`, `powershell.exe`, `pwsh.exe`); alle anderen (insb. `explorer.exe`) bleiben unangetastet.
+    - `tests/test_terminal_autoclose.py`: Neue Regressionstests `test_close_window_does_not_kill_explorer` und `test_close_window_kills_whitelisted_shell` (4/4 bestanden).
+    - `docs/changelog.md` unter `[Unreleased] → Fixed` dokumentiert.
 
 - [x] **Settings Navigation: Rückkehr zu Settings beim Schließen von `NotificationConfigModal` (2026-11-01)**:
   - **Problem**: Klickte man in den Einstellungen (`SettingsModal`) auf `🔔 Notifications` und danach im Dialog auf `↩️ Back` (oder Escape bzw. `💾 Save Settings`), schloss sich der Dialog vollständig, anstatt wie bei den übrigen Einstellungsdialogen (`TrayConfigModal`, `AiExplainModal`, `SchoolConfigModal`) wieder zurück zum `SettingsModal` zu führen.
