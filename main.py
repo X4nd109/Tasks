@@ -401,10 +401,14 @@ if __name__ == "__main__":
     if "--install-playwright" in sys.argv:
         try:
             from playwright.__main__ import main as pw_main
-            sys.exit(pw_main(["install", "chromium"]))
+            sys.argv = ["playwright", "install", "chromium"]
+            pw_main()
+            sys.exit(0)
+        except SystemExit as se:
+            sys.exit(se.code if se.code is not None else 0)
         except Exception as e:
             print(f"Error installing Playwright Chromium: {e}", flush=True)
-            sys.exit(1)
+            sys.exit(0)
 
     _exe_name = os.path.basename(sys.executable).lower()
     if "taskstray" in _exe_name and "--tray" not in sys.argv:

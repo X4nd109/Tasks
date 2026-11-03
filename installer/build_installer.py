@@ -278,6 +278,11 @@ def main():
         action="store_true",
         help="Skip downloading python_installer.exe if missing.",
     )
+    parser.add_argument(
+        "--skip-build-exe",
+        action="store_true",
+        help="Skip rebuilding PyInstaller binaries in dist/Tasks/ before packaging.",
+    )
     args = parser.parse_args()
 
     version = args.version.strip().lstrip("v")
@@ -302,13 +307,15 @@ def main():
         sys.exit(1)
     print(f"  * Inno Setup found: {iscc}")
 
-    # Verify or compile PyInstaller binaries in dist/Tasks/
+    # Verify or compile fresh PyInstaller binaries in dist/Tasks/
     tasks_exe = PROJECT_ROOT / "dist" / "Tasks" / "Tasks.exe"
     tray_exe = PROJECT_ROOT / "dist" / "Tasks" / "TasksTray.exe"
-    if not (tasks_exe.exists() and tray_exe.exists()):
-        print("  * Binaries missing in dist/Tasks/, running scripts/build_exe.py ...")
+    if not args.skip_build_exe or not (tasks_exe.exists() and tray_exe.exists()):
+        print("  * Compiling fresh PyInstaller binaries via scripts/build_exe.py ...")
         build_script = PROJECT_ROOT / "scripts" / "build_exe.py"
         subprocess.check_call([sys.executable, str(build_script)])
+    else:
+        print("  * Skipping PyInstaller build (--skip-build-exe passed and binaries exist)")
 
     build_dir = PROJECT_ROOT / f".build_{output_name}"
     if build_dir.exists():
