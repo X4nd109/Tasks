@@ -282,15 +282,39 @@ class TestUpdateService(unittest.TestCase):
         self.assertIn("`r$e[2K$cGreen", script)
 
         # 5-Sekunden Auto-Close Countdown
-        self.assertIn("Closing window in", script)
-        self.assertIn("Console]::KeyAvailable", script)
+        self.assertIn("for ($sec = 5; $sec -gt 0; $sec--)", script)
+        self.assertIn("Closing window in ${sec}s... (press any key to exit immediately)", script)
+        self.assertIn("[Console]::KeyAvailable", script)
+        self.assertIn("[Console]::ReadKey($true)", script)
 
         # Englische Lokalisierung & Fehlerbehandlung: Read-Host bei Fehlern damit das Fenster offen bleibt
         self.assertIn("Read-Host", script)
         self.assertIn("UPDATE FAILED", script)
-        self.assertIn("Waiting for Tasks to close...", script)
-        self.assertIn("Installing update files...", script)
-        self.assertIn("Update installed successfully!", script)
+        self.assertIn("[✓] Tasks closed successfully.", script)
+        self.assertIn("[✓] Installation package verified ($sizeMb MB).", script)
+        self.assertIn("Extracting and updating components...", script)
+        self.assertIn("[✓] Installation completed.", script)
+        self.assertIn("[✓] Program files verified successfully.", script)
+        self.assertIn("[✓] Cleanup completed.", script)
+        self.assertIn("✨ Update installed successfully!", script)
+        self.assertIn("Tasks will restart automatically...", script)
+        self.assertIn("Error details: $($_.Exception.Message)", script)
+        self.assertIn("Detailed log: $logFile", script)
+        self.assertIn("This window will remain open for troubleshooting.", script)
+        self.assertIn("Press Enter to close...", script)
+        self.assertIn("UPDATE FAILED: $errDetails", script)
+        self.assertIn("update.log", script)
+        self.assertIn("Inno Setup finished with exit code", script)
+        self.assertIn("[5/5] Cleaning up and restarting...", script)
+
+        # Keine verbliebenen deutschen Strings im Runner
+        self.assertNotIn("FEHLGESCHLAGEN", script)
+        self.assertNotIn("Bereinigung", script)
+        self.assertNotIn("Installationspaket", script)
+        self.assertNotIn("Neustart", script)
+        self.assertNotIn("überprüfen", script)
+        self.assertNotIn("Erfolgreich beendet", script)
+        self.assertNotIn("verifiziert", script)
 
     def test_powershell_script_syntax_with_parser(self):
         """Validiert das generierte PowerShell-Skript gegen den offiziellen PowerShell-Parser, auch bei Pfaden mit Sonderzeichen."""

@@ -13,7 +13,10 @@ import datetime
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import src
-import services.directory_service
+try:
+    from services.directory_service import DirectoryService
+except ImportError:
+    from directory_service import DirectoryService
 
 from models import UntisExam
 from config import (
@@ -572,14 +575,14 @@ class TestUntisExamsTUI(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Open Folder", str(btn_folder.label))
 
                 # Fall 1: Verknüpfter Ordner existiert -> open_directory wird aufgerufen
-                with patch("services.directory_service.DirectoryService.find_matching_directory_for_course", return_value={"id": "dir1", "title": "AMEC", "path": "C:\\AMEC"}), \
-                     patch("services.directory_service.DirectoryService.open_directory", return_value=(True, "OK")) as mock_open_dir:
+                with patch.object(DirectoryService, "find_matching_directory_for_course", return_value={"id": "dir1", "title": "AMEC", "path": "C:\\AMEC"}), \
+                     patch.object(DirectoryService, "open_directory", return_value=(True, "OK")) as mock_open_dir:
                     await pilot.click("#btn_open_exam_folder")
                     await pilot.pause()
                     mock_open_dir.assert_called_once()
 
                 # Fall 2: Kein verknüpfter Ordner -> Warning Toast via Taste 'f'
-                with patch("services.directory_service.DirectoryService.find_matching_directory_for_course", return_value=None):
+                with patch.object(DirectoryService, "find_matching_directory_for_course", return_value=None):
                     with patch.object(app, "notify") as mock_notify:
                         await pilot.press("f")
                         await pilot.pause()

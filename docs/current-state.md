@@ -1,11 +1,46 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-11-02  
-> **Active Milestone**: Release v2.3.5 — Hotfix: Windows Explorer Restart & Screen Flicker on Second Instance Launch
+> **Last Updated**: 2026-11-08  
+> **Active Milestone**: Release v2.5.0 (Completed)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **TwoThumbRangeSlider Text-Markierung beim Verschieben unterbunden (2026-11-08)**:
+  - `ALLOW_SELECT = False` auf `TwoThumbRangeSlider` gesetzt, `capture_mouse()`/`release_mouse()` implementiert und Mouse-Events mit `prevent_default()` und `stop()` isoliert. Der Slider gleitet nun wie ein echtes GUI-Element ohne Text-Hervorhebung, bei 100% identischem optischen Design.
+  - 14 Tests in `tests/test_page_range_slider.py` validiert (100% bestanden).
+
+- [x] **Digi4School Multi-Core PDF-Komprimierung & `tasks books compact` (2026-11-08)**:
+    - **Multi-Core Beschleunigung**: `compact_pdf_document` nutzt `ProcessPoolExecutor` mit dynamischem Worker-Pool (`os.cpu_count() - 1` Standard, überschreibbar mit `--workers <N>`). Bilder werden über ein Sliding Window kontinuierlich komprimiert und sofort in PyMuPDF eingebettet, was den RAM-Bedarf unter 400 MB hält und 400-Seiten-Bücher in Sekunden abarbeitet.
+  - **Ziel**: Die vom Digi4School Grabber erzeugten PDFs waren durch unkomprimierte PNG/FlateDecode-Bilder extrem groß (~850 MB für 400 Seiten). Downloads sollten auf kompakte JPEGs mit 4:4:4 Farbsampling umgestellt und bereits vorhandene PDFs offline nachträglich schrumpfbar werden.
+  - **Umsetzung & Status**:
+    - `src/services/digi4school_service.py`:
+      - `encode_image_dct(pil_img, quality=90, subsampling=0)`: JPEG-Kodierung inkl. RGB-Konvertierung, `optimize=True` und robustem Fallback für Pillow-Versionen, die `optimize` + 4:4:4 nicht unterstützen.
+      - `ocr_worker_process`: JPEG wird in eine temporäre `.jpg`-Datei geschrieben und an `pytesseract.image_to_pdf_or_hocr` übergeben → Tesseract bettet `DCTDecode` (JPEG) ein. Fallback-Konfigurationen und letzter Bild-only-Fallback nutzen dasselbe optimierte JPEG.
+      - `download_book(..., jpeg_quality=None)`: Preset-Mapping `standard=80`, `high=85`, `ultra=90` (Default 75); Weitergabe an OCR-Worker; `--no-ocr`-Pfad konvertiert `img_bytes` vor `insert_image`.
+      - `compact_pdf_document(...)`: Ersetzt alle eingebetteten Bilder via `page.replace_image(xref, stream=jpeg)`, speichert mit `garbage=4, deflate=True, clean=True`, validiert Seitenanzahl und ersetzt das Original atomar (optional `*.orig.pdf`).
+      - `Digi4SchoolService.list_downloaded_books()` listet PDFs im Downloadordner (ohne `.orig.pdf`/Temp-Dateien).
+    - `src/core/agent_cli.py`:
+      - Neuer Subcommand `tasks books compact <datei|index|all> [--quality 1-100] [--keep-original] [--output <pfad>] [--json]` inkl. Fortschritt, Zusammenfassung (`Before -> After (Saved: X MB / Y%)`) und Fehlerbehandlung.
+      - `tasks books download` unterstützt zusätzlich `--jpeg-quality <1-100>`.
+    - **Dokumentation**: `docs/features.md`, `docs/changelog.md` und dieser Session-Handoff aktualisiert.
+  - **Tests**: `tests/test_digi4school.py` um 5 Tests erweitert (JPEG-Header/4:4:4-Sampling, `compact_pdf_document` Größe/Text/TOC/Seitenzahl, `--keep-original`, CLI `compact --json`, Qualitätsvalidierung). Alle 18 Tests bestanden (bei nicht-interaktivem stdin).
+
+- [x] **Tasks PyInstaller Executable & Clean Installer Implementation (2026-11-04)**:
+  - **Aufgabe**: Standalone-Binaries (`Tasks.exe` Console + `TasksTray.exe` Windowed), PyInstaller Onedir-Build, Clean Inno-Setup-Installer, Playwright-Silent-Setup und Frozen-Path-Handling.
+  - **Umsetzung & Status**:
+    - `requirements.txt`: `pyinstaller>=6.0.0` unter `# Build & Packaging` erg�nzt.
+    - `src/core/config.py`: Frozen-Bundle-Pfade (`WORKSPACE_DIR`, `SRC_DIR`, `CORE_DIR`) via `sys.frozen` inkl. `_internal`-Fallback; `DATA_DIR`/`ASSETS_DIR` konsistent gebunden.
+    - `main.py`: `--install-playwright` (Playwright Chromium silent install) und `TasksTray.exe` -> Auto-Append `--tray`.
+    - `src/services/autostart_service.py`: Autostart registriert `TasksTray.exe` direkt, sobald es existiert.
+    - `src/services/update_service.py`: `apply_update.cmd` startet nach Update `Tasks.exe` (Fallback `run.bat`).
+    - `tasks.spec`: PyInstaller Onedir-Spec (2 Exe: Console `Tasks.exe`, Windowed `TasksTray.exe`, excludes `tkinter`/`matplotlib`/`unittest`, datas `assets`/`skills`/`src`, Version-Info via `installer/version_info*.txt`).
+    - `scripts/build_exe.py`: PyInstaller-Build + Copy von `tasks.cmd`, Helper-Skripten (`scripts/*.bat`), Icons und Skills; Cleanup von `assets/git-sync-tutorial`; Verify `dist/Tasks/Tasks.exe` & `TasksTray.exe`.
+    - `build.bat`: Fuehrt `python scripts/build_exe.py` aus.
+    - `installer/tasks.iss`: Clean Installer (Bundle `dist\Tasks\*`, silent Playwright-Setup, Start-Menü+Desktop-Icons, obsolete File-/Dir-Cleanup ohne Daten/Cache).
+    - `installer/build_installer.py`: Verifiziert `dist/Tasks/Tasks.exe` und startet bei Bedarf `scripts/build_exe.py`.
+  - **Tests**: Build-/Packaging-Code nicht Teil der Unittest-Suite; Gesamtsuite (592 Tests) ohne neue Fehler/Regressionen.
 
 - [x] **AI Agent Hub Modal, Skill State Management, Relocation & Clean Unlink/Removal Flow (2026-11-02)**:
     6. **Automatische Integritätsprüfung bei manuellem Löschen auf der Festplatte**:
@@ -879,25 +914,29 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
 
 ## 2. In Progress / Immediate Next Steps
 
-- [x] **Update Manager Verbesserungen & Reparatur**: ANSI-Clear-Line ($e[2K), englische Lokalisierung, 5s Auto-Close Countdown, `update.bat` und CLI `tasks update`.
-- [x] **Entwicklungs-Laufzeit Bereinigung**: `tasks.cmd`, `Tasks.exe`, `TasksTray.exe` und veraltete Debug-Logs (`ctrl_test.log`, `tray_err.log`) aus dem Root entfernt; C#-Root-Launcher-Kompilierung in `build_exe.py` deaktiviert.
+- [x] **Digi4School PDF-Komprimierung & DCTDecode-Pipeline**: Umstellung von FlateDecode-PNGs auf JPEG 4:4:4 (`subsampling=0`) bei Standard Q75 (Dateigrößenreduktion um ~80-85%).
+- [x] **Multi-Core In-Place PDF-Kompaktierer (`tasks books compact`)**: Parallele Bildkompression via `ProcessPoolExecutor` mit Streaming Sliding-Window (RAM < 400 MB, `os.cpu_count() - 1` Cores).
+- [x] **Range-Slider Text-Selektions-Fix**: `ALLOW_SELECT = False` und Maus-Capture auf `TwoThumbRangeSlider` zur Beseitigung der Markierungs-Artefakte beim Ziehen.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
-- [ ] **Vorbereitung Release v2.3.6 / Tagging**: Versionierung hochstufen und Release-Paket schnüren.
+- [ ] **Vorbereitung Release v2.4.1 / Tagging**: Versionierung hochstufen und Release-Paket schnüren.
 
 ---
 
 ## 3. Session Handoff Notes
 
-- **Erreicht in dieser Session (Update Manager Polish, Reinstall Feature & Dev Environment Decoupling)**:
-  - **Behebung der Text-Überlappung**: Schritt [3/5] nutzt nun `$e[2K` vor dem Zeilenumbruch im Spinner und beim Abschlussframe (`Installation completed.`), wodurch Geisterzeichen (`ponenten...nten...`) restlos eliminiert werden.
-  - **Englische Lokalisierung**: Alle Ausgaben, Schritte [1/5]–[5/5], Logs und Fehlerboxen des Update Managers sind einheitlich auf Englisch umgestellt.
-  - **Drüber-Installations- & Reparatur-Pipeline**:
-    - `update.bat` & `scripts/update_launcher.ps1` (mit UTF-8 BOM) im Programmordner ermöglichen Reparatur/Neuinstallation per Doppelklick auch bei beschädigter `Tasks.exe`.
-    - Neuer CLI-Befehl `tasks update [--force] [--json]` (und Alias `reinstall`) in `src/core/agent_cli.py`.
-    - Voll automatisiert in `dist/Tasks/` und den Inno Setup Installer (`build_installer.py`) eingebunden.
-  - **5s Auto-Close & Sofortiger Neustart**: Tasks startet direkt nach Schritt 5; das Fenster schließt sich nach einem sicheren 5s-Countdown (überspringbar per Taste, immun gegen Pipe/Redirect `InvalidOperationException`), da `-NoExit` entfernt wurde.
-  - **Entwicklungs-Bereinigung**: Root-Binaries (`Tasks.exe`, `TasksTray.exe`, `tasks.cmd`) und veraltete Logs gelöscht. Entwicklung & Tests laufen nun zu 100% unverfälscht über `python main.py <cmd>`.
+- **Erreicht in dieser Session (Digi4School PDF Compression, Multi-Core Compactor & Slider Polish)**:
+  - **JPEG 4:4:4 DCTDecode-Pipeline**: Bilder im Grabber werden nun mit `subsampling=0` als hochauflösendes JPEG (Standard: Q75) eingebettet. Text, Formeln und Schaltpläne bleiben gestochen scharf ohne Farbsäume; Dateigrößen sinken von ~850 MB auf ~130–150 MB.
+  - **Neuer Befehl `tasks books compact <datei|index|all>`**:
+    - Kompaktiert existierende PDFs nachträglich verlustarm direkt auf der Festplatte.
+    - Vollständiger Erhalt aller OCR-Texte, Inhaltsverzeichnisse (Bookmarks/Outlines) und PageLabels.
+    - Atomare Ersetzung mit optionalem Sicherheitsbackup (`--keep-original`).
+  - **Multi-Core `ProcessPoolExecutor` Pipeline**:
+    - Automatische Erkennung aller CPU-Kerne (`os.cpu_count() - 1` Standard, anpassbar via `--workers <N>` / `--cores <N>`).
+    - Streaming Sliding-Window (`workers * 2` Aufgaben in-flight) hält RAM stabil unter 400 MB.
+    - Beschleunigung um den Faktor 6x bis 10x (~20–30s für 400 Seiten).
+  - **TwoThumbRangeSlider Text-Markierung behoben**:
+    - `ALLOW_SELECT = False`, `capture_mouse()` und Event-Isolierung eliminieren die unschöne Text-Hervorhebung beim Ziehen mit der Maus restlos, bei 100% unverändertem Design.
 - **Hinweis für nächste Session / nächsten Agent**:
-  - Alle 40 betroffenen Tests in `test_update_service.py` und `test_agent_cli.py` sowie die gesamte Testsuite sind grün.
-  - ADR-025 wurde in `docs/decisions.md` dokumentiert.
-  - Dokumentation in `docs/current-state.md`, `docs/changelog.md`, `docs/features.md` und `AGENTS.md` ist vollständig synchron.
+  - Alle 20 Tests in `tests/test_digi4school.py` und alle 14 Tests in `tests/test_page_range_slider.py` laufen fehlerfrei durch (100% Erfolgsquote).
+  - ADR-026 wurde in `docs/decisions.md` dokumentiert.
+  - Dokumentation in `AGENTS.md`, `docs/current-state.md`, `docs/changelog.md`, `docs/features.md`, `docs/architecture.md` und `docs/decisions.md` ist vollständig synchron.

@@ -27,6 +27,7 @@ class TwoThumbRangeSlider(Widget):
     }
     """
 
+    ALLOW_SELECT = False
     can_focus = True
 
     class Changed(Message):
@@ -157,6 +158,16 @@ class TwoThumbRangeSlider(Widget):
     def on_mouse_down(self, event: events.MouseDown) -> None:
         """Reagiert auf Mausklicks zur Positionierung der Griffe."""
         self.focus()
+        try:
+            self.capture_mouse()
+        except Exception:
+            pass
+        try:
+            if hasattr(self.screen, "clear_selection"):
+                self.screen.clear_selection()
+        except Exception:
+            pass
+
         track_start_x, track_width = self._get_track_metrics()
         rel_x = event.x - track_start_x
         val = self._pos_to_val(rel_x, track_width)
@@ -177,9 +188,17 @@ class TwoThumbRangeSlider(Widget):
         self._is_dragging = True
         self.refresh()
         self.post_message(self.Changed(self.start_val, self.end_val))
+        event.stop()
+        event.prevent_default()
 
     def on_mouse_up(self, event: events.MouseUp) -> None:
         self._is_dragging = False
+        try:
+            self.release_mouse()
+        except Exception:
+            pass
+        event.stop()
+        event.prevent_default()
 
     def on_mouse_move(self, event: events.MouseMove) -> None:
         if not self._is_dragging:
@@ -195,6 +214,8 @@ class TwoThumbRangeSlider(Widget):
 
         self.refresh()
         self.post_message(self.Changed(self.start_val, self.end_val))
+        event.stop()
+        event.prevent_default()
 
     def on_key(self, event: events.Key) -> None:
         """Steuerung über Tastatur."""

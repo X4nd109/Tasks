@@ -97,7 +97,7 @@
 | `<Suchbegriff>` | Books (Rot) | Durchsucht die verknüpfte Schulbuch-Bibliothek und öffnet das gewählte Buch (PDF oder Web). |
 | `/link` | Books | Öffnet den nativen Windows-Dateidialog zum Verknüpfen einer lokalen Schulbuch-PDF. |
 | `/url <URL>` | Books | Öffnet den Eingabedialog zum Hinterlegen eines webbasierten Schulbuchs. |
-| `/download <Code>` | Books | Startet den Digi4School Grabber und erzeugt ein durchsuchbares OCR-Sandwich-PDF. |
+| `/download <Code>` | Books | Startet den Digi4School Grabber und erzeugt ein durchsuchbares OCR-Sandwich-PDF (JPEG 4:4:4, deutlich kleinere Dateien). |
 | `/unlink` | Books | Entfernt ein verknüpftes Buch aus der lokalen Liste (`data/schoolbooks.json`). |
 | `<Suchbegriff>` | Directories (Grün) | Durchsucht verknüpfte Ordner nach Name oder Pfad und öffnet sie im Explorer. |
 | `/link` | Directories | Öffnet den nativen Windows-Ordnerauswahldialog zum Verknüpfen eines lokalen Ordners. |
@@ -117,7 +117,8 @@
 | `tasks books list` | `--json` | Gibt alle verknüpften Schulbücher aus. |
 | `tasks books open <id>` | — | Startet das angegebene Schulbuch im OS-Standardviewer oder Webbrowser. |
 | `tasks books add <pfad>` | `--title <titel>` | Verknüpft eine lokale PDF-Datei oder Web-URL headless als Schulbuch. |
-| `tasks books download <code>` | `[--quality <q>] [--scale <s>] [--dpi <d>] [--no-ocr] [--no-toc] [--page-offset <o>] [--visible]` | Lädt ein Digi4School-Buch im Terminal herunter und generiert ein OCR-PDF (Ultra-HD Standard). |
+| `tasks books download <code>` | `[--quality <q>] [--jpeg-quality <1-100>] [--scale <s>] [--dpi <d>] [--no-ocr] [--no-toc] [--page-offset <o>] [--visible]` | Lädt ein Digi4School-Buch im Terminal herunter und generiert ein OCR-PDF (Ultra-HD Standard) mit kompakter JPEG-Kompression (4:4:4 Farbsampling, Standard-Qualität 75). |
+| `tasks books compact <datei\|index\|all>` | `[--quality <1-100>] [--workers <N>] [--keep-original] [--output <pfad>] [--json]` | Schrumpft PDFs offline parallel auf mehreren CPU-Kernen (ProcessPoolExecutor, Standard: Cores - 1); JPEG 4:4:4 Farbsampling (Standard 75); Textschichten, TOC-Bookmarks und PageLabels bleiben zu 100 % erhalten. |
 | `tasks dirs list` | `--json` | Gibt alle verknüpften lokalen Ordner aus. |
 | `tasks dirs open <id\|name>` | — | Öffnet das verknüpfte Verzeichnis im System-Dateimanager (Windows Explorer). |
 | `tasks dirs add <pfad>` | `--title <name>` | Verknüpft einen lokalen Ordnerpfad headless mit automatischer oder manueller Benennung. |

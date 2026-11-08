@@ -39,7 +39,7 @@ else:
 USERPROFILE = os.environ.get("USERPROFILE") or os.path.expanduser("~")
 
 # Anwendungs-Version & GitHub Repository
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 GITHUB_REPO = "X4nd109/Tasks"
 
 
@@ -819,6 +819,18 @@ def save_saved_theme(theme_name: str) -> None:
         except Exception:
             pass
 
+    # Automatisch zu Git pushen, wenn sich das Theme geändert hat
+    if changed:
+        try:
+            try:
+                from git_sync_service import is_git_configured, GitSyncService
+            except ImportError:
+                from services.git_sync_service import is_git_configured, GitSyncService
+            if is_git_configured():
+                GitSyncService.async_push(f"Update theme: {clean_theme}")
+        except Exception:
+            pass
+
 
 def clear_skill_target_dir() -> bool:
     """Löscht das hinterlegte Skill-Zielverzeichnis aus der Konfiguration.
@@ -855,18 +867,6 @@ def clear_skill_target_dir() -> bool:
         except Exception:
             pass
     return cleared_any
-
-    # Automatisch zu Git pushen, wenn sich das Theme geändert hat
-    if changed:
-        try:
-            try:
-                from git_sync_service import is_git_configured, GitSyncService
-            except ImportError:
-                from services.git_sync_service import is_git_configured, GitSyncService
-            if is_git_configured():
-                GitSyncService.async_push(f"Update theme: {clean_theme}")
-        except Exception:
-            pass
 
 
 def load_favorite_themes() -> List[str]:

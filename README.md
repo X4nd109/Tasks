@@ -57,11 +57,12 @@ Modern terminal workspace (Interactive TUI & Headless CLI) consolidating all sch
    - Link local PDF textbooks (`/link`) or online digital books (`/url`).
    - 1-Click opening in your OS default PDF viewer or browser.
 
-8. **Digi4School Book Grabber (`/download`):**
-   - Built-in Digi4School book grabber integrated directly into the search palette.
-   - Quick download via access code: `/download <access_code>`.
+8. **Digi4School Book Grabber & Multi-Core Compactor (`/download` & `tasks books compact`):**
+   - Built-in Digi4School book grabber integrated directly into the search palette (`/download <access_code>`).
+   - Interactive page range selection with dual-thumb slider (`TwoThumbRangeSlider`) and synchronized page inputs.
    - Downloads high-resolution pages and compiles a fully searchable **OCR sandwich PDF** with table of contents (bookmarks), clickable hyperlinks, and synchronized page numbering.
-   - Saved directly to your Windows Downloads folder with a 1-click button to reveal the file.
+   - **Stream-Optimized JPEG 4:4:4 (`subsampling=0`):** Compresses pages without color fringing or loss of sharpness on circuit schematics, diagrams, and formulas, shrinking files by **~80–85%** compared to raw PNG streams.
+   - **Multi-Core In-Place Compactor (`tasks books compact`):** Retroactively compresses existing digital textbooks offline directly on disk using a parallel `ProcessPoolExecutor` streaming sliding-window (utilizing all available CPU cores minus 1), slashing runtime from minutes to seconds (< 400 MB RAM) while preserving 100% of OCR text, outlines, and page labels.
 
 9. **Headless Agent CLI (`tasks`):**
    - Token-efficient CLI dispatcher designed for AI coding agents (Antigravity), terminal enthusiasts, and automated scripts.
@@ -231,6 +232,8 @@ tasks books list
 tasks books open 1
 tasks books add "C:\School\MathBook.pdf"
 tasks books download 26s7dbu5qxvw
+tasks books compact "C:\School\Bet Buch.pdf"
+tasks books compact all --quality 75 --workers 8
 
 # Open Moodle course in browser
 tasks open SWP

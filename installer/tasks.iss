@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.4.0"
+#define AppVersion "2.5.0"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"
@@ -57,17 +57,21 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 ; Symbole explizit deklarieren (stellt sicher, dass PNG & ICO immer verpackt werden)
 Source: "{#SourceDir}\assets\app_icon.ico"; DestDir: "{app}\assets"; Flags: ignoreversion
 Source: "{#SourceDir}\assets\app_icon.png"; DestDir: "{app}\assets"; Flags: ignoreversion
+; Eigenständiger Updater & Reparatur-Launcher (funktioniert auch wenn Tasks.exe defekt ist)
+Source: "{#SourceDir}\update.bat"; DestDir: "{app}"; Flags: ignoreversion
 ; Alle kompilierten Programm-Dateien aus dist\Tasks (rekursiv, inkl. _internal/ und fonts/)
 Source: "{#SourceDir}\dist\Tasks\*"; DestDir: "{app}"; Excludes: "cache\*,data\*,config.json,*.log,skills\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-; Desktop shortcut (optional task)
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Open Tasks"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
+; Start Menu: Tasks
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks"; IconFilename: "{app}\assets\app_icon.ico"
+; Desktop (optional task)
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\Tasks.exe"; WorkingDir: "{app}"; Comment: "Tasks"; Tasks: desktopicon; IconFilename: "{app}\assets\app_icon.ico"
 [Run]
 ; 1. Setup Playwright Chromium Browser silently (for Teams login)
 Filename: "{app}\Tasks.exe"; \
   Parameters: "--install-playwright"; \
-  StatusMsg: "Setting up browser components (please wait)..."; \
+  StatusMsg: "Richte Browser-Komponenten ein (bitte warten)..."; \
   Flags: runhidden waituntilterminated
 
 ; 2. Add 'tasks' command to PATH
@@ -155,7 +159,6 @@ begin
       DeleteFile(AppDir + '\requirements.txt');
       DelTree(AppDir + '\src', True, True, True);
       DelTree(AppDir + '\tests', True, True, True);
-      DelTree(AppDir + '\scripts', True, True, True);
       DelTree(AppDir + '\skills', True, True, True);
       DelTree(AppDir + '\__pycache__', True, True, True);
       DelTree(AppDir + '\assets\git-sync-tutorial', True, True, True);

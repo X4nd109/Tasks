@@ -11,6 +11,31 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ---
 
+## [2.5.0] - 2026-11-08
+
+### Fixed
+- **TwoThumbRangeSlider Text-Markierung unterbunden**: Deaktivierung von Textuals nativer Textselektion (`ALLOW_SELECT = False`) sowie Kapselung von MouseDown/Move/Up mit `capture_mouse()` und `event.prevent_default()`, wodurch der Slider beim Verschieben mit der Maus nicht mehr wie Fließtext markiert wird.
+- **Git Sync Theme-Trigger**: Behebung eines Fehlers in `src/core/config.py`, bei dem Theme-Änderungen durch eine Code-Verschiebung nicht verlässlich per Git Sync synchronisiert wurden.
+- **Untis Exams Directory Mocking**: Bereinigung der Test-Mocks in `tests/test_untis_exams.py` für robuste modulübergreifende Ausführung.
+
+### Added
+- **Digi4School PDF-Komprimierung & `tasks books compact`**:
+  - `encode_image_dct()` kodiert Seitenbilder als hochqualitatives JPEG mit **4:4:4 Farbsampling (`subsampling=0`)**, sodass Text- und Diagrammkanten ohne Farbfransen gestochen scharf bleiben.
+  - `ocr_worker_process` übergibt das JPEG nun als temporäre `.jpg`-Datei an Tesseract; das Bild wird dadurch nativ als kompaktes `DCTDecode` (JPEG) eingebettet. Der Fallback-Zweig nutzt ebenfalls das optimierte JPEG.
+  - `download_book()` nutzt standardmäßig **Q75** für optimale Dateigröße bei makelloser Schärfe; auch der `--no-ocr`-Pfad verwendet komprimierte JPEGs.
+  - **Multi-Core Parallele PDF-Kompaktierung (`ProcessPoolExecutor`)**: `tasks books compact` nutzt automatisch mehrere CPU-Kerne (`os.cpu_count() - 1` für flüssige System-Reaktionsfähigkeit, steuerbar via `--workers <N>` / `--cores <N>`), mit speichereffizientem Streaming Sliding-Window (RAM stabil < 400 MB).
+  - Neuer Befehl `tasks books compact <datei|index|all> [--quality <1-100>] [--keep-original] [--output <pfad>] [--json]` kompaktiert bereits heruntergeladene PDFs offline über `compact_pdf_document()`. Textschicht (OCR), TOC-Bookmarks und PageLabels bleiben unverändert; optional bleibt das Original als `*.orig.pdf` erhalten.
+  - `tasks books download` akzeptiert zusätzlich `--jpeg-quality <1-100>`.
+  - Neue Tests in `tests/test_digi4school.py` für JPEG-Header/Sampling, `compact_pdf_document` (Größe, Textschicht, TOC, Seitenzahl, `--keep-original`) und den CLI-Subcommand `compact --json`.
+- **Tasks PyInstaller Executable & Clean Installer Implementation**:
+  - Standalone-Binaries via PyInstaller Onedir-Spec (`tasks.spec`): Console `Tasks.exe` und Windowed `TasksTray.exe` (excludes `tkinter`, `matplotlib`, `unittest`; datas `assets`, `skills`, `src`; Version-Info aus `installer/version_info*.txt`).
+  - Build-Pipeline: `scripts/build_exe.py` (via `python -m PyInstaller tasks.spec --noconfirm --clean`) mit Copy von `tasks.cmd`, Helper-Skripten (`scripts/*.bat`), Icons und Skills; Cleanup von `assets/git-sync-tutorial`; Verify `dist/Tasks/Tasks.exe` & `TasksTray.exe`.
+  - `build.bat` startet das Build-Skript.
+  - Clean Installer via Inno Setup (`installer/tasks.iss`, `installer/build_installer.py`): Bundle `dist\Tasks\*`, silent `--install-playwright` Setup, Start-Menü- & Desktop-Icons, obsolete File-/Dir-Cleanup (ohne Daten/Cache).
+  - Frozen-Path-Handling: `src/core/config.py` (Bundle-Pfade inkl. `_internal`), `main.py` (`--install-playwright`, `TasksTray.exe` -> `--tray`), Autostart via `TasksTray.exe` (`src/services/autostart_service.py`), Update-Restart via `Tasks.exe` (`src/services/update_service.py`).
+
+---
+
 ## [2.4.0] - 2026-11-03
 
 ### Added

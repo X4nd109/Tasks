@@ -15,7 +15,8 @@ import sys
 import time
 import re
 import webbrowser
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
 from config import CONFIG_DIR, extract_teacher, normalize_subject_name, load_all_course_links
 from models import Task
@@ -409,7 +410,7 @@ Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
   tasks restore <id|index> [--json]
     Restore a hidden/deleted assignment.
 
-  tasks books [list|open|add|remove|download] [--json]
+  tasks books [list|open|add|remove|download|compact] [--json]
     Manage and open schoolbooks (PDF, Web, Digi4School).
     Subcommands:
       list                       List all linked schoolbooks
@@ -417,6 +418,9 @@ Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
       add <path|url> [--title]   Link a local PDF or online schoolbook
       remove <id|index>          Remove linked schoolbook
       download <code>            Download Digi4School book with OCR
+                                 [--quality standard|high|ultra] [--jpeg-quality 1-100]
+      compact <file|index|all>   Shrink existing PDFs offline (JPEG 4:4:4)
+                                 [--quality 1-100] [--keep-original]
 
   tasks dirs [list|open|add|remove] [--json]
     Manage and open linked local directories in file explorer.
@@ -438,6 +442,13 @@ Fast (<0.1s offline cache) & token-efficient CLI designed for AI agents.
 
   tasks sync [--deep] [--json]
     Perform live network sync with Moodle & Teams in background/terminal.
+
+  tasks update [--force] [--reinstall] [--json]
+    Check GitHub Releases for a newer version and install it
+    (downloads Tasks_Setup.exe, reinstalls and restarts Tasks).
+    Flags:
+      --force / --reinstall   Install/repair even if already up to date
+      --json                  Output structured JSON
 
   tasks guide
     Print this reference guide.
@@ -1433,7 +1444,7 @@ def handle_books_command(sub_args: List[str]) -> int:
     target = args.target or (remaining[0] if remaining else "")
 
     # If first parameter is not an action, but a search query or index to open:
-    if action not in ["list", "ls", "open", "add", "remove", "rm", "delete", "download", "grab", "d4s", "digi", "digi4school"]:
+    if action not in ["list", "ls", "open", "add", "remove", "rm", "delete", "download", "grab", "d4s", "digi", "digi4school", "compact", "compress", "shrink"]:
         target = args.action
         action = "open"
 
@@ -1539,6 +1550,162 @@ def handle_books_command(sub_args: List[str]) -> int:
                 print(f"Error: Schoolbook '{target}' not found.")
         return 0 if ok else 1
 
+    if action in ["compact", "compress", "shrink"]:
+        if any(h in sub_args for h in ("-h", "--help")):
+            print("Usage: tasks books compact <file|index|all> [--quality 1-100] [--keep-original] [--output PATH] [--json]")
+            print("Shrinks existing PDF schoolbooks offline by re-encoding embedded images to JPEG 4:4:4.")
+            print("Flags:")
+            print("  --quality <1-100>   JPEG compression quality (default: 75)")
+            print("  --workers <N>       Number of CPU worker processes (default: CPU cores - 1)")
+            print("  --keep-original     Preserve original file as *.orig.pdf")
+            print("  --output <PATH>     Save to an alternative path instead of replacing in-place")
+            print("  --json              Output structured JSON")
+            return 0
+
+        compact_argv = [
+            a for a in sub_args
+            if a.lower() not in ("compact", "compress", "shrink")
+        ]
+        parser_c = argparse.ArgumentParser(prog="tasks books compact", add_help=False)
+        parser_c.add_argument("target", nargs="?", default="")
+        parser_c.add_argument("--quality", type=int, default=None, help="JPEG quality (1-100, default: 75)")
+        parser_c.add_argument("--workers", "--cores", type=int, default=None, help="Number of CPU worker processes (default: CPU cores - 1)")
+        parser_c.add_argument("--keep-original", action="store_true", help="Keep original as *.orig.pdf")
+        parser_c.add_argument("--output", "-o", default="", help="Optional output file path")
+        c_args, _ = parser_c.parse_known_args(compact_argv)
+
+        compact_target = c_args.target or target
+        if not compact_target:
+            msg = "Error: Please specify a PDF, an index, or 'all'. Example: 'tasks books compact all'"
+            if args.json:
+                print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+            else:
+                print(msg)
+            return 1
+
+        quality = 75 if c_args.quality is None else int(c_args.quality)
+        if quality < 1 or quality > 100:
+            msg = f"Error: Invalid quality '{quality}'. Allowed range: 1-100."
+            if args.json:
+                print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+            else:
+                print(msg)
+            return 1
+
+        try:
+            from digi4school_service import Digi4SchoolService, compact_pdf_document
+        except ImportError:
+            from src.services.digi4school_service import Digi4SchoolService, compact_pdf_document
+
+        available_books = Digi4SchoolService.list_downloaded_books()
+        selected_files: List[str] = []
+
+        if compact_target.strip().lower() in ("all", "alle"):
+            selected_files = [b["path"] for b in available_books]
+            if not selected_files:
+                msg = (
+                    "Error: No PDF books found in "
+                    f"{Digi4SchoolService.get_default_downloads_dir()}."
+                )
+                if args.json:
+                    print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+                else:
+                    print(msg)
+                return 1
+        elif compact_target.isdigit():
+            idx = int(compact_target) - 1
+            if 0 <= idx < len(available_books):
+                selected_files = [available_books[idx]["path"]]
+            else:
+                max_idx = len(available_books)
+                msg = f"Error: Index {compact_target} out of range (1-{max_idx})."
+                if args.json:
+                    print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+                else:
+                    print(msg)
+                return 1
+        else:
+            candidate = Path(compact_target).expanduser()
+            if not candidate.is_file():
+                candidate = Path(Digi4SchoolService.get_default_downloads_dir()) / compact_target
+            if not candidate.is_file():
+                needle = compact_target.lower()
+                match = next(
+                    (
+                        b for b in available_books
+                        if needle in b["title"].lower() or needle in Path(b["path"]).name.lower()
+                    ),
+                    None
+                )
+                if match:
+                    candidate = Path(match["path"])
+            if not candidate.is_file():
+                msg = f"Error: PDF '{compact_target}' not found."
+                if args.json:
+                    print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+                else:
+                    print(msg)
+                return 1
+            selected_files = [str(candidate.resolve())]
+
+        if len(selected_files) > 1 and c_args.output:
+            msg = "Error: --output can only be used with a single PDF file."
+            if args.json:
+                print(json.dumps({"error": msg, "success": False}, ensure_ascii=False))
+            else:
+                print(msg)
+            return 1
+
+        results: List[Dict[str, Any]] = []
+        errors: List[Dict[str, str]] = []
+
+        for file_idx, pdf_file in enumerate(selected_files, start=1):
+            file_name = Path(pdf_file).name
+
+            def compact_progress(cur: int, tot: int, message: str):
+                if not args.json:
+                    sys.stdout.write(f"\r{message}   ")
+                    sys.stdout.flush()
+
+            try:
+                res = compact_pdf_document(
+                    pdf_file,
+                    output_path=(c_args.output or None) if len(selected_files) == 1 else None,
+                    jpeg_quality=quality,
+                    subsampling=0,
+                    keep_original=bool(c_args.keep_original),
+                    max_workers=c_args.workers,
+                    progress_cb=compact_progress,
+                )
+                if not args.json:
+                    sys.stdout.write("\r" + " " * 100 + "\r")
+                results.append(res)
+                if not args.json:
+                    print(f"[✓] Compaction completed: {file_name}")
+                    print(
+                        f"    Before: {res['original_size_mb']:.1f} MB -> "
+                        f"After: {res['new_size_mb']:.1f} MB "
+                        f"(Saved: {res['saved_mb']:.1f} MB / {res['saved_percent']:.1f}%)"
+                    )
+                    print(f"    Path:   {res['path']}")
+            except Exception as e:
+                if not args.json:
+                    sys.stdout.write("\r" + " " * 100 + "\r")
+                    print(f"[✗] Compaction failed: {file_name}")
+                    print(f"    Error: {e}")
+                errors.append({"file": file_name, "error": str(e)})
+
+        if args.json:
+            print(json.dumps({
+                "success": len(errors) == 0,
+                "count": len(results),
+                "failed": len(errors),
+                "results": results,
+                "errors": errors,
+            }, ensure_ascii=False, indent=2))
+
+        return 0 if not errors else 1
+
     if action in ["download", "grab", "d4s", "digi", "digi4school"]:
         if not target:
             msg = "Error: Please specify a 12-digit access code. Example: 'tasks books download 26s7dbu5qxvw'"
@@ -1555,6 +1722,7 @@ def handle_books_command(sub_args: List[str]) -> int:
         parser_d4s.add_argument("--pages", "-p", default="", help="Page range (e.g. '1-50')")
         parser_d4s.add_argument("--scale", type=float, default=4.0, help="Device scale factor (e.g. 4.0 for Ultra-HD, 2.0 for standard)")
         parser_d4s.add_argument("--quality", choices=["standard", "high", "ultra"], default=None, help="Render quality preset: standard (2.0), high (3.0), ultra (4.0)")
+        parser_d4s.add_argument("--jpeg-quality", type=int, default=None, help="JPEG quality for page images (1-100, default: preset-based 80/85/90)")
         parser_d4s.add_argument("--dpi", type=int, default=None, help="Custom DPI resolution (default: auto from scale, e.g. 600 at 4.0)")
         parser_d4s.add_argument("--psm", type=int, default=3, help="Tesseract Page Segmentation Mode")
         parser_d4s.add_argument("--lang", "-l", default="deu+eng", help="OCR language(s)")
@@ -1631,6 +1799,7 @@ def handle_books_command(sub_args: List[str]) -> int:
                     pages=d4s_args.pages or None,
                     scale=d4s_args.scale,
                     quality=d4s_args.quality,
+                    jpeg_quality=d4s_args.jpeg_quality,
                     dpi=d4s_args.dpi,
                     psm=d4s_args.psm,
                     lang=d4s_args.lang,

@@ -290,5 +290,9 @@ flowchart TD
 ```
 
 - **Ultra-HD Resolution & Adaptive DPI Coupling**: Renders pages by default with Playwright's `device_scale_factor = 4.0` and dynamically couples OCR DPI via `effective_dpi = int(150 * scale)` (600 DPI standard), keeping standard A4/B5 physical geometry while quadrupling zoom sharpness. Supports quick presets (`ultra`, `high`, `standard`) and pure image archives (`--no-ocr`).
+
+- **High-Quality JPEG 4:4:4 Stream Optimization (`subsampling=0`)**: By default, page screenshots are encoded as high-fidelity JPEG streams with 4:4:4 chroma subsampling (`subsampling=0`, standard Q75). This prevents color bleeding on thin schematic lines, formulas, and text while reducing PDF size by ~80-85% compared to raw PNG FlateDecode streams.
+- **Multi-Core In-Place Compaction Pipeline (`compact_pdf_document`)**: Existing PDFs can be compacted offline on disk via `tasks books compact`. A streaming sliding window (`ProcessPoolExecutor` with `os.cpu_count() - 1` cores, configurable via `--workers`) processes images in parallel, bounding RAM consumption under 400 MB while preserving 100% of the OCR text layer, TOC bookmarks, and page labels.
+
 - **Live ETA & Progress Calculation**: Real-time progress updates are reported via thread-safe callbacks to the TUI and CLI. The remaining time (ETA) estimates both active page rendering and multi-core OCR throughput based on dynamic elapsed-time rates.
 

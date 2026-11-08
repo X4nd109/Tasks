@@ -66,6 +66,55 @@ class TestTwoThumbRangeSlider(unittest.TestCase):
         # Pos 100 should map to page 101
         self.assertEqual(slider._pos_to_val(100, track_width), 101)
 
+    def test_allow_select_is_disabled(self):
+        """Stellt sicher, dass Textauswahl auf dem Slider deaktiviert ist."""
+        slider = TwoThumbRangeSlider(min_val=1, max_val=100)
+        self.assertFalse(slider.ALLOW_SELECT)
+        self.assertFalse(slider.allow_select)
+
+    def test_mouse_events_stop_propagation_and_prevent_selection(self):
+        """Prüft, dass Maus-Events gestoppt werden, um Textmarkierung zu verhindern."""
+        slider = TwoThumbRangeSlider(min_val=1, max_val=100)
+
+        from textual.geometry import Size
+        from unittest.mock import PropertyMock
+        mock_screen = MagicMock()
+        mock_down_event = MagicMock()
+        mock_down_event.x = 30
+        mock_down_event.y = 1
+
+        with patch.object(TwoThumbRangeSlider, "screen", new_callable=PropertyMock, return_value=mock_screen), \
+             patch.object(TwoThumbRangeSlider, "size", new_callable=PropertyMock, return_value=Size(80, 3)), \
+             patch.object(slider, "focus"), \
+             patch.object(slider, "capture_mouse"), \
+             patch.object(slider, "post_message"), \
+             patch.object(slider, "refresh"):
+            slider.on_mouse_down(mock_down_event)
+
+        self.assertTrue(slider._is_dragging)
+        mock_down_event.stop.assert_called_once()
+        mock_down_event.prevent_default.assert_called_once()
+        mock_screen.clear_selection.assert_called_once()
+
+        # Test MouseMove while dragging
+        mock_move_event = MagicMock()
+        mock_move_event.x = 40
+        mock_move_event.y = 1
+        with patch.object(TwoThumbRangeSlider, "size", new_callable=PropertyMock, return_value=Size(80, 3)), \
+             patch.object(slider, "post_message"), \
+             patch.object(slider, "refresh"):
+            slider.on_mouse_move(mock_move_event)
+        mock_move_event.stop.assert_called_once()
+        mock_move_event.prevent_default.assert_called_once()
+
+        # Test MouseUp
+        mock_up_event = MagicMock()
+        with patch.object(slider, "release_mouse"):
+            slider.on_mouse_up(mock_up_event)
+        self.assertFalse(slider._is_dragging)
+        mock_up_event.stop.assert_called_once()
+        mock_up_event.prevent_default.assert_called_once()
+
     def test_render_output_contains_labels(self):
         slider = TwoThumbRangeSlider(min_val=1, max_val=300, start_val=20, end_val=50)
         text = slider.render().plain

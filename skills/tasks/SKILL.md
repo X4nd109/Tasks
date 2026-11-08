@@ -85,7 +85,8 @@ tasks sync --json
   - `tasks books list --json`: List linked schoolbooks.
   - `tasks books open <id|index>`: Open book in PDF reader / browser.
   - `tasks books add "<path_oder_url>" [--title "<name>"] --json`: Link a book.
-  - `tasks books download <12_digit_code> --email "..." --password "..." --json`: Download Digi4School book with OCR.
+  - `tasks books download <12_digit_code> --email "..." --password "..." [--quality standard|high|ultra] [--jpeg-quality 1-100] --json`: Download Digi4School book with OCR and stream-optimized JPEG 4:4:4 compression.
+  - `tasks books compact <file|index|all> [--quality 1-100] [--workers <N>] [--keep-original] [--output PATH] --json`: Compact existing digital textbook PDFs offline using parallel multi-core compression (default Q75, preserves OCR, bookmarks, and page labels).
 
 ---
 
@@ -107,7 +108,20 @@ tasks sync --json
 
 ---
 
-## 6. System Tray & Autostart Management
+## 6. Update & Self-Repair
+
+- **Check for updates and install latest release**:
+  ```powershell
+  tasks update --json
+  ```
+- **Force reinstall / repair over current installation**:
+  ```powershell
+  tasks update --force --json
+  ```
+
+---
+
+## 7. System Tray & Autostart Management
 
 - **Tray Status & Background State**:
   ```powershell

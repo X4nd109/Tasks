@@ -91,15 +91,29 @@ def build() -> int:
     with open(tasks_cmd_path, "w", encoding="utf-8") as f:
         f.write('@echo off\n"%~dp0Tasks.exe" %*\n')
 
-    # update.bat and scripts/update_launcher.ps1
+    # update.bat (standalone updater & repair tool)
     src_update_bat = os.path.join(PROJECT_ROOT, "update.bat")
     if os.path.isfile(src_update_bat):
         shutil.copy2(src_update_bat, os.path.join(dist_dir, "update.bat"))
+        print("[*] Copied update.bat (standalone updater & repair tool)")
+    else:
+        print("[!] Warning: update.bat not found in project root - skipping")
+
+    # scripts: update_launcher.ps1 + Windows Terminal profile helpers
     target_scripts = os.path.join(dist_dir, "scripts")
     os.makedirs(target_scripts, exist_ok=True)
     src_launcher = os.path.join(PROJECT_ROOT, "scripts", "update_launcher.ps1")
     if os.path.isfile(src_launcher):
         shutil.copy2(src_launcher, os.path.join(target_scripts, "update_launcher.ps1"))
+    scripts_src_dir = os.path.join(PROJECT_ROOT, "scripts")
+    if os.path.isdir(scripts_src_dir):
+        for helper_name in sorted(f for f in os.listdir(scripts_src_dir) if f.endswith(".bat")):
+            helper_src = os.path.join(scripts_src_dir, helper_name)
+            if os.path.isfile(helper_src):
+                shutil.copy2(helper_src, os.path.join(target_scripts, helper_name))
+                print(f"[*] Copied runtime helper script: {helper_name}")
+            else:
+                print(f"[!] Missing runtime helper script: {helper_name}")
 
     # Copy top-level assets (icons)
     target_assets = os.path.join(dist_dir, "assets")

@@ -13,6 +13,7 @@ import re
 import shutil
 import statistics
 import sys
+import tempfile
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 try:
@@ -628,9 +629,29 @@ async def capture_single_page(
     return None
 
 
-def ocr_worker_process(args_tuple: Tuple[int, bytes, str, int, int, str]) -> Tuple[int, bytes]:
+def encode_image_dct(pil_img: Image.Image, quality: int = 75, subsampling: int = 0) -> bytes:
+    """Konvertiert ein PIL-Image in ein hochqualitatives JPEG mit 4:4:4 Farbsampling (keine Farbfransen)."""
+    rgb_img = pil_img if pil_img.mode == "RGB" else pil_img.convert("RGB")
+    buf = io.BytesIO()
+    save_kwargs = {
+        "format": "JPEG",
+        "quality": int(quality),
+        "subsampling": int(subsampling),
+    }
+    try:
+        rgb_img.save(buf, optimize=True, **save_kwargs)
+    except Exception:
+        # Einige Pillow-Versionen scheitern bei optimize=True in Kombination mit
+        # 4:4:4-Farbsampling. Ohne optimize bleibt das JPEG dennoch vollwertig.
+        buf = io.BytesIO()
+        rgb_img.save(buf, optimize=False, **save_kwargs)
+    return buf.getvalue()
+
+
+def ocr_worker_process(args_tuple: Tuple) -> Tuple[int, bytes]:
     """Multiprocessing Worker für Tesseract OCR (LSTM Engine, OEM 1, PSM 3, Sauvola Thresholding)."""
-    page_num, img_bytes, lang, dpi, psm, tesseract_cmd = args_tuple
+    page_num, img_bytes, lang, dpi, psm, tesseract_cmd = args_tuple[:6]
+    jpeg_quality = int(args_tuple[6]) if len(args_tuple) > 6 and args_tuple[6] is not None else 75
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
     pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -640,6 +661,9 @@ def ocr_worker_process(args_tuple: Tuple[int, bytes, str, int, int, str]) -> Tup
         ocr_img = pil_img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=115, threshold=3))
     except Exception:
         ocr_img = pil_img
+
+    # Kompaktes JPEG mit 4:4:4 Farbsampling (Tesseract bettet es nativ als DCTDecode ein)
+    jpeg_bytes = encode_image_dct(ocr_img, quality=jpeg_quality, subsampling=0)
 
     # Optimierte Tesseract-Konfiguration mit Sauvola-Binarisierung, Stroke-Normierung und Unterstreichungstrennung
     tess_config = (
@@ -652,37 +676,58 @@ def ocr_worker_process(args_tuple: Tuple[int, bytes, str, int, int, str]) -> Tup
         f"-c textord_underline_threshold=0.5"
     )
 
+    def _run_tesseract(config: str) -> bytes:
+        """Schreibt das JPEG in eine temporäre Datei und lässt Tesseract daraus ein PDF bauen."""
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
+            tf.write(jpeg_bytes)
+            temp_jpg = tf.name
+        try:
+            return pytesseract.image_to_pdf_or_hocr(
+                temp_jpg,
+                extension="pdf",
+                lang=lang,
+                config=config
+            )
+        finally:
+            if os.path.isfile(temp_jpg):
+                os.unlink(temp_jpg)
+
     try:
-        pdf_bytes = pytesseract.image_to_pdf_or_hocr(
-            ocr_img,
-            extension="pdf",
-            lang=lang,
-            config=tess_config
-        )
-        return page_num, pdf_bytes
+        return page_num, _run_tesseract(tess_config)
     except Exception:
         # Fallback auf Standardkonfiguration ohne erweiterte Parameter, falls ältere Tesseract-Version vorliegt
         try:
             fallback_config = f"--oem 1 --psm {psm} -c user_defined_dpi={dpi} -c preserve_interword_spaces=1"
-            pdf_bytes = pytesseract.image_to_pdf_or_hocr(
-                pil_img,
-                extension="pdf",
-                lang=lang,
-                config=fallback_config
-            )
-            return page_num, pdf_bytes
+            return page_num, _run_tesseract(fallback_config)
         except Exception:
-            # Letzter Fallback: Bild ohne OCR direkt in PDF-Seite einbetten
+            # Letzter Fallback: optimiertes JPEG ohne OCR direkt in PDF-Seite einbetten
             pt_w = (pil_img.width / dpi) * 72.0
             pt_h = (pil_img.height / dpi) * 72.0
             doc = fitz.open()
             page = doc.new_page(width=pt_w, height=pt_h)
-            buf = io.BytesIO()
-            pil_img.save(buf, format="JPEG", quality=93)
-            page.insert_image(page.rect, stream=buf.getvalue())
+            page.insert_image(
+                page.rect,
+                stream=encode_image_dct(pil_img, quality=jpeg_quality, subsampling=0)
+            )
             fallback_bytes = doc.tobytes(garbage=4, deflate=True)
             doc.close()
             return page_num, fallback_bytes
+
+
+def _compact_image_worker(args: Tuple) -> Tuple[int, int, Optional[bytes]]:
+    """Multiprocessing Worker: Re-kodiert ein einzelnes Bild isoliert als JPEG 4:4:4."""
+    page_idx, xref, raw_bytes, jpeg_quality, subsampling = args
+    try:
+        with Image.open(io.BytesIO(raw_bytes)) as pil_img:
+            jpg_bytes = encode_image_dct(
+                pil_img,
+                quality=jpeg_quality,
+                subsampling=subsampling
+            )
+        return page_idx, xref, jpg_bytes
+    except Exception as e:
+        logger.debug(f"Worker image compression failed for xref {xref}: {e}")
+        return page_idx, xref, None
 
 
 def infer_toc_hierarchy(raw_toc_items: List[dict]) -> List[dict]:
@@ -941,6 +986,230 @@ def apply_page_labels(
         logger.warning(f"Fehler beim Setzen der Page-Labels: {e}")
 
 
+def compact_pdf_document(
+    pdf_path: str | Path,
+    output_path: Optional[str | Path] = None,
+    jpeg_quality: int = 75,
+    subsampling: int = 0,
+    keep_original: bool = False,
+    max_workers: Optional[int] = None,
+    progress_cb: Optional[Callable[[int, int, str], None]] = None
+) -> Dict[str, Any]:
+    """
+    Komprimiert ein vorhandenes PDF verlustarm, indem alle eingebetteten Bilder
+    als JPEG (4:4:4 Farbsampling) neu kodiert werden.
+
+    Textschichten, Lesezeichen (TOC) und PageLabels bleiben unangetastet.
+    """
+    src_path = Path(pdf_path)
+    if not src_path.is_file():
+        raise FileNotFoundError(f"PDF file not found: {src_path}")
+
+    jpeg_quality = max(1, min(100, int(jpeg_quality)))
+    subsampling = max(0, min(2, int(subsampling)))
+    orig_size_mb = src_path.stat().st_size / (1024 * 1024)
+
+    doc = fitz.open(str(src_path))
+    page_count = len(doc)
+    if page_count == 0:
+        doc.close()
+        raise ValueError(f"PDF contains no pages: {src_path}")
+
+    if output_path is not None:
+        work_dir = Path(output_path).expanduser().resolve().parent
+    else:
+        work_dir = src_path.resolve().parent
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    tmp_fd, tmp_name = tempfile.mkstemp(suffix=".tmp.pdf", dir=str(work_dir))
+    os.close(tmp_fd)
+
+    try:
+        try:
+            if max_workers is not None:
+                effective_workers = max(1, int(max_workers))
+            else:
+                cpu_count = os.cpu_count() or 4
+                effective_workers = max(1, cpu_count - 1)
+
+            # Eindeutige Image-XREFs im gesamten Dokument erfassen
+            unique_xrefs = set()
+            for p in doc:
+                for img_info in p.get_images(full=True):
+                    if img_info[0]:
+                        unique_xrefs.add(img_info[0])
+            total_images = len(unique_xrefs)
+
+            replaced_count = 0
+
+            if total_images == 0:
+                pass
+            elif effective_workers <= 1:
+                # Sequentieller Fallback
+                processed_xrefs = set()
+                done_count = 0
+                for page_idx in range(page_count):
+                    page = doc[page_idx]
+                    for img_info in page.get_images(full=True):
+                        xref = img_info[0]
+                        if not xref or xref in processed_xrefs:
+                            continue
+                        processed_xrefs.add(xref)
+                        try:
+                            img_dict = doc.extract_image(xref)
+                            if not img_dict or not img_dict.get("image"):
+                                continue
+                            with Image.open(io.BytesIO(img_dict["image"])) as pil_img:
+                                jpg_bytes = encode_image_dct(
+                                    pil_img,
+                                    quality=jpeg_quality,
+                                    subsampling=subsampling
+                                )
+                            page.replace_image(xref, stream=jpg_bytes)
+                            replaced_count += 1
+                        except Exception as e:
+                            logger.debug(f"Image xref {xref} skipped: {e}")
+                        done_count += 1
+                        if progress_cb:
+                            try:
+                                progress_cb(done_count, total_images, f"Compacting image {done_count}/{total_images} (1 core)...")
+                            except Exception:
+                                pass
+            else:
+                # Parallele Multi-Core Verarbeitung mit Streaming Sliding-Window
+                def _task_generator():
+                    seen_xrefs = set()
+                    for p_idx in range(page_count):
+                        page_obj = doc[p_idx]
+                        for img_info in page_obj.get_images(full=True):
+                            xref = img_info[0]
+                            if not xref or xref in seen_xrefs:
+                                continue
+                            seen_xrefs.add(xref)
+                            try:
+                                img_dict = doc.extract_image(xref)
+                                if img_dict and img_dict.get("image"):
+                                    yield (p_idx, xref, img_dict["image"], jpeg_quality, subsampling)
+                            except Exception as e:
+                                logger.debug(f"Extract image xref {xref} failed: {e}")
+
+                task_iter = _task_generator()
+                max_in_flight = effective_workers * 2
+                in_flight = {}
+                done_count = 0
+
+                with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+                    # Initialen Batch bis max_in_flight füllen
+                    for task in task_iter:
+                        fut = executor.submit(_compact_image_worker, task)
+                        in_flight[fut] = (task[0], task[1])
+                        if len(in_flight) >= max_in_flight:
+                            break
+
+                    # Kontinuierlich abarbeiten und nachfüllen
+                    while in_flight:
+                        done_fut = next(as_completed(in_flight))
+                        orig_pidx, orig_xref = in_flight.pop(done_fut)
+                        try:
+                            res_pidx, res_xref, jpg_bytes = done_fut.result()
+                            if jpg_bytes:
+                                doc[res_pidx].replace_image(res_xref, stream=jpg_bytes)
+                                replaced_count += 1
+                        except Exception as e:
+                            logger.debug(f"Worker task error for xref {orig_xref}: {e}")
+
+                        done_count += 1
+                        if progress_cb:
+                            try:
+                                pct = (done_count / total_images * 100.0) if total_images > 0 else 100.0
+                                progress_cb(
+                                    done_count,
+                                    total_images,
+                                    f"Compacting image {done_count}/{total_images} ({effective_workers} CPU cores, {pct:.1f}%)..."
+                                )
+                            except Exception:
+                                pass
+
+                        try:
+                            next_task = next(task_iter)
+                            next_fut = executor.submit(_compact_image_worker, next_task)
+                            in_flight[next_fut] = (next_task[0], next_task[1])
+                        except StopIteration:
+                            pass
+
+            if progress_cb:
+                try:
+                    progress_cb(page_count, page_count, "Saving compacted PDF...")
+                except Exception:
+                    pass
+
+            doc.save(tmp_name, garbage=4, deflate=True, clean=True)
+        finally:
+            try:
+                doc.close()
+            except Exception:
+                pass
+
+        # Validierung: Seitenanzahl identisch und Datei fehlerfrei öffenbar
+        with fitz.open(tmp_name) as check_doc:
+            if len(check_doc) != page_count:
+                raise RuntimeError(
+                    f"Validation failed: page count changed from {page_count} to {len(check_doc)}"
+                )
+
+        if output_path is not None:
+            final_path = Path(output_path).expanduser().resolve()
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(tmp_name, str(final_path))
+        elif keep_original:
+            backup_path = src_path.with_name(f"{src_path.stem}.orig.pdf")
+            counter = 1
+            while backup_path.exists():
+                backup_path = src_path.with_name(f"{src_path.stem}.orig{counter}.pdf")
+                counter += 1
+            os.replace(str(src_path), str(backup_path))
+            try:
+                os.replace(tmp_name, str(src_path))
+            except Exception:
+                os.replace(str(backup_path), str(src_path))
+                raise
+            final_path = src_path.resolve()
+        else:
+            os.replace(tmp_name, str(src_path))
+            final_path = src_path.resolve()
+
+        new_size_mb = final_path.stat().st_size / (1024 * 1024)
+        saved_mb = orig_size_mb - new_size_mb
+        saved_pct = (saved_mb / orig_size_mb * 100.0) if orig_size_mb > 0 else 0.0
+
+        if progress_cb:
+            try:
+                progress_cb(page_count, page_count, "Compaction finished.")
+            except Exception:
+                pass
+
+        return {
+            "success": True,
+            "path": str(final_path),
+            "pages": page_count,
+            "images_replaced": replaced_count,
+            "jpeg_quality": jpeg_quality,
+            "subsampling": subsampling,
+            "workers": effective_workers,
+            "original_size_mb": round(orig_size_mb, 2),
+            "new_size_mb": round(new_size_mb, 2),
+            "saved_mb": round(saved_mb, 2),
+            "saved_percent": round(saved_pct, 1),
+        }
+    except Exception:
+        if os.path.isfile(tmp_name):
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+        raise
+
+
 class Digi4SchoolService:
     """Service für den vollautomatisierten Download von Digi4School-Büchern."""
 
@@ -948,6 +1217,38 @@ class Digi4SchoolService:
     def get_default_downloads_dir() -> str:
         """Gibt den Pfad zum Downloads-Ordner des Benutzers zurück."""
         return os.path.join(os.path.expanduser("~"), "Downloads")
+
+    @classmethod
+    def list_downloaded_books(cls, downloads_dir: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Listet alle heruntergeladenen PDF-Bücher im Digi4School-Downloadordner auf."""
+        folder = Path(downloads_dir or cls.get_default_downloads_dir())
+        if not folder.is_dir():
+            return []
+
+        books: List[Dict[str, Any]] = []
+        try:
+            pdf_files = sorted(
+                (p for p in folder.iterdir() if p.is_file() and p.suffix.lower() == ".pdf"),
+                key=lambda p: p.name.lower()
+            )
+        except OSError:
+            return []
+
+        for pdf_file in pdf_files:
+            name_lower = pdf_file.name.lower()
+            if name_lower.endswith(".orig.pdf") or ".tmp." in name_lower:
+                continue
+            try:
+                size_mb = pdf_file.stat().st_size / (1024 * 1024)
+            except OSError:
+                size_mb = 0.0
+            books.append({
+                "title": pdf_file.stem,
+                "path": str(pdf_file.resolve()),
+                "size_mb": round(size_mb, 2),
+            })
+
+        return books
 
     @classmethod
     async def inspect_book(
@@ -1032,6 +1333,7 @@ class Digi4SchoolService:
         pages: Optional[str] = None,
         scale: float = 4.0,
         quality: Optional[str] = None,
+        jpeg_quality: Optional[int] = None,
         dpi: Optional[int] = None,
         psm: int = 3,
         lang: str = "deu+eng",
@@ -1067,6 +1369,12 @@ class Digi4SchoolService:
             quality_map = {"standard": 2.0, "high": 3.0, "ultra": 4.0}
             if quality in quality_map:
                 scale = quality_map[quality]
+
+        # JPEG-Kompression: 4:4:4 Farbsampling verhindert Farbfransen an Text- und Diagrammkanten
+        if jpeg_quality is None:
+            effective_jpeg_quality = 75
+        else:
+            effective_jpeg_quality = max(1, min(100, int(jpeg_quality)))
 
         effective_dpi = dpi if dpi else int(150 * scale)
 
@@ -1199,13 +1507,19 @@ class Digi4SchoolService:
                     update_progress("saving", 0, 1, "Creating uniform image PDF without OCR...")
                     for p_num, img_bytes in downloaded_pages:
                         new_p = target_doc.new_page(width=master_pt_w, height=master_pt_h)
-                        new_p.insert_image(new_p.rect, stream=img_bytes)
+                        with Image.open(io.BytesIO(img_bytes)) as pil_img:
+                            jpeg_bytes = encode_image_dct(
+                                pil_img,
+                                quality=effective_jpeg_quality,
+                                subsampling=0
+                            )
+                        new_p.insert_image(new_p.rect, stream=jpeg_bytes)
                 else:
                     # OCR Verarbeitung
                     cpu_cores = os.cpu_count() or 4
                     max_workers = min(cpu_cores, 12)
                     ocr_tasks = [
-                        (p_num, img_bytes, lang, effective_dpi, psm, tess_path)
+                        (p_num, img_bytes, lang, effective_dpi, psm, tess_path, effective_jpeg_quality)
                         for p_num, img_bytes in downloaded_pages
                     ]
 
@@ -1273,6 +1587,7 @@ class Digi4SchoolService:
                     "offset": detected_offset,
                     "scale": scale,
                     "dpi": effective_dpi,
+                    "jpeg_quality": effective_jpeg_quality,
                     "ocr": not no_ocr,
                     "toc": not no_toc
                 }
