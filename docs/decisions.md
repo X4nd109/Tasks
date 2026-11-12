@@ -498,7 +498,7 @@ This document records high-impact architectural choices, library selections, and
   4. In the Digi4School page range selection modal, dragging the `TwoThumbRangeSlider` caused Textual to initiate a text selection highlight over the widget characters, appearing like highlighted text.
 - **Decision**:
   1. **JPEG 4:4:4 (`subsampling=0`) & Native DCTDecode**:
-     - Encode page images using Pillow's JPEG encoder with `subsampling=0` (4:4:4 chroma sampling) at standard quality **Q75**.
+     - Encode page images using Pillow's JPEG encoder with `subsampling=0` (4:4:4 chroma sampling). Quality follows the render preset (`standard=80`, `high=85`, `ultra=90`, default Q90); `--jpeg-quality` and `--quality` allow explicit overrides.
      - Eliminates color fringing on circuit schematics, diagrams, and formulas while cutting file size from ~850 MB to ~130–150 MB.
      - Pass temporary `.jpg` files to Tesseract OCR, forcing Tesseract to generate native `DCTDecode` streams in the output PDF.
   2. **Multi-Core In-Place PDF Compactor (`tasks books compact`)**:
@@ -512,4 +512,37 @@ This document records high-impact architectural choices, library selections, and
      - Preserves 100% of the visual styling, track characters, thumb symbols, badges, and Catppuccin colors.
 - **Consequences**:
   - Positive: ~80-85% smaller book PDFs; 6x-10x faster compaction (~20-30s for 400 pages); bounded RAM usage; smooth, native-feeling slider dragging without text highlights; 100% metadata preservation.
-  - Negative: None. Default quality Q75 can still be customized via `--quality` or `--jpeg-quality`.
+  - Negative: None. Default quality Q90 can still be customized via `--quality` or `--jpeg-quality`.
+
+---
+
+## ADR-027: Resilient Auto-Update Pipeline via HTTP Range Resumption, Exponential Backoff & Connection-Drop Protection
+
+- **Date**: 2026-11-08
+- **Status**: Accepted
+- **Context**:
+  1. On slow, high-latency, or fluctuating internet connections (e.g., school Wi-Fi or mobile hotspots), updates in Tasks frequently failed completely.
+  2. The GitHub release check had an aggressive 3.0s timeout that failed silently, causing misleading messages (*"Tasks is already up to date"*) or preventing the update reminder modal from appearing.
+  3. The ~80 MB installer download aborted immediately on the first socket read error or network hiccup because there were zero retries and no HTTP Range resumption.
+  4. Any download failure immediately deleted the `.part` file, discarding up to 70+ MB of downloaded data and forcing users to resort to manual browser downloads.
+- **Decision**:
+  1. **Extended Check Timeout with API Retry**:
+     - Increase default timeout in `check_for_updates(...)` from 3.0s to 12.0s.
+     - Add 1 automatic retry after a 1.0s delay to absorb transient latency spikes before returning `None`.
+  2. **HTTP Range-Header Resumption & Chunk Streaming**:
+     - In `download_update_installer(...)`, check if a partial `.part` file exists and send `Range: bytes={existing}-`.
+     - Handle HTTP 206 (Partial Content) by opening in append mode (`ab`) and resuming seamlessly.
+     - Fall back to clean rewrite mode (`wb`) if the server returns HTTP 200 (Range ignored or fresh file).
+     - Reset on HTTP 416 (Range Not Satisfiable).
+  3. **Multi-Attempt Retry Loop with Incremental Backoff**:
+     - Allow up to 3 automatic retries (`max_retries=3`) with exponential backoff (2s, 4s, 8s).
+     - Dispatch live status messages via `status_callback` to `#update_status_lbl` in the TUI, console output in `tasks update`, and `update.bat`.
+  4. **Preserve Partial Downloads on Network Errors**:
+     - On network failure or retry exhaustion, retain the `.part` file so clicking *Try Again* resumes at the exact previous offset.
+     - Delete the `.part` file only when the user explicitly clicks *Cancel* (`cancel_event`).
+  5. **Parity in `update.bat`**:
+     - Update the embedded PowerShell script in `update.bat` to support `$request.AddRange($existing)` and 3 retries with backoff.
+- **Consequences**:
+  - Positive: Completely eliminates failed update downloads on slow connections; zero wasted bandwidth; seamless resumption at any megabyte; transparent live feedback during network hiccups; 100% backward compatible.
+  - Negative: Keeps temporary `.part` file in `%TEMP%\Tasks_Update\` until completed or cancelled.
+

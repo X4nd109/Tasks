@@ -3833,11 +3833,18 @@ class UpdateReminderModal(ModalScreen[None]):
             except Exception:
                 pass
 
+        def status_cb(msg: str) -> None:
+            try:
+                app.call_from_thread(self._on_download_status, msg)
+            except Exception:
+                pass
+
         success = download_update_installer(
             download_url=installer_url,
             target_path=target_path,
             progress_callback=progress_cb,
             cancel_event=self._cancel_event,
+            status_callback=status_cb,
         )
 
         try:
@@ -3864,6 +3871,13 @@ class UpdateReminderModal(ModalScreen[None]):
                 status_lbl.update(f"Downloading: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct:.0f}%)")
             else:
                 status_lbl.update(f"Downloading: {cur_mb:.1f} MB")
+        except Exception:
+            pass
+
+    def _on_download_status(self, status_msg: str) -> None:
+        try:
+            status_lbl = self.query_one("#update_status_lbl", Label)
+            status_lbl.update(f"[bold #f9e2af]⏳ {escape(status_msg)}[/]")
         except Exception:
             pass
 

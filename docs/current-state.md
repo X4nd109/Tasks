@@ -1,11 +1,37 @@
 # Current Project State & Session Handoff — Tasks
 
-> **Last Updated**: 2026-11-08  
-> **Active Milestone**: Release v2.5.0 (Completed)
+> **Last Updated**: 2026-11-12  
+> **Active Milestone**: Release v2.5.1 (Released)
 
 ---
 
 ## 1. Completed Tasks & Milestones
+
+- [x] **Playwright Standalone Exe & Multiprocessing Fixes für Tasks.exe (2026-11-12)**:
+  - **Problem**: Nach der Umstellung auf `.exe` brach der Buch-Download (Digi4School) ab mit `Executable doesn't exist at ...\_internal\playwright\driver\package\.local-browsers\...`. Playwright setzte im PyInstaller-Modus hart `PLAYWRIGHT_BROWSERS_PATH="0"`, während der Inno Setup Installer Browser nach `%LOCALAPPDATA%\ms-playwright` installierte. Zudem fehlten Fallbacks auf System-Chrome/Edge, `freeze_support()` fehlte in `main.py` (OCR/Kompaktierung-Worker crashten mit `--multiprocessing-fork`), und `dependency_checker.py` versuchte `Tasks.exe -m playwright` aufzurufen.
+  - **Lösung & Umsetzung**:
+    - `main.py`: UTF-8 Console-Encoding für `stdout`/`stderr` auf Windows forciert (verhindert cp1252-Abstürze bei Box-Zeichen), `multiprocessing.freeze_support()` direkt beim Start aufgerufen und `PLAYWRIGHT_BROWSERS_PATH` auf `%LOCALAPPDATA%\ms-playwright` abgesichert.
+    - `src/services/digi4school_service.py`: `_launch_playwright_browser` mit Fallback-Kaskade (`[Standard-Chromium, "chrome", "msedge"]`) in `inspect_book` und `download_book` integriert.
+    - `src/services/moodle_service.py`: Moodle-Task-Details ebenfalls mit Channel-Fallback abgesichert.
+    - `src/core/dependency_checker.py`: Im Frozen-Modus auf `Tasks.exe --install-playwright` umgestellt.
+    - **Validierung**: 606 Unit-Tests bestanden, PyInstaller-Build erfolgreich, Live-Test der kompilierten `Tasks.exe` verifiziert.
+    - **Release**: Version auf 2.5.1 angehoben (`APP_VERSION`, Inno Setup, Version-Info Structs).
+
+- [x] **Ausfallsicheres Update-System (Resilient Updates mit Range-Resuming & Retries) (2026-11-08)**:
+  - **Problem & Anforderung**: Bei langsamen oder instabilen Internetverbindungen schlug das Update komplett fehl. Der Release-Check brach bereits nach 3 Sekunden mit irreführender Meldung ab (*"Tasks is already up to date"*). Der ~80 MB Installer-Download brach bei kurzen Netzwerk-Schwankungen ohne Wiederholungsversuche sofort ab und löschte alle bereits geladenen Teildaten, was den Benutzer dazu zwang, den Download manuell im Browser durchzuführen.
+  - **Umsetzung & Status**:
+    - `src/services/update_service.py`:
+      - `check_for_updates`: Default-Timeout von 3s auf 12s erhöht, plus 1 automatischer Retry bei Netzwerkproblemen.
+      - `download_update_installer`: Neuer Parameter `status_callback` und `max_retries=3`. Vollständige HTTP-Range-Header-Unterstützung (`Range: bytes={offset}-`), Auswertung von HTTP 206 (Partial Content) vs. HTTP 200 (Reset), automatischer Backoff (2s, 4s, 8s) bei Socket-Fehlern, sauberes Löschen der `.part`-Datei nur bei explizitem Benutzerabbruch via `cancel_event` und Erhalt von `.part` bei Netzwerkfehlern für nahtloses Resuming.
+    - `src/ui/tui_app.py`:
+      - `UpdateReminderModal`: `_on_download_status()` implementiert und via `status_callback` angebunden. Anzeige von Warnungen und Retry-Versuchen (`⏳ Connection interrupted... Retrying (1/3) in 2s...`) direkt im Status-Label. Bei Fehlschlag setzt ein Klick auf *🔄 Try Again* den Download nahtlos an den bereits geladenen Megabytes fort.
+    - `src/core/agent_cli.py`:
+      - `tasks update`: Live-Download-Fortschritt (`cur_mb / tot_mb (pct%)`) und Konsolenausgabe von Verbindungs- und Retry-Meldungen via `status_callback`.
+    - `update.bat`:
+      - Standalone-Batch-Reparaturtool im eingebetteten PowerShell-Teil ebenfalls mit Range-Requests (`$request.AddRange`), Retry-Schleife (bis zu 3 Versuche) und Konsolen-Rückmeldungen abgesichert.
+    - **Testabdeckung**:
+      - `tests/test_update_service.py` um 5 neue Tests erweitert (API-Check-Timeout-Retry, HTTP 206 Range-Resuming, HTTP 200 Fallback-Reset, Retry bei Socket-Drop inkl. `status_callback`, Erhalt der `.part`-Datei bei Fehlererschöpfung).
+      - Alle 26 Tests in `test_update_service.py` und alle 606 Tests der Gesamtsuite bestanden (100% grün).
 
 - [x] **TwoThumbRangeSlider Text-Markierung beim Verschieben unterbunden (2026-11-08)**:
   - `ALLOW_SELECT = False` auf `TwoThumbRangeSlider` gesetzt, `capture_mouse()`/`release_mouse()` implementiert und Mouse-Events mit `prevent_default()` und `stop()` isoliert. Der Slider gleitet nun wie ein echtes GUI-Element ohne Text-Hervorhebung, bei 100% identischem optischen Design.
@@ -18,14 +44,14 @@
     - `src/services/digi4school_service.py`:
       - `encode_image_dct(pil_img, quality=90, subsampling=0)`: JPEG-Kodierung inkl. RGB-Konvertierung, `optimize=True` und robustem Fallback für Pillow-Versionen, die `optimize` + 4:4:4 nicht unterstützen.
       - `ocr_worker_process`: JPEG wird in eine temporäre `.jpg`-Datei geschrieben und an `pytesseract.image_to_pdf_or_hocr` übergeben → Tesseract bettet `DCTDecode` (JPEG) ein. Fallback-Konfigurationen und letzter Bild-only-Fallback nutzen dasselbe optimierte JPEG.
-      - `download_book(..., jpeg_quality=None)`: Preset-Mapping `standard=80`, `high=85`, `ultra=90` (Default 75); Weitergabe an OCR-Worker; `--no-ocr`-Pfad konvertiert `img_bytes` vor `insert_image`.
+      - `download_book(..., jpeg_quality=None)`: Preset-Mapping `standard=80`, `high=85`, `ultra=90` (Default 90); Weitergabe an OCR-Worker; `--no-ocr`-Pfad konvertiert `img_bytes` vor `insert_image`.
       - `compact_pdf_document(...)`: Ersetzt alle eingebetteten Bilder via `page.replace_image(xref, stream=jpeg)`, speichert mit `garbage=4, deflate=True, clean=True`, validiert Seitenanzahl und ersetzt das Original atomar (optional `*.orig.pdf`).
       - `Digi4SchoolService.list_downloaded_books()` listet PDFs im Downloadordner (ohne `.orig.pdf`/Temp-Dateien).
     - `src/core/agent_cli.py`:
-      - Neuer Subcommand `tasks books compact <datei|index|all> [--quality 1-100] [--keep-original] [--output <pfad>] [--json]` inkl. Fortschritt, Zusammenfassung (`Before -> After (Saved: X MB / Y%)`) und Fehlerbehandlung.
+      - Neuer Subcommand `tasks books compact <datei|index|all> [--quality 1-100] [--workers <N>] [--keep-original] [--output <pfad>] [--json]` inkl. Fortschritt, Zusammenfassung (`Before -> After (Saved: X MB / Y%)`) und Fehlerbehandlung.
       - `tasks books download` unterstützt zusätzlich `--jpeg-quality <1-100>`.
     - **Dokumentation**: `docs/features.md`, `docs/changelog.md` und dieser Session-Handoff aktualisiert.
-  - **Tests**: `tests/test_digi4school.py` um 5 Tests erweitert (JPEG-Header/4:4:4-Sampling, `compact_pdf_document` Größe/Text/TOC/Seitenzahl, `--keep-original`, CLI `compact --json`, Qualitätsvalidierung). Alle 18 Tests bestanden (bei nicht-interaktivem stdin).
+  - **Tests**: `tests/test_digi4school.py` um 7 Tests erweitert (JPEG-Header/4:4:4-Sampling, `compact_pdf_document` Größe/Text/TOC/Seitenzahl, `--keep-original`, Multi-Core mit `max_workers=2`, CLI `compact --json`, CLI `--workers`, Qualitätsvalidierung). Alle 20 Tests bestanden (bei nicht-interaktivem stdin).
 
 - [x] **Tasks PyInstaller Executable & Clean Installer Implementation (2026-11-04)**:
   - **Aufgabe**: Standalone-Binaries (`Tasks.exe` Console + `TasksTray.exe` Windowed), PyInstaller Onedir-Build, Clean Inno-Setup-Installer, Playwright-Silent-Setup und Frozen-Path-Handling.
@@ -914,7 +940,7 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
 
 ## 2. In Progress / Immediate Next Steps
 
-- [x] **Digi4School PDF-Komprimierung & DCTDecode-Pipeline**: Umstellung von FlateDecode-PNGs auf JPEG 4:4:4 (`subsampling=0`) bei Standard Q75 (Dateigrößenreduktion um ~80-85%).
+- [x] **Digi4School PDF-Komprimierung & DCTDecode-Pipeline**: Umstellung von FlateDecode-PNGs auf JPEG 4:4:4 (`subsampling=0`) mit Preset-Qualität 80/85/90 (Default Q90; Dateigrößenreduktion um ~80-85%).
 - [x] **Multi-Core In-Place PDF-Kompaktierer (`tasks books compact`)**: Parallele Bildkompression via `ProcessPoolExecutor` mit Streaming Sliding-Window (RAM < 400 MB, `os.cpu_count() - 1` Cores).
 - [x] **Range-Slider Text-Selektions-Fix**: `ALLOW_SELECT = False` und Maus-Capture auf `TwoThumbRangeSlider` zur Beseitigung der Markierungs-Artefakte beim Ziehen.
 - [ ] **Optionaler ESC-Shortcut im AI Chat**: Überprüfen, ob [ESC] im Chatverlauf bei geöffneter Tastatur den Fokus freigibt oder direkt zurückkehrt.
@@ -925,7 +951,7 @@ un.bat als commandline hinterlegt war und Inno Setup bei Updates das Profil übe
 ## 3. Session Handoff Notes
 
 - **Erreicht in dieser Session (Digi4School PDF Compression, Multi-Core Compactor & Slider Polish)**:
-  - **JPEG 4:4:4 DCTDecode-Pipeline**: Bilder im Grabber werden nun mit `subsampling=0` als hochauflösendes JPEG (Standard: Q75) eingebettet. Text, Formeln und Schaltpläne bleiben gestochen scharf ohne Farbsäume; Dateigrößen sinken von ~850 MB auf ~130–150 MB.
+  - **JPEG 4:4:4 DCTDecode-Pipeline**: Bilder im Grabber werden nun mit `subsampling=0` als hochauflösendes JPEG eingebettet (Preset-Qualität 80/85/90, Default Q90). Text, Formeln und Schaltpläne bleiben gestochen scharf ohne Farbsäume; Dateigrößen sinken von ~850 MB auf ~130–150 MB.
   - **Neuer Befehl `tasks books compact <datei|index|all>`**:
     - Kompaktiert existierende PDFs nachträglich verlustarm direkt auf der Festplatte.
     - Vollständiger Erhalt aller OCR-Texte, Inhaltsverzeichnisse (Bookmarks/Outlines) und PageLabels.

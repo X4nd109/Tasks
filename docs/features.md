@@ -38,7 +38,7 @@
 | `AgentSkillSetupModal` | Modal | 3-stufiger interaktiver Einrichtungs-Assistent auf Englisch zur Konfiguration und zum schlüssellosen On-Demand-Download des Tasks Agent Skills direkt von GitHub. |
 | `ClearChatConfirmModal` | Modal | Englischer Sicherheits-Bestätigungsdialog vor dem Leeren des Chat-Verlaufs (`🗑️ Clear` / `Cancel [ESC]`). |
 | `AiConfigModal` / `AiExplainModal` | Modal | Konfigurationsdialog für den AI Assistant mit Provider-Auswahl (Google Gemini Free-Tier, OpenAI-kompatibel), API-Key, Modell-Name, Base-URL, Test-Verbindung-Button und Sprachumschalter (German/English). |
-| `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases (auch via Windows Toast & `tasks://update`), In-App-Download mit Fortschrittsbalken und Start des isolierten Catppuccin-PowerShell-Update-Runners (`update_runner.ps1`). |
+| `UpdateReminderModal` | Modal | Popup-Erinnerung bei neueren GitHub-Releases (auch via Windows Toast & `tasks://update`), resilienter In-App-Download mit HTTP Range-Resuming, automatischen Retries (Backoff) und Start des isolierten Catppuccin-PowerShell-Update-Runners (`update_runner.ps1`). |
 | `LoginChoiceModal` (`[L]`) | Modal | Zentrales Auswahlmenü für Anmeldungen bei Moodle, Microsoft Teams und WebUntis. |
 | `TeamsSetupModal` | Modal | Geführter Teams-Login via Playwright-Chromium mit Passkey-, 2FA- oder Kennwort-Unterstützung. |
 | `MoodleLoginModal` | Modal | Eingabe von Moodle-Benutzername (oder E-Mail mit automatischem Domain-Stripping) und Passwort mit blitzschneller HTTP-Authentifizierung und Fehleranzeige. |
@@ -83,7 +83,9 @@
 | `TwoThumbRangeSlider` | `range_slider_widget` | Interaktiver 2-Schieber-Slider zur Festlegung von Start- und Endseite via Maus oder Tastatur. |
 | `Start Download` | `btn_start_download_from_range` | Startet den Download und die OCR-Verarbeitung für den exakt ausgewählten Seitenbereich. |
 | `Show in Downloads folder` | `btn_open_folder_d4s` | Öffnet den Downloads-Ordner nach erfolgreichem Buchdownload direkt im Windows Explorer. |
-| `Install Update Now` | `btn_update_install` | Startet den automatischen In-App-Download des Installers und die Aktualisierung im Hintergrund. |
+| `Install Update Now` | `btn_update_install` | Startet den resilienten In-App-Download des Installers mit HTTP Range-Resuming und automatischer Retry-Schleife. |
+| `Try Again` | `btn_update_retry` | Wiederholt einen fehlgeschlagenen Update-Download und setzt nahtlos an den bereits geladenen Teildaten (`.part`) an. |
+| `Download in Browser` | `btn_update_fallback` | Öffnet bei permanenten Verbindungsproblemen den direkten Installer-Download im Standard-Browser. |
 | `View in Browser` | `btn_update_open` | Öffnet die GitHub-Release-Seite der neuen Version im Standard-Webbrowser. |
 | `Later [ESC]` | `btn_update_dismiss` | Schließt das Update-Erinnerungsmodal ohne Aktualisierung (ESC-Taste oder Mausklick). |
 
@@ -117,8 +119,8 @@
 | `tasks books list` | `--json` | Gibt alle verknüpften Schulbücher aus. |
 | `tasks books open <id>` | — | Startet das angegebene Schulbuch im OS-Standardviewer oder Webbrowser. |
 | `tasks books add <pfad>` | `--title <titel>` | Verknüpft eine lokale PDF-Datei oder Web-URL headless als Schulbuch. |
-| `tasks books download <code>` | `[--quality <q>] [--jpeg-quality <1-100>] [--scale <s>] [--dpi <d>] [--no-ocr] [--no-toc] [--page-offset <o>] [--visible]` | Lädt ein Digi4School-Buch im Terminal herunter und generiert ein OCR-PDF (Ultra-HD Standard) mit kompakter JPEG-Kompression (4:4:4 Farbsampling, Standard-Qualität 75). |
-| `tasks books compact <datei\|index\|all>` | `[--quality <1-100>] [--workers <N>] [--keep-original] [--output <pfad>] [--json]` | Schrumpft PDFs offline parallel auf mehreren CPU-Kernen (ProcessPoolExecutor, Standard: Cores - 1); JPEG 4:4:4 Farbsampling (Standard 75); Textschichten, TOC-Bookmarks und PageLabels bleiben zu 100 % erhalten. |
+| `tasks books download <code>` | `[--quality <q>] [--jpeg-quality <1-100>] [--scale <s>] [--dpi <d>] [--no-ocr] [--no-toc] [--page-offset <o>] [--visible]` | Lädt ein Digi4School-Buch im Terminal herunter und generiert ein OCR-PDF (Ultra-HD Standard) mit kompakter JPEG-Kompression (4:4:4 Farbsampling, Preset-Qualität 80/85/90, Default 90). |
+| `tasks books compact <datei\|index\|all>` | `[--quality <1-100>] [--workers <N>] [--keep-original] [--output <pfad>] [--json]` | Schrumpft PDFs offline parallel auf mehreren CPU-Kernen (ProcessPoolExecutor, Standard: Cores - 1); JPEG 4:4:4 Farbsampling (Standard 90); Textschichten, TOC-Bookmarks und PageLabels bleiben zu 100 % erhalten. |
 | `tasks dirs list` | `--json` | Gibt alle verknüpften lokalen Ordner aus. |
 | `tasks dirs open <id\|name>` | — | Öffnet das verknüpfte Verzeichnis im System-Dateimanager (Windows Explorer). |
 | `tasks dirs add <pfad>` | `--title <name>` | Verknüpft einen lokalen Ordnerpfad headless mit automatischer oder manueller Benennung. |
@@ -129,8 +131,8 @@
 | `tasks tray` | `[status\|enable\|disable\|show\|quit\|sync-interval [VAL]] [--json]` | Steuert System-Tray, Auto-Sync-Intervall (`5min`, `10min`, `30min`, `1h`, `never`) und sendet `SHOW`/`QUIT`/`STATUS` an die Hintergrund-Instanz. |
 | `tasks autostart` | `[status\|enable\|disable] [--json]` | Verwaltet den Windows-Autostart-Eintrag unter `HKCU\...\Run`. |
 | `tasks sync` | `--deep` | Führt eine vollständige Plattform-Synchronisation im Hintergrund durch. |
-| `tasks update` | `[--force\|--reinstall] [--json]` | Prüft auf neuere GitHub-Releases oder stößt bei `--force` eine sofortige Neuinstallation/Reparatur über den Update Manager an. |
-| `update.bat` | — | Eigenständige Batch-Datei im Programmordner zur Reparatur und Drüber-Installation auch bei beschädigter `Tasks.exe`. |
+| `tasks update` | `[--force\|--reinstall] [--json]` | Prüft auf neuere GitHub-Releases (12s Timeout + Retry) und führt einen resilienten Download mit Live-Fortschritt & Resuming durch. |
+| `update.bat` | — | Eigenständige Batch-Datei im Programmordner zur Reparatur und Drüber-Installation mit HTTP Range-Resuming und 3 Retries. |
 
 ---
 

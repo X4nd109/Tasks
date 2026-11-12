@@ -184,6 +184,157 @@ class TestUpdateService(unittest.TestCase):
             self.assertFalse(os.path.exists(target_exe))
             self.assertFalse(os.path.exists(target_exe + ".part"))
 
+    @patch("urllib.request.urlopen")
+    def test_check_for_updates_timeout_retry_success(self, mock_urlopen):
+        """Prüft, dass bei einem ersten Timeout ein zweiter Versuch unternommen wird und erfolgreich ist."""
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_data = {
+            "tag_name": "v1.0.3",
+            "name": "Tasks v1.0.3",
+            "html_url": "https://github.com/X4nd109/Tasks/releases/tag/v1.0.3",
+        }
+        mock_response.read.return_value = json.dumps(mock_data).encode("utf-8")
+        # 1. Aufruf Timeout, 2. Aufruf Erfolg
+        mock_urlopen.side_effect = [TimeoutError("Slow connection"), MagicMock(__enter__=MagicMock(return_value=mock_response))]
+
+        res = check_for_updates(current_version="1.0.2", max_retries=1)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["latest_version"], "1.0.3")
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+    @patch("urllib.request.urlopen")
+    def test_download_update_installer_resuming_206(self, mock_urlopen):
+        """Prüft Wiederaufnahme eines Teil-Downloads über HTTP 206 (Range Header)."""
+        import tempfile
+        import os
+        from src.services.update_service import download_update_installer
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_exe = os.path.join(tmp_dir, "test_setup.exe")
+            part_file = target_exe + ".part"
+            # Simuliere bestehende 1024 Bytes
+            with open(part_file, "wb") as f:
+                f.write(b"A" * 1024)
+
+            mock_resp = MagicMock()
+            mock_resp.status = 206
+            mock_resp.headers = {
+                "Content-Length": "1024",
+                "Content-Range": "bytes 1024-2047/2048",
+            }
+            mock_resp.read.side_effect = [b"B" * 1024, b""]
+            mock_urlopen.return_value.__enter__.return_value = mock_resp
+
+            status_messages = []
+            ok = download_update_installer(
+                "https://example.com/setup.exe",
+                target_exe,
+                status_callback=lambda msg: status_messages.append(msg),
+            )
+            self.assertTrue(ok)
+            self.assertTrue(os.path.exists(target_exe))
+            self.assertEqual(os.path.getsize(target_exe), 2048)
+            with open(target_exe, "rb") as f:
+                content = f.read()
+            self.assertEqual(content, b"A" * 1024 + b"B" * 1024)
+
+            # Prüfe, dass Range-Header gesendet wurde
+            req_sent = mock_urlopen.call_args[0][0]
+            self.assertEqual(req_sent.get_header("Range"), "bytes=1024-")
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_download_update_installer_fallback_200(self, mock_urlopen, mock_sleep):
+        """Prüft, dass bei Server-Rückgabe von HTTP 200 (kein Range-Support) die Datei sauber neu geschrieben wird."""
+        import tempfile
+        import os
+        from src.services.update_service import download_update_installer
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_exe = os.path.join(tmp_dir, "test_setup.exe")
+            part_file = target_exe + ".part"
+            # Bestehende ungültige oder alte Bytes
+            with open(part_file, "wb") as f:
+                f.write(b"OLD_DATA" * 100)
+
+            mock_resp = MagicMock()
+            mock_resp.status = 200
+            mock_resp.headers = {"Content-Length": "800"}
+            mock_resp.read.side_effect = [b"NEW_DATA" * 100, b""]
+            mock_urlopen.return_value.__enter__.return_value = mock_resp
+
+            ok = download_update_installer(
+                "https://example.com/setup.exe",
+                target_exe,
+            )
+            self.assertTrue(ok)
+            self.assertTrue(os.path.exists(target_exe))
+            self.assertEqual(os.path.getsize(target_exe), 800)
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_download_update_installer_retry_on_disconnect(self, mock_urlopen, mock_sleep):
+        """Prüft, dass bei Socket-Fehlern automatisch wiederholt wird und status_callback aufgerufen wird."""
+        import tempfile
+        import os
+        from src.services.update_service import download_update_installer
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_exe = os.path.join(tmp_dir, "test_setup.exe")
+
+            # Versuch 1: wirft ConnectionResetError
+            # Versuch 2: erfolgreich
+            mock_resp_success = MagicMock()
+            mock_resp_success.status = 200
+            mock_resp_success.headers = {"Content-Length": "1024"}
+            mock_resp_success.read.side_effect = [b"X" * 1024, b""]
+
+            mock_urlopen.side_effect = [
+                ConnectionResetError("Connection dropped by peer"),
+                MagicMock(__enter__=MagicMock(return_value=mock_resp_success)),
+            ]
+
+            status_messages = []
+            ok = download_update_installer(
+                "https://example.com/setup.exe",
+                target_exe,
+                max_retries=2,
+                status_callback=lambda msg: status_messages.append(msg),
+            )
+            self.assertTrue(ok)
+            self.assertTrue(os.path.exists(target_exe))
+            self.assertEqual(os.path.getsize(target_exe), 1024)
+            self.assertTrue(any("Retrying (1/2)" in m for m in status_messages))
+
+    @patch("time.sleep")
+    @patch("urllib.request.urlopen")
+    def test_download_update_installer_failure_preserves_part(self, mock_urlopen, mock_sleep):
+        """Prüft, dass bei Scheitern aller Retries die .part-Datei für einen späteren 'Try Again' erhalten bleibt."""
+        import tempfile
+        import os
+        from src.services.update_service import download_update_installer
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_exe = os.path.join(tmp_dir, "test_setup.exe")
+            part_file = target_exe + ".part"
+            with open(part_file, "wb") as f:
+                f.write(b"PARTIAL_CONTENT")
+
+            # Schlägt immer fehl
+            mock_urlopen.side_effect = TimeoutError("Network timeout")
+
+            ok = download_update_installer(
+                "https://example.com/setup.exe",
+                target_exe,
+                max_retries=1,
+            )
+            self.assertFalse(ok)
+            self.assertFalse(os.path.exists(target_exe))
+            # .part-Datei MUSS noch existieren
+            self.assertTrue(os.path.exists(part_file))
+            self.assertEqual(os.path.getsize(part_file), len(b"PARTIAL_CONTENT"))
+
     @patch("subprocess.Popen")
     def test_launch_update_and_restart(self, mock_popen):
         """Prüft Skript-Generierung und Runner-Aufruf ohne PowerShell und ohne setup.bat."""

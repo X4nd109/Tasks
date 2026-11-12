@@ -27,6 +27,25 @@ import pytesseract
 logger = logging.getLogger("Digi4SchoolService")
 
 
+async def _launch_playwright_browser(playwright_instance, headless: bool = True, args: list = None):
+    """Launches Chromium with fallback to installed Chrome or MS Edge channels."""
+    channels = [None, "chrome", "msedge"] if sys.platform == "win32" else [None]
+    last_err = None
+    for ch in channels:
+        try:
+            kwargs = {"headless": headless, "args": args or []}
+            if ch:
+                kwargs["channel"] = ch
+            return await playwright_instance.chromium.launch(**kwargs)
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(
+        f"Could not launch any Chromium browser (tried bundled, chrome, msedge): {last_err}"
+    )
+
+
+
 def find_tesseract(custom_cmd: Optional[str] = None) -> str:
     """Sucht die tesseract.exe auf Windows oder im System-Pfad."""
     if custom_cmd and os.path.isfile(custom_cmd):
@@ -629,7 +648,7 @@ async def capture_single_page(
     return None
 
 
-def encode_image_dct(pil_img: Image.Image, quality: int = 75, subsampling: int = 0) -> bytes:
+def encode_image_dct(pil_img: Image.Image, quality: int = 90, subsampling: int = 0) -> bytes:
     """Konvertiert ein PIL-Image in ein hochqualitatives JPEG mit 4:4:4 Farbsampling (keine Farbfransen)."""
     rgb_img = pil_img if pil_img.mode == "RGB" else pil_img.convert("RGB")
     buf = io.BytesIO()
@@ -651,7 +670,7 @@ def encode_image_dct(pil_img: Image.Image, quality: int = 75, subsampling: int =
 def ocr_worker_process(args_tuple: Tuple) -> Tuple[int, bytes]:
     """Multiprocessing Worker für Tesseract OCR (LSTM Engine, OEM 1, PSM 3, Sauvola Thresholding)."""
     page_num, img_bytes, lang, dpi, psm, tesseract_cmd = args_tuple[:6]
-    jpeg_quality = int(args_tuple[6]) if len(args_tuple) > 6 and args_tuple[6] is not None else 75
+    jpeg_quality = int(args_tuple[6]) if len(args_tuple) > 6 and args_tuple[6] is not None else 90
     pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
 
     pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
@@ -989,7 +1008,7 @@ def apply_page_labels(
 def compact_pdf_document(
     pdf_path: str | Path,
     output_path: Optional[str | Path] = None,
-    jpeg_quality: int = 75,
+    jpeg_quality: int = 90,
     subsampling: int = 0,
     keep_original: bool = False,
     max_workers: Optional[int] = None,
@@ -1271,9 +1290,10 @@ class Digi4SchoolService:
             raise ValueError("No access code provided.")
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
+            browser = await _launch_playwright_browser(
+                p,
                 headless=not visible,
-                args=["--disable-web-security", "--allow-running-insecure-content"]
+                args=["--disable-web-security", "--allow-running-insecure-content"],
             )
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 900},
@@ -1371,8 +1391,9 @@ class Digi4SchoolService:
                 scale = quality_map[quality]
 
         # JPEG-Kompression: 4:4:4 Farbsampling verhindert Farbfransen an Text- und Diagrammkanten
+        quality_map_jpeg = {"standard": 80, "high": 85, "ultra": 90}
         if jpeg_quality is None:
-            effective_jpeg_quality = 75
+            effective_jpeg_quality = quality_map_jpeg.get((quality or "").lower(), 90)
         else:
             effective_jpeg_quality = max(1, min(100, int(jpeg_quality)))
 
@@ -1402,9 +1423,10 @@ class Digi4SchoolService:
 
         # 3. Playwright starten
         async with async_playwright() as p:
-            browser = await p.chromium.launch(
+            browser = await _launch_playwright_browser(
+                p,
                 headless=not visible,
-                args=["--disable-web-security", "--allow-running-insecure-content"]
+                args=["--disable-web-security", "--allow-running-insecure-content"],
             )
             context = await browser.new_context(
                 viewport={"width": 2000, "height": 3000},

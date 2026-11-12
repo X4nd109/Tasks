@@ -1403,7 +1403,31 @@ def handle_update_command(sub_args: List[str]) -> int:
         if not args.json:
             print(f"Updating from v{cur_ver} to v{lat_ver}...")
 
-    ok = download_update_installer(url, target_installer)
+    def cli_progress(cur: int, tot: int, pct: float) -> None:
+        if not args.json:
+            cur_mb = cur / (1024 * 1024)
+            tot_mb = tot / (1024 * 1024)
+            if tot > 0:
+                sys.stdout.write(f"\rDownloading update: {cur_mb:.1f} MB / {tot_mb:.1f} MB ({pct:.0f}%)")
+            else:
+                sys.stdout.write(f"\rDownloading update: {cur_mb:.1f} MB")
+            sys.stdout.flush()
+
+    def cli_status(msg: str) -> None:
+        if not args.json:
+            sys.stdout.write(f"\n[!] {msg}\n")
+            sys.stdout.flush()
+
+    ok = download_update_installer(
+        url,
+        target_installer,
+        progress_callback=cli_progress,
+        status_callback=cli_status,
+    )
+    if not args.json and ok:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
     if not ok:
         if args.json:
             print(json.dumps({"success": False, "error": "Download failed"}, ensure_ascii=False))
@@ -1552,10 +1576,10 @@ def handle_books_command(sub_args: List[str]) -> int:
 
     if action in ["compact", "compress", "shrink"]:
         if any(h in sub_args for h in ("-h", "--help")):
-            print("Usage: tasks books compact <file|index|all> [--quality 1-100] [--keep-original] [--output PATH] [--json]")
+            print("Usage: tasks books compact <file|index|all> [--quality 1-100] [--workers N] [--keep-original] [--output PATH] [--json]")
             print("Shrinks existing PDF schoolbooks offline by re-encoding embedded images to JPEG 4:4:4.")
             print("Flags:")
-            print("  --quality <1-100>   JPEG compression quality (default: 75)")
+            print("  --quality <1-100>   JPEG compression quality (default: 90)")
             print("  --workers <N>       Number of CPU worker processes (default: CPU cores - 1)")
             print("  --keep-original     Preserve original file as *.orig.pdf")
             print("  --output <PATH>     Save to an alternative path instead of replacing in-place")
@@ -1568,7 +1592,7 @@ def handle_books_command(sub_args: List[str]) -> int:
         ]
         parser_c = argparse.ArgumentParser(prog="tasks books compact", add_help=False)
         parser_c.add_argument("target", nargs="?", default="")
-        parser_c.add_argument("--quality", type=int, default=None, help="JPEG quality (1-100, default: 75)")
+        parser_c.add_argument("--quality", type=int, default=None, help="JPEG quality (1-100, default: 90)")
         parser_c.add_argument("--workers", "--cores", type=int, default=None, help="Number of CPU worker processes (default: CPU cores - 1)")
         parser_c.add_argument("--keep-original", action="store_true", help="Keep original as *.orig.pdf")
         parser_c.add_argument("--output", "-o", default="", help="Optional output file path")
@@ -1583,7 +1607,7 @@ def handle_books_command(sub_args: List[str]) -> int:
                 print(msg)
             return 1
 
-        quality = 75 if c_args.quality is None else int(c_args.quality)
+        quality = 90 if c_args.quality is None else int(c_args.quality)
         if quality < 1 or quality > 100:
             msg = f"Error: Invalid quality '{quality}'. Allowed range: 1-100."
             if args.json:

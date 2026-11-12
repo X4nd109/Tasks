@@ -11,6 +11,26 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 
 ---
 
+## [2.5.1] - 2026-11-12
+
+### Fixed
+- **Playwright Standalone Exe Browser-Pfad (`PLAYWRIGHT_BROWSERS_PATH`)**: In `main.py` wird `PLAYWRIGHT_BROWSERS_PATH` für gepackte Binaries (`Tasks.exe`) automatisch auf `%LOCALAPPDATA%\ms-playwright` abgesichert, damit der Playwright-Driver installierte Browser findet und nicht vergeblich in `_internal\...` sucht.
+- **Browser-Kanal Fallback (`digi4school_service.py`, `moodle_service.py`)**: Digi4School Book Inspection/Download sowie Moodle-Task-Details nutzen nun eine robuste Fallback-Kette (`[Standard-Chromium, "chrome", "msedge"]`), um nahtlos auf vorinstalliertes Google Chrome oder Microsoft Edge auszuweichen.
+- **Multiprocessing Freeze Support (`main.py`)**: `multiprocessing.freeze_support()` direkt beim Start von `main.py` aufgerufen, sodass parallele OCR- und PDF-Compaction-Worker unter Windows nicht mit `unrecognized arguments: --multiprocessing-fork` abstürzen.
+- **Dependency Checker Exe-Kompatibilität (`dependency_checker.py`)**: Bei gepackten Binaries wird `Tasks.exe --install-playwright` anstelle von `python -m playwright` ausgeführt, und `check_playwright_chromium_installed()` berücksichtigt den korrekten Browser-Pfad.
+- **Windows Terminal Codepage-Absicherung (cp1252)**: Frühes UTF-8 Reconfigure für `stdout` und `stderr` verhindert `UnicodeEncodeError`-Abstürze bei Playwright-Meldungen und CLI-Symbolen (`✓`, `✗`).
+
+### Added
+- **Resilient Update-System mit Range-Resuming & Retries (`src/services/update_service.py`, `src/ui/tui_app.py`, `src/core/agent_cli.py`, `update.bat`)**:
+  - **HTTP Range Requests (Resuming)**: Der Installer-Download sendet nun automatisch `Range: bytes={offset}-` mit, falls eine temporäre `.part`-Datei existiert. Bei Server-Unterstützung (HTTP 206) wird der Download nahtlos fortgesetzt; bei fehlender Unterstützung (HTTP 200) erfolgt ein sauberer Reset.
+  - **Automatische Retries mit Backoff**: Bei Socket-Timeouts, instabilem WLAN oder Verbindungsabbrüchen erfolgen bis zu 3 automatische Wiederholungsversuche mit dynamischem Backoff (2s, 4s, 8s).
+  - **Live-Statusmeldungen**: TUI (`#update_status_lbl`), CLI (`tasks update`) und das Standalone-Reparaturskript `update.bat` zeigen den Verbindungsstatus und Retry-Versuche aktiv an (z. B. *"Connection interrupted. Retrying (1/3) in 2s..."*).
+  - **Erhöhte Timeouts für Versionsprüfung**: Default-Timeout für `check_for_updates()` von 3,0s auf 12,0s erhöht plus 1 automatischer Retry, um Fehlalarme (*"Tasks is already up to date"*) bei langsamen Leitungen zuverlässig zu verhindern.
+  - **Erhalt von Teildaten bei Netzwerkfehlern**: Bei Verbindungsabbrüchen bleibt die `.part`-Datei erhalten, sodass ein Klick auf *Try Again* im TUI oder ein erneuter CLI-Aufruf sofort an der Abbruchstelle weiterlädt, anstatt von 0 Byte neu zu beginnen.
+  - **Saubere Abbruch-Bereinigung**: Klickt der Benutzer im TUI explizit auf *Abbrechen*, wird die `.part`-Datei restlos gelöscht.
+
+---
+
 ## [2.5.0] - 2026-11-08
 
 ### Fixed
@@ -22,11 +42,11 @@ und dieses Projekt hält sich an [Semantic Versioning](https://semver.org/lang/d
 - **Digi4School PDF-Komprimierung & `tasks books compact`**:
   - `encode_image_dct()` kodiert Seitenbilder als hochqualitatives JPEG mit **4:4:4 Farbsampling (`subsampling=0`)**, sodass Text- und Diagrammkanten ohne Farbfransen gestochen scharf bleiben.
   - `ocr_worker_process` übergibt das JPEG nun als temporäre `.jpg`-Datei an Tesseract; das Bild wird dadurch nativ als kompaktes `DCTDecode` (JPEG) eingebettet. Der Fallback-Zweig nutzt ebenfalls das optimierte JPEG.
-  - `download_book()` nutzt standardmäßig **Q75** für optimale Dateigröße bei makelloser Schärfe; auch der `--no-ocr`-Pfad verwendet komprimierte JPEGs.
+  - `download_book(..., jpeg_quality=None)` mit Preset-Mapping `standard=80`, `high=85`, `ultra=90` (Standard: 90); auch der `--no-ocr`-Pfad verwendet komprimierte JPEGs.
   - **Multi-Core Parallele PDF-Kompaktierung (`ProcessPoolExecutor`)**: `tasks books compact` nutzt automatisch mehrere CPU-Kerne (`os.cpu_count() - 1` für flüssige System-Reaktionsfähigkeit, steuerbar via `--workers <N>` / `--cores <N>`), mit speichereffizientem Streaming Sliding-Window (RAM stabil < 400 MB).
-  - Neuer Befehl `tasks books compact <datei|index|all> [--quality <1-100>] [--keep-original] [--output <pfad>] [--json]` kompaktiert bereits heruntergeladene PDFs offline über `compact_pdf_document()`. Textschicht (OCR), TOC-Bookmarks und PageLabels bleiben unverändert; optional bleibt das Original als `*.orig.pdf` erhalten.
+  - Neuer Befehl `tasks books compact <datei|index|all> [--quality <1-100>] [--workers <N>] [--keep-original] [--output <pfad>] [--json]` kompaktiert bereits heruntergeladene PDFs offline über `compact_pdf_document()`. Textschicht (OCR), TOC-Bookmarks und PageLabels bleiben unverändert; optional bleibt das Original als `*.orig.pdf` erhalten.
   - `tasks books download` akzeptiert zusätzlich `--jpeg-quality <1-100>`.
-  - Neue Tests in `tests/test_digi4school.py` für JPEG-Header/Sampling, `compact_pdf_document` (Größe, Textschicht, TOC, Seitenzahl, `--keep-original`) und den CLI-Subcommand `compact --json`.
+  - Neue Tests in `tests/test_digi4school.py` für JPEG-Header/Sampling, `compact_pdf_document` (Größe, Textschicht, TOC, Seitenzahl, `--keep-original`, Multi-Core), den CLI-Subcommand `compact --json`/`--workers` und die Qualitätsvalidierung.
 - **Tasks PyInstaller Executable & Clean Installer Implementation**:
   - Standalone-Binaries via PyInstaller Onedir-Spec (`tasks.spec`): Console `Tasks.exe` und Windowed `TasksTray.exe` (excludes `tkinter`, `matplotlib`, `unittest`; datas `assets`, `skills`, `src`; Version-Info aus `installer/version_info*.txt`).
   - Build-Pipeline: `scripts/build_exe.py` (via `python -m PyInstaller tasks.spec --noconfirm --clean`) mit Copy von `tasks.cmd`, Helper-Skripten (`scripts/*.bat`), Icons und Skills; Cleanup von `assets/git-sync-tutorial`; Verify `dist/Tasks/Tasks.exe` & `TasksTray.exe`.

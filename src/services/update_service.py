@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import urllib.request
 import urllib.error
 from typing import Optional, Dict, Any, Tuple, Callable
@@ -56,13 +57,15 @@ def is_newer_version(latest_tag: str, current_version: str = APP_VERSION) -> boo
 def check_for_updates(
     current_version: str = APP_VERSION,
     repo: str = GITHUB_REPO,
-    timeout: float = 3.0,
+    timeout: float = 12.0,
+    max_retries: int = 1,
 ) -> Optional[Dict[str, Any]]:
     """
     Prüft geräuschlos über die GitHub REST-API, ob ein neuer Release vorliegt.
     
     Gibt bei einem neueren Release ein Dict mit Details zurück,
     andernfalls (keine neuere Version, Offline, Timeout, Rate-Limit) None.
+    Bei Netzwerkverzögerungen wird bis zu max_retries mal wiederholt.
     """
     try:
         from config import verify_skill_integrity
@@ -79,12 +82,27 @@ def check_for_updates(
         },
     )
 
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            if response.status != 200:
-                return None
-            data = json.loads(response.read().decode("utf-8"))
+    data = None
+    for attempt in range(max_retries + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                if response.status != 200:
+                    return None
+                data = json.loads(response.read().decode("utf-8"))
+            break
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
+            if attempt < max_retries:
+                time.sleep(1.0)
+                continue
+            return None
+        except Exception as e:
+            logger.debug("Unerwarteter Fehler bei Update-Prüfung: %s", e)
+            return None
 
+    if not data:
+        return None
+
+    try:
         tag_name = data.get("tag_name", "").strip()
         if not tag_name:
             return None
@@ -120,12 +138,8 @@ def check_for_updates(
             }
 
         return None
-
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
-        # Geräuschloses Abfangen bei Offline-Betrieb oder Netzwerkausfällen
-        return None
     except Exception as e:
-        logger.debug("Unerwarteter Fehler bei Update-Prüfung: %s", e)
+        logger.debug("Fehler beim Verarbeiten der Release-Metadaten: %s", e)
         return None
 
 
@@ -137,15 +151,31 @@ def get_update_temp_dir() -> str:
     return update_dir
 
 
+def _cleanup_part(part_path: str) -> None:
+    """Entfernt eine temporäre .part-Datei geräuschlos."""
+    if os.path.exists(part_path):
+        try:
+            os.remove(part_path)
+        except Exception:
+            pass
+
+
 def download_update_installer(
     download_url: str,
     target_path: str,
     progress_callback: Optional[Callable[[int, int, float], None]] = None,
     cancel_event: Optional[threading.Event] = None,
     chunk_size: int = 65536,
+    max_retries: int = 3,
+    status_callback: Optional[Callable[[str], None]] = None,
 ) -> bool:
     """
-    Lädt das Installer-Asset herunter.
+    Lädt das Installer-Asset herunter mit Unterstützung für:
+    - HTTP Range Requests (Resuming nach Verbindungsabbrüchen)
+    - Automatische Retries mit exponentiellem Backoff
+    - Live-Statusmeldungen über status_callback
+    - Benutzerabbruch via cancel_event (löscht bei Abbruch Teildateien)
+    - Erhalt von Teildaten (.part) bei Netzwerkfehlern für nahtloses 'Try Again'
     
     progress_callback(downloaded_bytes: int, total_bytes: int, percent: float)
     Gibt True bei Erfolg zurück, False bei Fehler oder Abbruch.
@@ -155,65 +185,121 @@ def download_update_installer(
         os.makedirs(target_dir, exist_ok=True)
 
     part_path = target_path + ".part"
-    if os.path.exists(part_path):
+    total_size = 0
+
+    for attempt in range(max_retries + 1):
+        if cancel_event and cancel_event.is_set():
+            logger.info("Update-Download wurde vom Benutzer abgebrochen.")
+            _cleanup_part(part_path)
+            return False
+
+        existing_bytes = os.path.getsize(part_path) if os.path.exists(part_path) else 0
+
+        req = urllib.request.Request(
+            download_url,
+            headers={
+                "User-Agent": f"Tasks/{APP_VERSION}",
+                "Accept": "*/*",
+            },
+        )
+        if existing_bytes > 0:
+            req.add_header("Range", f"bytes={existing_bytes}-")
+
         try:
-            os.remove(part_path)
-        except Exception:
-            pass
+            with urllib.request.urlopen(req, timeout=25.0) as resp:
+                status = getattr(resp, "status", 200)
 
-    req = urllib.request.Request(
-        download_url,
-        headers={
-            "User-Agent": f"Tasks/{APP_VERSION}",
-            "Accept": "*/*",
-        },
-    )
+                if status == 206:
+                    # Server unterstützt Resuming: Content-Range auswerten (z. B. 'bytes 1000-4999/5000')
+                    crange = resp.headers.get("Content-Range", "")
+                    if "/" in crange:
+                        try:
+                            total_size = int(crange.split("/")[-1])
+                        except ValueError:
+                            total_size = existing_bytes + int(resp.headers.get("Content-Length", 0))
+                    else:
+                        total_size = existing_bytes + int(resp.headers.get("Content-Length", 0))
 
-    try:
-        with urllib.request.urlopen(req, timeout=30.0) as resp:
-            total_size = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
+                    open_mode = "ab"
+                    downloaded = existing_bytes
+                    if status_callback and attempt > 0:
+                        status_callback("Resuming download...")
+                else:
+                    # Vollständiger Download (HTTP 200 oder Range ignoriert)
+                    total_size = int(resp.headers.get("Content-Length", 0))
+                    open_mode = "wb"
+                    downloaded = 0
 
-            with open(part_path, "wb") as f_out:
-                while True:
-                    if cancel_event and cancel_event.is_set():
-                        logger.info("Update-Download wurde vom Benutzer abgebrochen.")
-                        f_out.close()
-                        if os.path.exists(part_path):
-                            try:
-                                os.remove(part_path)
-                            except Exception:
-                                pass
-                        return False
+                if progress_callback:
+                    percent = (downloaded / total_size * 100.0) if total_size > 0 else 0.0
+                    progress_callback(downloaded, total_size, percent)
 
-                    chunk = resp.read(chunk_size)
-                    if not chunk:
-                        break
+                with open(part_path, open_mode) as f_out:
+                    while True:
+                        if cancel_event and cancel_event.is_set():
+                            logger.info("Update-Download wurde vom Benutzer abgebrochen.")
+                            f_out.close()
+                            _cleanup_part(part_path)
+                            return False
 
-                    f_out.write(chunk)
-                    downloaded += len(chunk)
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
 
-                    if progress_callback:
-                        percent = (downloaded / total_size * 100.0) if total_size > 0 else 0.0
-                        progress_callback(downloaded, total_size, percent)
+                        f_out.write(chunk)
+                        downloaded += len(chunk)
 
-        # Download erfolgreich abgeschlossen: atomar umbenennen
-        if os.path.exists(target_path):
-            try:
-                os.remove(target_path)
-            except Exception:
-                pass
-        os.replace(part_path, target_path)
-        return True
+                        if progress_callback:
+                            percent = (downloaded / total_size * 100.0) if total_size > 0 else 0.0
+                            progress_callback(downloaded, total_size, percent)
 
-    except Exception as e:
-        logger.warning("Fehler beim Herunterladen des Updates: %s", e)
-        if os.path.exists(part_path):
-            try:
-                os.remove(part_path)
-            except Exception:
-                pass
-        return False
+            # Prüfen, ob der Download vollständig ist
+            if total_size > 0 and downloaded < total_size:
+                raise OSError(f"Incomplete download: {downloaded}/{total_size} bytes received")
+
+            # Download erfolgreich abgeschlossen: atomar umbenennen
+            if os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except Exception:
+                    pass
+            os.replace(part_path, target_path)
+            return True
+
+        except urllib.error.HTTPError as he:
+            if he.code == 416:
+                # Range Not Satisfiable -> Datei ungültig oder bereits vollständig -> bereinigen und neu starten
+                logger.warning("HTTP 416 Range Not Satisfiable, setze .part-Datei zurück.")
+                _cleanup_part(part_path)
+                continue
+            err_msg = str(he)
+        except Exception as e:
+            err_msg = str(e)
+
+        if cancel_event and cancel_event.is_set():
+            logger.info("Update-Download wurde vom Benutzer abgebrochen.")
+            _cleanup_part(part_path)
+            return False
+
+        if attempt < max_retries:
+            delay = 2 * (attempt + 1)
+            retry_msg = f"Connection interrupted ({err_msg}). Retrying ({attempt + 1}/{max_retries}) in {delay}s..."
+            logger.info(retry_msg)
+            if status_callback:
+                status_callback(retry_msg)
+
+            # Schlafphase in 100ms-Schritten, um reaktiv auf cancel_event zu reagieren
+            for _ in range(delay * 10):
+                if cancel_event and cancel_event.is_set():
+                    _cleanup_part(part_path)
+                    return False
+                time.sleep(0.1)
+        else:
+            logger.warning("Update-Download nach %d Versuchen fehlgeschlagen: %s", max_retries, err_msg)
+            # .part wird hier BEIBEHALTEN, damit der Nutzer via 'Try Again' fortsetzen kann
+            return False
+
+    return False
 
 
 def generate_powershell_updater_script(

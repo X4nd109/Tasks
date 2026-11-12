@@ -8,6 +8,19 @@ import time
 import warnings
 from typing import Optional
 
+# Force UTF-8 on Windows stdio to prevent cp1252 crashes on box-drawing/checkmarks
+if sys.platform == "win32":
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
 # Suppress PyMuPDF legacy fitz module deprecation warning
 warnings.filterwarnings("ignore", category=FutureWarning, module="fitz")
 
@@ -398,6 +411,24 @@ def _handle_existing_instance_autoclose() -> None:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
+    # Playwright in frozen builds sets PLAYWRIGHT_BROWSERS_PATH="0", which makes it
+    # look for browsers inside _internal. The installer puts them in %LOCALAPPDATA%.
+    if getattr(sys, "frozen", False):
+        if "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+            pw_cache = os.path.join(os.environ.get("LOCALAPPDATA", ""), "ms-playwright")
+            internal_pw = os.path.join(
+                os.path.dirname(sys.executable),
+                "_internal", "playwright", "driver", "package", ".local-browsers",
+            )
+            if os.path.isdir(internal_pw):
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+            else:
+                os.environ["PLAYWRIGHT_BROWSERS_PATH"] = pw_cache
+
     if "--install-playwright" in sys.argv:
         try:
             from playwright.__main__ import main as pw_main

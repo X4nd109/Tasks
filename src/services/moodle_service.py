@@ -864,7 +864,19 @@ def fetch_moodle_task_details(task: Task) -> Task:
 
     # 2. Browser-Fallback mit Playwright
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = None
+        for ch in [None, "chrome", "msedge"]:
+            try:
+                kwargs = {"headless": True}
+                if ch:
+                    kwargs["channel"] = ch
+                browser = p.chromium.launch(**kwargs)
+                if browser:
+                    break
+            except Exception:
+                continue
+        if not browser:
+            return task
         context = browser.new_context()
         page = context.new_page()
 

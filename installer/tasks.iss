@@ -8,7 +8,7 @@
 
 #define AppName "Tasks"
 #ifndef AppVersion
-#define AppVersion "2.5.0"
+#define AppVersion "2.5.1"
 #endif
 #define AppPublisher "Alexander Endl"
 #define AppURL "https://github.com/X4nd109/Tasks"

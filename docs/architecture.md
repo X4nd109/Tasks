@@ -291,8 +291,46 @@ flowchart TD
 
 - **Ultra-HD Resolution & Adaptive DPI Coupling**: Renders pages by default with Playwright's `device_scale_factor = 4.0` and dynamically couples OCR DPI via `effective_dpi = int(150 * scale)` (600 DPI standard), keeping standard A4/B5 physical geometry while quadrupling zoom sharpness. Supports quick presets (`ultra`, `high`, `standard`) and pure image archives (`--no-ocr`).
 
-- **High-Quality JPEG 4:4:4 Stream Optimization (`subsampling=0`)**: By default, page screenshots are encoded as high-fidelity JPEG streams with 4:4:4 chroma subsampling (`subsampling=0`, standard Q75). This prevents color bleeding on thin schematic lines, formulas, and text while reducing PDF size by ~80-85% compared to raw PNG FlateDecode streams.
+- **High-Quality JPEG 4:4:4 Stream Optimization (`subsampling=0`)**: Page screenshots are encoded as high-fidelity JPEG streams with 4:4:4 chroma subsampling (`subsampling=0`). The JPEG quality follows the render preset (`standard=80`, `high=85`, `ultra=90`, default Q90). This prevents color bleeding on thin schematic lines, formulas, and text while reducing PDF size by ~80-85% compared to raw PNG FlateDecode streams.
 - **Multi-Core In-Place Compaction Pipeline (`compact_pdf_document`)**: Existing PDFs can be compacted offline on disk via `tasks books compact`. A streaming sliding window (`ProcessPoolExecutor` with `os.cpu_count() - 1` cores, configurable via `--workers`) processes images in parallel, bounding RAM consumption under 400 MB while preserving 100% of the OCR text layer, TOC bookmarks, and page labels.
 
 - **Live ETA & Progress Calculation**: Real-time progress updates are reported via thread-safe callbacks to the TUI and CLI. The remaining time (ETA) estimates both active page rendering and multi-core OCR throughput based on dynamic elapsed-time rates.
+
+---
+
+## 7. Resilient Auto-Update Architecture
+
+The update subsystem (`src/services/update_service.py`, `update.bat`, `src/ui/tui_app.py`) provides a robust, zero-login update pipeline resilient against slow or fluctuating network connections:
+
+```mermaid
+flowchart TD
+    A["Background Thread / User Action"] --> B["check_for_updates (12s Timeout, 1 Retry)"]
+    B -->|Newer Tag Found| C["UpdateReminderModal / CLI update"]
+    C --> D["download_update_installer"]
+    D --> E{"Check .part File"}
+    E -->|part_size > 0| F["Request with Range: bytes=offset-"]
+    E -->|Fresh| G["Standard GET Request"]
+    F --> H{"Server Status"}
+    H -->|206 Partial Content| I["Append Stream (Mode 'ab')"]
+    H -->|200 OK / Range Ignored| J["Reset & Overwrite (Mode 'wb')"]
+    G --> J
+    I --> K["Chunk Stream Loop with Progress Callback"]
+    J --> K
+    K -->|Network Drop / Socket Error| L{"Attempts < 3?"}
+    L -->|Yes| M["Backoff Delay (2s, 4s, 8s) & Live Status Callback"]
+    M --> E
+    L -->|No| N["Preserve .part for 'Try Again' & Report Error"]
+    K -->|User Clicks Cancel| O["Delete .part & Abort"]
+    K -->|Download Complete| P["Atomic Rename (.part -> .exe)"]
+    P --> Q["launch_update_and_restart"]
+    Q --> R["Launch Detached PowerShell Runner (update_runner.ps1)"]
+    R --> S["Inno Setup /UPDATE=1 /VERYSILENT"]
+    S --> T["Restart Tasks.exe"]
+```
+
+- **HTTP Range Header Resumption**: Downloads never restart from 0 Byte on network interruptions. If a `.part` file exists, `Range: bytes={offset}-` requests only the missing slice. If the server supports it, HTTP 206 is returned and data is appended.
+- **Dynamic Retry Backoff**: Up to 3 automatic retries with incremental backoff (2s, 4s, 8s) absorb Wi-Fi drops and cellular hotspot jitter without interrupting the user.
+- **Thread-Safe Live Status Feedback**: Live progress and retry states are passed through `status_callback` to `#update_status_lbl` in the TUI, stdout in the CLI, and console output in `update.bat`.
+- **User Intent Distinction**: Network drops preserve the `.part` file so clicking *Try Again* resumes immediately; user cancellations (`cancel_event`) wipe the `.part` file cleanly.
+
 

@@ -266,31 +266,84 @@ try {
     $installerPath = Join-Path $tempDir $asset.name
 
     Write-Host "  [2/3] Downloading $($asset.name) to $installerPath ..." -ForegroundColor Cyan
-    $request = [System.Net.HttpWebRequest]::Create($asset.browser_download_url)
-    $request.UserAgent = "Tasks/update.bat"
-    $request.AllowAutoRedirect = $true
-    $response = $request.GetResponse()
-    $total = $response.ContentLength
-    $stream = $response.GetResponseStream()
-    $buffer = New-Object byte[] 65536
-    $fileStream = [System.IO.File]::Create($installerPath)
-    $downloaded = [long]0
-    try {
-        while ($true) {
-            $read = $stream.Read($buffer, 0, $buffer.Length)
-            if ($read -le 0) { break }
-            $fileStream.Write($buffer, 0, $read)
-            $downloaded += $read
-            if ($total -gt 0) {
-                $pct = [math]::Round(($downloaded / $total) * 100, 1)
-                $doneMb = [math]::Round($downloaded / 1MB, 1)
-                Write-Progress -Activity "Downloading Tasks update" -Status "$doneMb / $sizeMb MB ($pct%)" -PercentComplete $pct
+    $partPath = "$installerPath.part"
+    $maxRetries = 3
+    $success = $false
+
+    for ($attempt = 0; $attempt -le $maxRetries; $attempt++) {
+        try {
+            $existing = 0
+            if (Test-Path -LiteralPath $partPath) {
+                $existing = (Get-Item -LiteralPath $partPath).Length
+            }
+
+            $request = [System.Net.HttpWebRequest]::Create($asset.browser_download_url)
+            $request.UserAgent = "Tasks/update.bat"
+            $request.AllowAutoRedirect = $true
+            $request.Timeout = 30000
+            $request.ReadWriteTimeout = 30000
+
+            if ($existing -gt 0) {
+                $request.AddRange($existing)
+                Write-Host "  [~] Resuming download from $([math]::Round($existing / 1MB, 1)) MB..." -ForegroundColor Yellow
+            }
+
+            $response = $request.GetResponse()
+            $isPartial = ([int]$response.StatusCode -eq 206)
+            $total = $response.ContentLength
+            if ($isPartial) {
+                $total += $existing
+            } else {
+                $existing = 0
+            }
+
+            $stream = $response.GetResponseStream()
+            $buffer = New-Object byte[] 65536
+            if ($isPartial -and (Test-Path -LiteralPath $partPath)) {
+                $fileStream = [System.IO.File]::Open($partPath, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write)
+            } else {
+                $fileStream = [System.IO.File]::Create($partPath)
+            }
+            $downloaded = [long]$existing
+
+            try {
+                while ($true) {
+                    $read = $stream.Read($buffer, 0, $buffer.Length)
+                    if ($read -le 0) { break }
+                    $fileStream.Write($buffer, 0, $read)
+                    $downloaded += $read
+                    if ($total -gt 0) {
+                        $pct = [math]::Round(($downloaded / $total) * 100, 1)
+                        $doneMb = [math]::Round($downloaded / 1MB, 1)
+                        Write-Progress -Activity "Downloading Tasks update" -Status "$doneMb / $sizeMb MB ($pct%)" -PercentComplete $pct
+                    }
+                }
+            } finally {
+                $fileStream.Close()
+                $stream.Close()
+                $response.Close()
+            }
+
+            if ($total -gt 0 -and $downloaded -lt $total) {
+                throw "Incomplete download: received $downloaded of $total bytes."
+            }
+
+            if (Test-Path -LiteralPath $installerPath) {
+                Remove-Item -LiteralPath $installerPath -Force -ErrorAction SilentlyContinue
+            }
+            Move-Item -LiteralPath $partPath -Destination $installerPath -Force
+            $success = $true
+            break
+        } catch {
+            $err = $_.Exception.Message
+            if ($attempt -lt $maxRetries) {
+                $delay = 2 * ($attempt + 1)
+                Write-Host "  [!] Connection interrupted ($err). Retrying ($($attempt + 1)/$maxRetries) in ${delay}s..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $delay
+            } else {
+                throw "Download failed after $maxRetries retries: $err"
             }
         }
-    } finally {
-        $fileStream.Close()
-        $stream.Close()
-        $response.Close()
     }
     Write-Progress -Activity "Downloading Tasks update" -Completed
     Write-Host "  [OK] Download complete ($sizeMb MB)." -ForegroundColor Green

@@ -89,6 +89,10 @@ def format_warning_banner(missing: List[Tuple[str, str, str]], install_cmd: str)
 def check_playwright_chromium_installed() -> bool:
     """Checks whether Playwright's Chromium browser binary is installed."""
     try:
+        if getattr(sys, "frozen", False) and "PLAYWRIGHT_BROWSERS_PATH" not in os.environ:
+            os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+                os.environ.get("LOCALAPPDATA", ""), "ms-playwright"
+            )
         from playwright.sync_api import sync_playwright
         with sync_playwright() as p:
             exec_path = p.chromium.executable_path
@@ -99,7 +103,10 @@ def check_playwright_chromium_installed() -> bool:
 
 def install_playwright_chromium() -> int:
     """Installs Playwright's Chromium browser binary."""
-    cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--install-playwright"]
+    else:
+        cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
     print(f"\n[INFO] Installing Playwright Chromium browser binary (for Microsoft Teams)...\n" + "-" * 78)
     try:
         res = subprocess.run(cmd)
